@@ -306,3 +306,24 @@ README.md
 - Set budget alerts per category
 - Analyze spending trends over time
 - Identify anomalous transactions
+
+### Session 4 (2026-07-01 late) — Project Cleanup & GitHub Setup
+
+**Folder Reorganization** ✅
+- Moved 16 exploration/debug files (all `_*.txt` temporary outputs) → `_archive/` folder
+- Deleted `src/__pycache__/` (Python cache, will regenerate)
+- Kept clean root structure:
+  - Documentation: CLAUDE.md, README.md, context.md, DATA_SETUP.md
+  - Config: .gitignore, requirements.txt, merchant_rules_to_fill.csv
+  - Directories: data/, src/, _archive/
+
+**GitHub Setup** ✅
+- Fixed git repository initialization (was tracking unrelated parent files; corrected to only track financing files)
+- Committed 46 project files (clean, no Desktop/ICDS artifacts)
+- Pushed to https://github.com/Chinsanaa/financing (main branch)
+- Repository now ready for collaboration or backup
+
+**Project Status:**
+- All 7 pipeline stages complete and tested
+- Repository clean and organized
+- Ready for: new data imports, model updates, or dashboard deployment
