@@ -1,0 +1,40 @@
+================================================================================
+VERIFICATION: Confidence improvement on corrected merchants
+================================================================================
+
+
+杜福睿                 :  1 trans | Avg conf:  30.1% | Transportation
+
+名创优品                :  2 trans | Avg conf:  30.7% | Eating Out, Shopping
+
+荣康                  :  1 trans | Avg conf:  32.2% | Eating Out
+
+浦东机场                :  1 trans | Avg conf:  35.6% | Eating Out
+
+昆仑唐                 : 10 trans | Avg conf:  80.3% | Eating Out
+
+中国移动                :  3 trans | Avg conf:  24.4% | Utilities & Services
+
+春秋航空                :  1 trans | Avg conf:  38.1% | Eating Out
+
+K-MART              :  1 trans | Avg conf:  38.1% | Eating Out
+
+KKV                 :  1 trans | Avg conf:  38.1% | Eating Out
+
+MUJI                :  3 trans | Avg conf:  43.5% | Shopping
+
+================================================================================
+OVERALL STATISTICS
+================================================================================
+Total transactions: 901
+Mean confidence: 81.0%
+Min confidence: 24.4%
+Max confidence: 97.7%
+
+Category breakdown:
+  Eating Out               : 437 ( 48.5%) - Avg conf:  78.8%
+  Groceries                : 209 ( 23.2%) - Avg conf:  87.6%
+  Transportation           : 175 ( 19.4%) - Avg conf:  84.8%
+  Shopping                 :  50 (  5.5%) - Avg conf:  74.7%
+  Transfers & Gifts        :  27 (  3.0%) - Avg conf:  59.2%
+  Utilities & Services     :   3 (  0.3%) - Avg conf:  24.4%

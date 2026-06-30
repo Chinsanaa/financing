@@ -1,15 +1,15 @@
 
-1. Merchant: 美团
-   Category: Eating Out
-
-2. Merchant: 麦当劳
-   Category: Eating Out
-
-3. Merchant: 上海都畅数字技术有限公司
-   Category: Transportation
-
-4. Merchant: 荟选集市后滩店
+1. Merchant: 荟选集市后滩店
    Category: Groceries
 
-5. Merchant: 淘宝平台商户
-   Category: Shopping
+2. Merchant: 沪浙7-ELEVEN
+   Category: Groceries
+
+3. Merchant: 上海申通地铁资产经营管理有限公司
+   Category: Transportation
+
+4. Merchant: 淘天物流科技有限公司
+   Category: Utilities & Services
+
+5. Merchant: 上海都畅数字技术有限公司
+   Category: Transportation

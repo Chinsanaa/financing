@@ -1,0 +1,31 @@
+STAGE 5: CLASSIFIER TRAINING & EVALUATION
+================================================================================
+
+Model: Logistic Regression
+Accuracy: 0.967 (96.7%)
+
+CONFUSION MATRIX:
+         Eati  Groc  Othe  Shop  Tran  Tran  Trav  Util
+Eating    62     0     0     0     0     0     0     0
+Grocer     1    39     0     0     1     0     0     0
+Other      1     0     0     0     0     0     0     0
+Shoppi     0     0     0    10     0     0     0     0
+Transf     0     0     0     0     4     0     0     0
+Transp     0     0     0     0     0    33     0     0
+Travel     1     0     0     0     0     0     0     0
+Utilit     1     0     0     0     0     0     0     0
+
+                      precision    recall  f1-score   support
+
+          Eating Out      0.939     1.000     0.969        62
+           Groceries      1.000     0.951     0.975        41
+               Other      0.000     0.000     0.000         1
+            Shopping      1.000     1.000     1.000        10
+   Transfers & Gifts      0.800     1.000     0.889         4
+      Transportation      1.000     1.000     1.000        33
+              Travel      0.000     0.000     0.000         1
+Utilities & Services      0.000     0.000     0.000         1
+
+            accuracy                          0.967       153
+           macro avg      0.592     0.619     0.604       153
+        weighted avg      0.951     0.967     0.958       153

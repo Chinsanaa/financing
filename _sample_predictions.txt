@@ -1,0 +1,13 @@
+SAMPLE PREDICTIONS
+================================================================================
+
+✓ True: Eating Out                | Pred: Eating Out                | Conf: 95.92%
+✓ True: Eating Out                | Pred: Eating Out                | Conf: 95.65%
+✓ True: Groceries                 | Pred: Groceries                 | Conf: 95.68%
+✓ True: Shopping                  | Pred: Shopping                  | Conf: 88.10%
+✓ True: Eating Out                | Pred: Eating Out                | Conf: 95.92%
+✗ True: Other                     | Pred: Eating Out                | Conf: 56.05%
+✗ True: Travel                    | Pred: Eating Out                | Conf: 35.57%
+✗ True: Groceries                 | Pred: Eating Out                | Conf: 33.58%
+✗ True: Utilities & Services      | Pred: Eating Out                | Conf: 33.32%
+✗ True: Groceries                 | Pred: Transfers & Gifts         | Conf: 64.39%
