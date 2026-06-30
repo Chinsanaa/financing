@@ -14,11 +14,20 @@ from segment import vectorize, build_vectorizer, clean_text
 
 
 def train_classifier(X_train, y_train):
-    """Train Logistic Regression classifier."""
+    """Train Logistic Regression classifier.
+
+    class_weight='balanced' and C=10 were chosen via stratified-CV
+    hyperparameter search (see src/tune.py, AUDIT_REPORT.md). Without
+    class_weight, minority categories (e.g. Transfers & Gifts) get
+    drowned out by majority categories (e.g. Eating Out) and the model
+    just predicts the majority class for anything ambiguous.
+    """
     clf = LogisticRegression(
         max_iter=1000,
         random_state=42,
-        solver='lbfgs'
+        solver='lbfgs',
+        class_weight='balanced',
+        C=10
     )
     clf.fit(X_train, y_train)
     return clf
@@ -185,3 +194,7 @@ if __name__ == '__main__':
     else:
         print(f"NEEDS WORK: Accuracy {100*accuracy:.1f}% - May need more training data or features")
     print(f"{'='*70}")
+    print(f"\nNOTE: the number above is from a single random 80/20 split and is")
+    print(f"NOT reliable for small categories (a category with 1-2 test samples")
+    print(f"can swing between 0% and 100% on luck alone). Run `python src/eval.py`")
+    print(f"for stratified cross-validation and real per-category F1 scores.")
