@@ -8,8 +8,12 @@ sys.path.insert(0, str(Path.cwd()))
 from segment import clean_text, vectorize
 
 
-def classify_all(df, vectorizer, classifier):
-    """Classify all transactions using trained model."""
+def classify_all(df, vectorizer, classifier, confidence_threshold=0.7):
+    """Classify all transactions using trained model.
+
+    Args:
+        confidence_threshold: Flag predictions below this threshold for manual review (default 0.7)
+    """
     # Clean text
     df = df.copy()
     df['text'] = df.apply(
@@ -26,6 +30,7 @@ def classify_all(df, vectorizer, classifier):
 
     df['category'] = predictions
     df['confidence'] = probabilities
+    df['needs_review'] = probabilities < confidence_threshold
 
     return df
 
@@ -54,6 +59,18 @@ if __name__ == '__main__':
         avg_conf = df_classified[df_classified['category'] == cat]['confidence'].mean()
         print(f"   {cat:30s}: {count:3d} transactions (avg confidence: {avg_conf:.1%})")
 
+    # Show low-confidence items
+    needs_review = df_classified[df_classified['needs_review']]
+    print(f"\n4b. LOW-CONFIDENCE ITEMS (confidence < 0.70):")
+    print(f"   {len(needs_review)} transactions flagged for manual review")
+    if len(needs_review) > 0:
+        print("\n   Sample of low-confidence predictions:")
+        for idx, (_, row) in enumerate(needs_review[['merchant', 'description', 'category', 'confidence']].head(5).iterrows()):
+            try:
+                print(f"      {row['merchant'][:30]} -> {row['category']:20s} ({row['confidence']:.1%})")
+            except:
+                print(f"      (unicode text) -> {row['category']:20s} ({row['confidence']:.1%})")
+
     # Show confidence stats
     print(f"\n5. CONFIDENCE STATISTICS:")
     print(f"   Mean confidence: {df_classified['confidence'].mean():.1%}")
@@ -64,6 +81,12 @@ if __name__ == '__main__':
     output_path = 'data/processed/transactions_classified.csv'
     df_classified.to_csv(output_path, index=False)
     print(f"\n6. Saved to {output_path}")
+
+    # Save low-confidence items for manual review
+    if len(needs_review) > 0:
+        review_path = 'data/processed/needs_manual_review.csv'
+        needs_review.to_csv(review_path, index=False)
+        print(f"   Low-confidence items saved to {review_path}")
 
     # Show sample
     print(f"\n7. SAMPLE CLASSIFIED TRANSACTIONS:")

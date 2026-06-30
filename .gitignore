@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-specific temporary files
+_*.txt
+_*.png
+_*.csv
+search_*.csv
+*_candidates*.csv
+*_sample*.csv
+*_debug*.csv
+candidates_*.csv
+review_*.csv
+low_confidence*.csv
+keyword_search*.txt

@@ -10,7 +10,7 @@ import joblib
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
-from segment import vectorize, build_vectorizer, clean_text
+from segment import vectorize, build_vectorizer, clean_text, LR_HYPERPARAMS
 
 
 def train_classifier(X_train, y_train):
@@ -22,13 +22,7 @@ def train_classifier(X_train, y_train):
     drowned out by majority categories (e.g. Eating Out) and the model
     just predicts the majority class for anything ambiguous.
     """
-    clf = LogisticRegression(
-        max_iter=1000,
-        random_state=42,
-        solver='lbfgs',
-        class_weight='balanced',
-        C=10
-    )
+    clf = LogisticRegression(**LR_HYPERPARAMS)
     clf.fit(X_train, y_train)
     return clf
 
@@ -130,8 +124,10 @@ if __name__ == '__main__':
     print(f"\n1. Loaded {len(df_labeled)} labeled transactions")
 
     # Build new vectorizer from current labeled data
+    # NOTE: max_features default is 3000 (was 500 before Session 8B)
+    # Increased to improve feature coverage with bigrams for compound merchant names
     print(f"2. Building vectorizer from {len(df_labeled)} texts...")
-    vectorizer = build_vectorizer(df_labeled['text'].tolist(), max_features=500)
+    vectorizer = build_vectorizer(df_labeled['text'].tolist())
 
     # Save the new vectorizer
     joblib.dump(vectorizer, 'data/processed/tfidf_vectorizer.pkl')
