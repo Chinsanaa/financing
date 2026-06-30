@@ -1,13 +1,13 @@
 CLASSIFIED TRANSACTIONS SAMPLE
 ================================================================================
 
-1. 荣康倍儿爽共享按摩椅                               | Eating Out           | 33.4%
-2. 滴滴出行                                     | Transportation       | 89.7%
-3. 上海纽约大学                                   | Eating Out           | 56.5%
-4. 上海公共交通卡股份有限公司                            | Transportation       | 53.7%
-5. 滴滴出行                                     | Transportation       | 92.0%
-6. 上海蕤盛工贸                                   | Eating Out           | 57.1%
-7. 淘宝平台商户                                   | Shopping             | 88.2%
-8. 滴滴出行                                     | Transportation       | 88.7%
-9. 滴滴出行                                     | Transportation       | 91.5%
-10. 喜士多                                      | Groceries            | 93.0%
+1. 荣康倍儿爽共享按摩椅                               | Eating Out           | 32.2%
+2. 滴滴出行                                     | Transportation       | 89.4%
+3. 上海纽约大学                                   | Eating Out           | 56.1%
+4. 上海公共交通卡股份有限公司                            | Transportation       | 52.5%
+5. 滴滴出行                                     | Transportation       | 91.8%
+6. 上海蕤盛工贸                                   | Eating Out           | 52.2%
+7. 淘宝平台商户                                   | Shopping             | 88.1%
+8. 滴滴出行                                     | Transportation       | 88.4%
+9. 滴滴出行                                     | Transportation       | 91.3%
+10. 喜士多                                      | Groceries            | 92.4%

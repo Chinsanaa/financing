@@ -1,12 +1,13 @@
 SAMPLE PREDICTIONS
 ================================================================================
 
-✓ True: Transportation            | Pred: Transportation            | Conf: 88.97%
-✓ True: Transportation            | Pred: Transportation            | Conf: 91.75%
-✓ True: Eating Out                | Pred: Eating Out                | Conf: 80.87%
-✓ True: Groceries                 | Pred: Groceries                 | Conf: 93.00%
-✓ True: Groceries                 | Pred: Groceries                 | Conf: 95.89%
-✗ True: Groceries                 | Pred: Eating Out                | Conf: 37.38%
-✗ True: Groceries                 | Pred: Transfers & Gifts         | Conf: 64.04%
-✗ True: Utilities & Services      | Pred: Eating Out                | Conf: 34.38%
-✗ True: Other                     | Pred: Eating Out                | Conf: 56.49%
+✓ True: Eating Out                | Pred: Eating Out                | Conf: 95.92%
+✓ True: Eating Out                | Pred: Eating Out                | Conf: 95.65%
+✓ True: Groceries                 | Pred: Groceries                 | Conf: 95.68%
+✓ True: Shopping                  | Pred: Shopping                  | Conf: 88.10%
+✓ True: Eating Out                | Pred: Eating Out                | Conf: 95.92%
+✗ True: Other                     | Pred: Eating Out                | Conf: 56.05%
+✗ True: Travel                    | Pred: Eating Out                | Conf: 35.57%
+✗ True: Groceries                 | Pred: Eating Out                | Conf: 33.58%
+✗ True: Utilities & Services      | Pred: Eating Out                | Conf: 33.32%
+✗ True: Groceries                 | Pred: Transfers & Gifts         | Conf: 64.39%
