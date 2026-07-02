@@ -20,6 +20,7 @@ from paths import (
     TRANSACTIONS_CLASSIFIED,
     VECTORIZER,
 )
+from feature_engineering import create_hybrid_feature_matrix
 
 
 def normalize_categories(df: pd.DataFrame) -> pd.DataFrame:
@@ -32,43 +33,75 @@ def normalize_categories(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _override_category(merchant: str, desc: str) -> Optional[str]:
+    """Resolve the override category for one (merchant, description) pair.
+
+    Precedence (unchanged): special_category() wins; otherwise a
+    'catering'/'餐饮' merchant match → Eating Out; otherwise None.
+    """
+    special = special_category(merchant, desc)
+    if special is not None:
+        return special
+    if 'catering' in merchant.lower() or '餐饮' in merchant:
+        return 'Eating Out'
+    return None
+
+
 def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
-    """Override categories using merchant/description patterns."""
+    """Override categories using merchant/description patterns.
+
+    Optimized: overrides are resolved once per unique (merchant, description)
+    pair and applied with vectorized masks instead of row-by-row iteration.
+    Output is identical to the original implementation.
+    """
     df = df.copy()
-    for idx, row in df.iterrows():
-        merchant = str(row['merchant'])
-        desc = str(row['description'])
-        merchant_lower = merchant.lower()
 
-        special = special_category(merchant, desc)
-        if special is not None:
-            df.loc[idx, 'category'] = special
-            df.loc[idx, 'confidence'] = 1.0
-            df.loc[idx, 'needs_review'] = False
-            if 'label_source' in df.columns:
-                df.loc[idx, 'label_source'] = 'override'
-            continue
+    merchants = df['merchant'].astype(str)
+    descs = df['description'].astype(str)
+    pairs = pd.Series(list(zip(merchants, descs)), index=df.index)
 
-        if 'catering' in merchant_lower or '餐饮' in merchant:
-            df.loc[idx, 'category'] = 'Eating Out'
-            df.loc[idx, 'confidence'] = 1.0
-            df.loc[idx, 'needs_review'] = False
-            if 'label_source' in df.columns:
-                df.loc[idx, 'label_source'] = 'override'
+    # Resolve each distinct pair once.
+    cache = {pair: _override_category(pair[0], pair[1]) for pair in set(pairs)}
+    override_cat = pairs.map(cache)
+    mask = override_cat.notna()
+
+    if mask.any():
+        df.loc[mask, 'category'] = override_cat[mask]
+        df.loc[mask, 'confidence'] = 1.0
+        if 'label_source' in df.columns:
+            df.loc[mask, 'label_source'] = 'override'
+        # Matches original: creates the column if absent (False at override
+        # rows, NaN elsewhere); classify_all overwrites it fully afterward.
+        df.loc[mask, 'needs_review'] = False
+
     return df
 
 
-def load_models() -> Tuple[Optional[object], Optional[object]]:
-    """Load classifier artifacts if they exist; return (None, None) for rules-only mode."""
+def load_models() -> Tuple[Optional[object], Optional[object], Optional[dict]]:
+    """
+    Load classifier artifacts if they exist; return (vectorizer, classifier, config).
+    Config indicates whether to use hybrid or legacy features.
+    Returns (None, None, None) for rules-only mode.
+    """
     if VECTORIZER.exists() and CLASSIFIER.exists():
-        return joblib.load(VECTORIZER), joblib.load(CLASSIFIER)
-    return None, None
+        vectorizer = joblib.load(VECTORIZER)
+        classifier = joblib.load(CLASSIFIER)
+
+        # Load config to determine feature type (hybrid or legacy)
+        config_path = VECTORIZER.parent / 'vectorizer_config.pkl'
+        config = {'use_hybrid': False}  # Default to legacy
+        if config_path.exists():
+            config = joblib.load(config_path)
+
+        return vectorizer, classifier, config
+    return None, None, None
 
 
 def classify_all(
     df,
     vectorizer=None,
     classifier=None,
+    config=None,
     confidence_threshold=0.7,
     rules=None,
 ):
@@ -89,16 +122,44 @@ def classify_all(
     mode: matched merchants get their rule category; others → Other, flagged for review.
     """
     df = df.copy()
-    df['text'] = df.apply(
-        lambda row: clean_text(row['merchant'], row['description']),
-        axis=1,
-    )
+
+    if config is None:
+        config = {'use_hybrid': False}
 
     if vectorizer is not None and classifier is not None:
-        X = vectorize(df['text'].tolist(), vectorizer)
-        df['category'] = classifier.predict(X)
-        df['confidence'] = classifier.predict_proba(X).max(axis=1)
-        df['label_source'] = 'model'
+        # Use hybrid feature engineering if config indicates
+        if config.get('use_hybrid', False):
+            from feature_engineering import extract_numeric_features
+
+            # Extract numeric features
+            numeric_features, valid_indices = extract_numeric_features(df)
+            df_valid = df.iloc[valid_indices].copy()
+
+            # Create hybrid feature matrix with desc and merch vectorizers
+            X = create_hybrid_feature_matrix(df_valid, vectorizer['desc'], vectorizer['merch'], numeric_features)
+
+            # Predict on valid rows only
+            predictions = classifier.predict(X)
+            probabilities = classifier.predict_proba(X).max(axis=1)
+
+            # Initialize all rows with 'Other' and 0.0 confidence
+            df['category'] = 'Other'
+            df['confidence'] = 0.0
+
+            # Update only the valid rows with predictions
+            df.loc[df_valid.index, 'category'] = predictions
+            df.loc[df_valid.index, 'confidence'] = probabilities
+            df['label_source'] = 'model'
+        else:
+            # Legacy vectorizer: single object
+            df['text'] = df.apply(
+                lambda row: clean_text(row['merchant'], row['description']),
+                axis=1,
+            )
+            X = vectorize(df['text'].tolist(), vectorizer)
+            df['category'] = classifier.predict(X)
+            df['confidence'] = classifier.predict_proba(X).max(axis=1)
+            df['label_source'] = 'model'
     else:
         df['category'] = 'Other'
         df['confidence'] = 0.0
@@ -138,18 +199,19 @@ if __name__ == '__main__':
     print("=" * 70)
 
     df = pd.read_csv(TRANSACTIONS)
-    vectorizer, classifier = load_models()
+    vectorizer, classifier, config = load_models()
     rules = load_merchant_rules(str(MERCHANT_RULES))
 
     print(f"\n1. Loaded {len(df)} transactions")
     if classifier is not None:
-        print("2. Loaded trained classifier")
+        feature_type = "HYBRID (semantic-weighted)" if config.get('use_hybrid', False) else "LEGACY (combined text)"
+        print(f"2. Loaded trained classifier ({feature_type})")
     else:
         print("2. No classifier found — rules-only mode (run bootstrap.py to train)")
     print(f"3. Loaded {len(rules)} merchant rules")
 
     print("\n4. Classifying all transactions...")
-    df_classified = classify_all(df, vectorizer, classifier, rules=rules)
+    df_classified = classify_all(df, vectorizer, classifier, config=config, rules=rules)
 
     print("\n4. CLASSIFICATION RESULTS:")
     for cat, count in df_classified['category'].value_counts().items():

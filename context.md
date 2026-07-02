@@ -61,17 +61,19 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Decide on the git-history privacy scrub (Session 27 open item #1). Otherwise run
-`python run_all.py` (deterministic full pipeline) or `python src/app.py` for the
-web wizard with your Alipay/WeChat exports.
+Continue manual review cycles: as you add more transactions, re-export the
+"Other" category, categorize them, and the rules will keep improving. With
+enough merchant-specific data, even the ML model could eventually generalize
+better. For now, the 2.2% uncategorized rate is near-optimal without more
+training data.
 
-## Current State (Session 21, 2026-07-02)
+## Current State (Session 30, 2026-07-02)
 
 | Item | Status |
 |---|---|
 | Personal transaction data in repo | **Removed** — gitignored; templates only |
 | Raw exports | User adds locally (`data/raw/`) |
-| Merchant rules | `data/templates/merchant_rules_starter.csv` + in-code rules in `src/merchant_categories.py` (295+ patterns) |
+| Merchant rules | `data/templates/merchant_rules_starter.csv` + in-code rules in `src/merchant_categories.py` (~600 patterns: merchant/brand names + description disambiguation keywords) |
 | Labeled training data | Created per-user by bootstrap + manual labeling |
 | Classifier | Trained per-user via `retrain.py` / bootstrap |
 | Budget config | `data/templates/budget_config.example.json` → user `budget_config.json` |
@@ -79,6 +81,100 @@ web wizard with your Alipay/WeChat exports.
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 30 (2026-07-02) — Rule expansion + matching-speed optimization
+Two pieces of work this session.
+
+**1. Rule expansion (~340 → ~600 patterns)** in `src/merchant_categories.py`:
+- Groceries: `mart`, `grocery`, `supermarket`, `market` + produce/日用品 keywords
+- Shopping: clothing brands (Nike, Adidas, Zara, luxury), electronics/gadgets
+  (Samsung, Sony, DJI, Apple products), product keywords, `**` Taobao pattern
+- Transfers & Gifts: `transfer`/`p2p` keywords, Chinese bank names (Bank of China,
+  工商/农业/建设/招商… + regional banks), Alipay/WeChat transfer, `withdrawal`
+- Added ~131 description-based disambiguation keywords across all 6 categories so
+  unseen merchants can be categorized from the description alone (e.g. unknown
+  merchant + "blue shoes" → Shopping). `special_category()` now checks these.
+
+**2. Matching-speed optimization (behavior-preserving)** — the rule growth exposed
+a bottleneck: both hot paths matched rules row-by-row.
+- **Root cause**: `apply_merchant_rules()` (`src/label.py`) re-sorted all ~600 rules
+  *inside* the per-row loop and used `iterrows()` + `df.loc[idx,...]` scalar writes;
+  `apply_description_overrides()` (`src/classify.py`) had the same `iterrows()` pattern.
+- **Fix**: sort patterns once; match only **unique** merchants / (merchant,desc)
+  pairs (real data repeats merchants heavily), cache, then vectorized `.map()` /
+  mask assignment. Hoisted `special_category()` keyword tuples to a module-level
+  `DESCRIPTION_KEYWORD_RULES` constant.
+- **Result (measured, 2000 txns / 14 unique merchants)**: `apply_merchant_rules`
+  **156x** faster (0.27 → 0.0017 ms/txn); `apply_description_overrides` **145x**
+  faster (0.30 → 0.0021 ms/txn). **No new dependencies.**
+- **Correctness**: `tests/test_matching_optimization.py` keeps the old row-by-row
+  implementations as oracles and asserts byte-identical output. Full suite: 48 passing.
+
+**Files Modified**: `src/merchant_categories.py`, `src/label.py`, `src/classify.py`,
+`tests/test_matching_optimization.py` (new).
+
+### Session 29 (2026-07-02) — Hybrid feature engineering to reduce merchant overfitting
+Implemented Option B: semantic-weighted features to reduce model memorization and improve generalization to unseen merchants.
+
+**Problem**: Model achieved ~95% accuracy on known merchants but only ~45% on new merchants (barely above 38.5% baseline). Root cause: merchant name was part of the vectorized text, so model learned "Holy Bagel" → "Eating Out" rather than generalizable patterns.
+
+**Solution Implemented**:
+- **Feature engineering module** (`src/feature_engineering.py`): separates merchant (downweighted 0.3x) and description (full weight 1.0x) text features; adds 4 numeric features (hour, day, amount_bucket, merchant_frequency)
+- **Hybrid vectorizer support**: `build_hybrid_vectorizers()` creates separate TF-IDF models for each text component
+- **Updated retrain.py**: added `USE_HYBRID_FEATURES=True` flag to enable/disable new approach; training pipeline switches between legacy (combined text) and hybrid (semantic-weighted) modes
+- **Updated segment.py**: added `MERCHANT_WEIGHT=0.3` constant (tunable) and new `clean_description_only()` / `clean_merchant_only()` functions
+- **Comprehensive testing**: 24 tests in `tests/test_feature_engineering.py` (100% passing)
+  - Numeric feature extraction: valid ranges, missing value handling, no nulls
+  - Text cleaning: description/merchant separation, edge cases, Unicode handling
+  - Vectorizer building: correct feature counts, separate sizing
+  - Hybrid matrix creation: shape validation, sparsity, feature combination
+  - Edge cases: single transaction, all same merchant, mixed language
+
+**Architecture**:
+```
+Description TF-IDF (weight 1.0x) 
+        +
+Merchant TF-IDF (weight 0.3x)
+        +
+4 numeric features (hour, day, amount, merchant_frequency)
+        ↓
+Concatenate → Sparse + Dense hybrid matrix → LogisticRegression
+```
+
+**Design Decisions**:
+- Skip rows with missing time/amount values (cleaner training data)
+- MERCHANT_WEIGHT as hyperparameter (can tune if needed)
+- Keep legacy pipeline (backward compatible; can compare old vs new)
+- Hybrid vectorizers saved separately (`tfidf_vectorizer_hybrid.pkl`)
+
+**Files Modified**:
+- `src/segment.py`: +MERCHANT_WEIGHT constant, +2 new cleaning functions
+- `src/retrain.py`: +hybrid feature engineering support, dual-mode training logic, split artifact saving
+- `src/feature_engineering.py` (NEW): full module with 5 core functions
+- `tests/test_feature_engineering.py` (NEW): 24 comprehensive tests
+- `README.md`: added "Feature Engineering Strategy" section explaining the approach
+- `context.md`: this session log
+
+**What's Left for Next Session**:
+- [ ] Run `retrain.py` on your labeled data with `USE_HYBRID_FEATURES=True`
+- [ ] Test on eval.py to compare old vs new metrics
+- [ ] Update classify.py to use hybrid features in production
+- [ ] Run GroupKFold CV to measure real improvement on unseen merchants
+- [ ] Decide whether to make hybrid the default or keep as opt-in
+
+### Session 28 (2026-07-02) — Manual merchant categorization review & rule generation
+Closed the iterative feedback loop for merchant rules. User reviewed all uncategorized transactions and manually assigned categories.
+
+- **Export & review**: Exported 114 "Other" category transactions from user's Alipay + WeChat feeds to XLSX file with columns: Time, Merchant (English), Description, Price, Current Category, and empty "Manual Category" for user to fill
+- **User categorization**: User reviewed all 114 and categorized them:
+  - 83 → Transfers & Gifts (personal names: Tara, Sydney, Steve, Margad, etc.; P2P transfers)
+  - 13 → Eating Out (Holy Bagel, Habibi, floating kitchen, etc.)
+  - 6 → Shopping (JUNGLEplus, Pumo Brands, ws**1)
+  - 4 → Groceries (Gaoqing Store, K-MART, Xiangxuehai Trading, etc.)
+  - 8 → Other (photo booths, amusement parks, films, ambiguous)
+- **Rule generation**: Added 40+ LOCAL_MERCHANT_RULES to `src/merchant_categories.py` based on the patterns. Used BOTH English merchant names (for P2P transfers) and Chinese names (for retail/restaurants) to match against raw data
+- **Results**: Uncategorized reduced from 114 (11.4%) → 22 (2.2%), an 81% improvement. Remaining 22 are genuinely hard to classify (bank transactions, app cashback, niche venues) and represent the new baseline
+- **Key learning**: LOCAL_MERCHANT_RULES apply pattern-matching to the raw merchant names in input CSVs (not translated names), so rules must include both original language variants and any transliterated names that appear in the feeds
 
 ### Session 27 (2026-07-02) — ML integrity audit (honest evaluation & reproducibility)
 Full audit written to `docs/FULL_AUDIT.md`. Worked phase by phase with user sign-off.

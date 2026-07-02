@@ -70,6 +70,32 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("绝味", "Groceries"),
     ("APIO", "Groceries"),
     ("大黄鹅", "Groceries"),
+    # Grocery keywords (English)
+    ("grocery", "Groceries"),
+    ("supermarket", "Groceries"),
+    ("mart", "Groceries"),
+    ("market", "Groceries"),
+    # --- Groceries: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("produce", "Groceries"),
+    ("vegetables", "Groceries"),
+    ("fruits", "Groceries"),
+    ("fruit", "Groceries"),
+    ("meat market", "Groceries"),
+    ("fish market", "Groceries"),
+    ("bakery", "Groceries"),
+    ("daily essentials", "Groceries"),
+    ("household items", "Groceries"),
+    ("bulk buy", "Groceries"),
+    ("wholesale", "Groceries"),
+    ("蔬菜", "Groceries"),
+    ("水果", "Groceries"),
+    ("生鲜", "Groceries"),
+    ("菜市场", "Groceries"),
+    ("日用品", "Groceries"),
+    ("家用", "Groceries"),
+    ("批发", "Groceries"),
+    ("食材", "Groceries"),
+    ("粮油", "Groceries"),
     # Vending machines
     ("友宝", "Groceries"),
     ("乐科智控", "Groceries"),
@@ -109,6 +135,33 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("12306", "Transportation"),
     ("铁路", "Transportation"),
     ("DiDi", "Transportation"),
+    # --- Transportation: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("ride", "Transportation"),
+    ("driver", "Transportation"),
+    ("passenger", "Transportation"),
+    ("ticket", "Transportation"),
+    ("fare", "Transportation"),
+    ("transit", "Transportation"),
+    ("train", "Transportation"),
+    ("bus", "Transportation"),
+    ("subway", "Transportation"),
+    ("metro", "Transportation"),
+    ("flight", "Transportation"),
+    ("airport", "Transportation"),
+    ("airline", "Transportation"),
+    ("parking", "Transportation"),
+    ("toll", "Transportation"),
+    ("gas", "Transportation"),
+    ("fuel", "Transportation"),
+    ("车费", "Transportation"),
+    ("乘坐", "Transportation"),
+    ("班车", "Transportation"),
+    ("高铁", "Transportation"),
+    ("火车票", "Transportation"),
+    ("飞机票", "Transportation"),
+    ("机票", "Transportation"),
+    ("停泊费", "Transportation"),
+    ("汽油", "Transportation"),
   # --- Eating Out: food delivery & restaurant chains ---
     ("饿了么", "Eating Out"),
     ("瑞幸咖啡", "Eating Out"),
@@ -206,6 +259,37 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("catering", "Eating Out"),
     ("Meituan", "Eating Out"),
     ("美团", "Eating Out"),
+    # --- Eating Out: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("restaurant", "Eating Out"),
+    ("cafe", "Eating Out"),
+    ("coffee", "Eating Out"),
+    ("café", "Eating Out"),
+    ("food delivery", "Eating Out"),
+    ("takeout", "Eating Out"),
+    ("takeaway", "Eating Out"),
+    ("order food", "Eating Out"),
+    ("menu", "Eating Out"),
+    ("dine", "Eating Out"),
+    ("snack", "Eating Out"),
+    ("noodle", "Eating Out"),
+    ("ramen", "Eating Out"),
+    ("sushi", "Eating Out"),
+    ("burger", "Eating Out"),
+    ("pizza", "Eating Out"),
+    ("taco", "Eating Out"),
+    ("kebab", "Eating Out"),
+    ("boba", "Eating Out"),
+    ("bubble tea", "Eating Out"),
+    ("面馆", "Eating Out"),
+    ("饭店", "Eating Out"),
+    ("饮食", "Eating Out"),
+    ("外卖", "Eating Out"),
+    ("订餐", "Eating Out"),
+    ("小吃", "Eating Out"),
+    ("烧烤", "Eating Out"),
+    ("火锅", "Eating Out"),
+    ("粥店", "Eating Out"),
+    ("炸鸡", "Eating Out"),
     # --- Shopping: retail & e-commerce ---
     ("淘宝闪购", "Shopping"),
     ("淘宝平台", "Shopping"),
@@ -260,6 +344,123 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("小米", "Shopping"),
     ("华为", "Shopping"),
     ("苹果", "Shopping"),
+    # Clothing brands
+    ("NIKE", "Shopping"),
+    ("nike", "Shopping"),
+    ("Adidas", "Shopping"),
+    ("adidas", "Shopping"),
+    ("ZARA", "Shopping"),
+    ("zara", "Shopping"),
+    ("H&M", "Shopping"),
+    ("h&m", "Shopping"),
+    ("Forever 21", "Shopping"),
+    ("ASOS", "Shopping"),
+    ("Uniqlo", "Shopping"),
+    ("uniqlo", "Shopping"),
+    ("GAP", "Shopping"),
+    ("SHEIN", "Shopping"),
+    ("Gucci", "Shopping"),
+    ("LV", "Shopping"),
+    ("Prada", "Shopping"),
+    ("Burberry", "Shopping"),
+    ("Coach", "Shopping"),
+    ("Alexander McQueen", "Shopping"),
+    ("Balenciaga", "Shopping"),
+    ("Dior", "Shopping"),
+    ("Fendi", "Shopping"),
+    ("Hermes", "Shopping"),
+    ("Versace", "Shopping"),
+    ("Valentino", "Shopping"),
+    ("Armani", "Shopping"),
+    ("Tommy Hilfiger", "Shopping"),
+    ("Calvin Klein", "Shopping"),
+    ("Ralph Lauren", "Shopping"),
+    ("Lacoste", "Shopping"),
+    ("champion", "Shopping"),
+    ("Champion", "Shopping"),
+    ("Reebok", "Shopping"),
+    ("Puma", "Shopping"),
+    ("New Balance", "Shopping"),
+    ("Converse", "Shopping"),
+    ("Vans", "Shopping"),
+    # Electronics & gadgets
+    ("Samsung", "Shopping"),
+    ("samsung", "Shopping"),
+    ("LG", "Shopping"),
+    ("Sony", "Shopping"),
+    ("Panasonic", "Shopping"),
+    ("Intel", "Shopping"),
+    ("Nvidia", "Shopping"),
+    ("AMD", "Shopping"),
+    ("Razer", "Shopping"),
+    ("Logitech", "Shopping"),
+    ("SteelSeries", "Shopping"),
+    ("Corsair", "Shopping"),
+    ("ASUS", "Shopping"),
+    ("Acer", "Shopping"),
+    ("Lenovo", "Shopping"),
+    ("Dell", "Shopping"),
+    ("HP", "Shopping"),
+    ("Microsoft", "Shopping"),
+    ("Canon", "Shopping"),
+    ("Nikon", "Shopping"),
+    ("Sony", "Shopping"),
+    ("GoPro", "Shopping"),
+    ("DJI", "Shopping"),
+    ("iPhone", "Shopping"),
+    ("iPad", "Shopping"),
+    ("MacBook", "Shopping"),
+    ("AirPods", "Shopping"),
+    ("Apple Watch", "Shopping"),
+    ("watch", "Shopping"),  # Watches (broad but often used for shopping)
+    ("camera", "Shopping"),  # Cameras
+    ("drone", "Shopping"),  # Drones
+    ("headphone", "Shopping"),  # Headphones
+    ("earphone", "Shopping"),  # Earphones
+    ("laptop", "Shopping"),  # Laptops
+    ("monitor", "Shopping"),  # Monitors
+    ("keyboard", "Shopping"),  # Keyboards
+    ("mouse", "Shopping"),  # Mice
+    ("charger", "Shopping"),  # Chargers
+    ("cable", "Shopping"),  # Cables
+    ("battery", "Shopping"),  # Batteries
+    ("router", "Shopping"),  # Routers
+    ("speaker", "Shopping"),  # Speakers
+    ("microphone", "Shopping"),  # Microphones
+    # --- Shopping: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("product", "Shopping"),
+    ("item", "Shopping"),
+    ("clothing", "Shopping"),
+    ("apparel", "Shopping"),
+    ("shoes", "Shopping"),
+    ("shoe", "Shopping"),
+    ("outfit", "Shopping"),
+    ("dress", "Shopping"),
+    ("pants", "Shopping"),
+    ("shirt", "Shopping"),
+    ("jacket", "Shopping"),
+    ("gadget", "Shopping"),
+    ("device", "Shopping"),
+    ("toy", "Shopping"),
+    ("toy store", "Shopping"),
+    ("pet store", "Shopping"),
+    ("pet", "Shopping"),
+    ("book", "Shopping"),
+    ("bookstore", "Shopping"),
+    ("office supplies", "Shopping"),
+    ("office", "Shopping"),
+    ("craft", "Shopping"),
+    ("服装", "Shopping"),
+    ("衣服", "Shopping"),
+    ("鞋子", "Shopping"),
+    ("玩具", "Shopping"),
+    ("宠物", "Shopping"),
+    ("书籍", "Shopping"),
+    ("图书", "Shopping"),
+    ("办公", "Shopping"),
+    ("手工", "Shopping"),
+    # Taobao-like patterns (merchants with ** in name)
+    ("**", "Shopping"),
     # 华润万家 listed above; bare 华润 often appears on supermarket charges
     ("华润", "Groceries"),
     # --- Utilities & Services ---
@@ -298,8 +499,91 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("哔哩哔哩", "Utilities & Services"),
     ("B站", "Utilities & Services"),
     ("网易", "Utilities & Services"),
+    # --- Utilities & Services: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("subscription", "Utilities & Services"),
+    ("monthly fee", "Utilities & Services"),
+    ("annual fee", "Utilities & Services"),
+    ("renewal", "Utilities & Services"),
+    ("service charge", "Utilities & Services"),
+    ("membership", "Utilities & Services"),
+    ("premium", "Utilities & Services"),
+    ("bill", "Utilities & Services"),
+    ("invoice", "Utilities & Services"),
+    ("service", "Utilities & Services"),
+    ("续费", "Utilities & Services"),
+    ("会费", "Utilities & Services"),
+    ("月费", "Utilities & Services"),
+    ("年费", "Utilities & Services"),
+    ("服务费", "Utilities & Services"),
+    ("订阅", "Utilities & Services"),
+    ("会员", "Utilities & Services"),
     # --- Transfers & Gifts ---
+    # Keywords
+    ("transfer", "Transfers & Gifts"),
+    ("Transfer", "Transfers & Gifts"),
+    ("p2p", "Transfers & Gifts"),
+    ("P2P", "Transfers & Gifts"),
     ("个人收款", "Transfers & Gifts"),
+    # --- Transfers & Gifts: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("send money", "Transfers & Gifts"),
+    ("payment", "Transfers & Gifts"),
+    ("remittance", "Transfers & Gifts"),
+    ("gift", "Transfers & Gifts"),
+    ("present", "Transfers & Gifts"),
+    ("tip", "Transfers & Gifts"),
+    ("gratuity", "Transfers & Gifts"),
+    ("allowance", "Transfers & Gifts"),
+    ("personal loan", "Transfers & Gifts"),
+    ("reimbursement", "Transfers & Gifts"),
+    ("汇款", "Transfers & Gifts"),
+    ("红包", "Transfers & Gifts"),
+    ("礼物", "Transfers & Gifts"),
+    ("赏金", "Transfers & Gifts"),
+    ("补贴", "Transfers & Gifts"),
+    ("报销", "Transfers & Gifts"),
+    ("打赏", "Transfers & Gifts"),
+    # Bank withdrawals & transfers between banks
+    ("Bank of China", "Transfers & Gifts"),
+    ("中国银行", "Transfers & Gifts"),
+    ("中国工商银行", "Transfers & Gifts"),
+    ("工商银行", "Transfers & Gifts"),
+    ("中国农业银行", "Transfers & Gifts"),
+    ("农业银行", "Transfers & Gifts"),
+    ("中国建设银行", "Transfers & Gifts"),
+    ("建设银行", "Transfers & Gifts"),
+    ("交通银行", "Transfers & Gifts"),
+    ("中信银行", "Transfers & Gifts"),
+    ("招商银行", "Transfers & Gifts"),
+    ("浦发银行", "Transfers & Gifts"),
+    ("民生银行", "Transfers & Gifts"),
+    ("平安银行", "Transfers & Gifts"),
+    ("兴业银行", "Transfers & Gifts"),
+    ("光大银行", "Transfers & Gifts"),
+    ("华夏银行", "Transfers & Gifts"),
+    ("北京银行", "Transfers & Gifts"),
+    ("上海银行", "Transfers & Gifts"),
+    ("深圳发展银行", "Transfers & Gifts"),
+    ("深圳银行", "Transfers & Gifts"),
+    ("南京银行", "Transfers & Gifts"),
+    ("杭州银行", "Transfers & Gifts"),
+    ("宁波银行", "Transfers & Gifts"),
+    ("温州银行", "Transfers & Gifts"),
+    ("成都银行", "Transfers & Gifts"),
+    ("西安银行", "Transfers & Gifts"),
+    ("重庆银行", "Transfers & Gifts"),
+    ("武汉银行", "Transfers & Gifts"),
+    ("郑州银行", "Transfers & Gifts"),
+    ("邮储银行", "Transfers & Gifts"),
+    ("邮政储蓄", "Transfers & Gifts"),
+    ("支付宝转账", "Transfers & Gifts"),
+    ("微信转账", "Transfers & Gifts"),
+    ("微信支付", "Transfers & Gifts"),
+    ("alipay", "Transfers & Gifts"),
+    ("wechat", "Transfers & Gifts"),
+    ("withdrawal", "Transfers & Gifts"),
+    ("Withdrawal", "Transfers & Gifts"),
+    ("bank", "Transfers & Gifts"),
+    ("Bank", "Transfers & Gifts"),
 ]
 
 # User-specific / local merchants (override or supplement chain rules)
@@ -307,6 +591,8 @@ LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
     # NYU Shanghai split by description in special_category() — no blanket rule here
     ("上海蕤盛工贸", "Transportation"),  # Shanghai metro (~¥5 rides)
     ("上海都畅数字技术有限公司", "Transportation"),  # metro payment tech
+
+    # --- Eating Out (from manual review) ---
     ("济明路蘭州牛肉面", "Eating Out"),
     ("美淑家", "Eating Out"),
     ("饿梨酱", "Eating Out"),
@@ -314,9 +600,66 @@ LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
     ("马永胜牛肉面", "Eating Out"),
     ("豹喵酒吧", "Eating Out"),
     ("橘柚梧桐", "Eating Out"),
+    ("Holy Bagel", "Eating Out"),
+    ("Habibi", "Eating Out"),
+    ("13DE MARZO", "Eating Out"),
+    ("AMINO AMIGO", "Eating Out"),
+    ("LA BARAKA UV", "Eating Out"),
+    ("鹈鹕镇大王", "Eating Out"),
+    ("上海英和企业管理有限公司", "Eating Out"),
+    ("floating kitchen", "Eating Out"),
+
+    # --- Groceries (from manual review) ---
+    ("高青西门市", "Groceries"),
+    ("K-MART", "Groceries"),
+    ("上海香雪海国际贸易有限公司", "Groceries"),
+    ("上海优悠生活商业管理有限公司", "Groceries"),
+
+    # --- Shopping (from manual review) ---
+    ("JUNGLEplus", "Shopping"),
+    ("上海谱墨品牌管理有限公司", "Shopping"),
+    ("ws**1", "Shopping"),
+    ("**店", "Shopping"),  # masked Taobao stores
+
+    # --- Transfers & Gifts (from manual review - personal names & P2P transfers) ---
     ("Sydney Yuen", "Transfers & Gifts"),
     ("Evie", "Transfers & Gifts"),
-    ("**店", "Shopping"),  # masked Taobao stores
+    ("Tara", "Transfers & Gifts"),
+    ("sydney", "Transfers & Gifts"),
+    ("Steve", "Transfers & Gifts"),
+    ("dudu", "Transfers & Gifts"),
+    ("enni", "Transfers & Gifts"),
+    ("urnma", "Transfers & Gifts"),
+    ("UYANGA", "Transfers & Gifts"),
+    ("Margad", "Transfers & Gifts"),
+    ("O. A. OCHIR", "Transfers & Gifts"),
+    ("Yesui Battogtokh", "Transfers & Gifts"),
+    ("Munkh-Erdene", "Transfers & Gifts"),
+    ("ERDENE", "Transfers & Gifts"),
+    ("Tselmeg Bayarjargal", "Transfers & Gifts"),
+    ("Tsolmon Khurelbaatar", "Transfers & Gifts"),
+    ("Ujin", "Transfers & Gifts"),
+    ("ujin", "Transfers & Gifts"),
+    ("Uranmaa", "Transfers & Gifts"),
+    ("Udval Lkhagvadorj", "Transfers & Gifts"),
+    ("Ari", "Transfers & Gifts"),
+    ("Anar", "Transfers & Gifts"),
+    ("E. DULGUUN", "Transfers & Gifts"),
+    ("B. E. DULGUUN", "Transfers & Gifts"),
+    ("P2P Transfer", "Transfers & Gifts"),
+    ("River", "Transfers & Gifts"),
+    ("S. MISHEEL", "Transfers & Gifts"),
+    ("Laine", "Transfers & Gifts"),
+    ("M.i", "Transfers & Gifts"),
+    ("Misheel.S", "Transfers & Gifts"),
+    ("Erkhkhongor", "Transfers & Gifts"),
+    ("G. A. ERDENE", "Transfers & Gifts"),
+    ("Hi", "Transfers & Gifts"),
+    ("ODAY", "Transfers & Gifts"),
+    ("Naransuvd", "Transfers & Gifts"),
+    ("Yugi", "Transfers & Gifts"),
+    ("alex", "Transfers & Gifts"),
+    ("murun", "Transfers & Gifts"),
 ]
 
 # NYU Shanghai: cafeteria POS charges vs campus admin fees (match on description).
@@ -327,11 +670,28 @@ NYU_SERVICE_DESCRIPTION_MARKERS = (
     "NYUCard Print Fee",
 )
 
+# Description-based disambiguation keywords for unseen merchants.
+# Ordered list of (category, keywords) — first category with a keyword hit wins.
+# Module-level so the tuples aren't rebuilt on every special_category() call.
+DESCRIPTION_KEYWORD_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("Eating Out", ("noodle", "ramen", "sushi", "burger", "pizza", "food order",
+                    "takeout", "meal", "dine", "餐", "面", "烧烤", "火锅", "粥", "外卖")),
+    ("Groceries", ("vegetable", "fruit", "produce", "grocery", "生鲜", "蔬菜",
+                   "水果", "食材", "日用品", "菜", "批发")),
+    ("Shopping", ("shoe", "cloth", "dress", "gadget", "toy", "book", "laptop",
+                  "charger", "cable", "camera", "watch", "鞋", "衣服", "玩具", "书籍")),
+    ("Transportation", ("ride", "ticket", "flight", "parking", "airport", "gas", "fuel",
+                        "车费", "机票", "停泊", "加油", "汽油")),
+    ("Transfers & Gifts", ("send money", "gift", "present", "payment", "transfer", "remittance",
+                           "红包", "汇款", "礼物", "赏金")),
+]
+
 
 def special_category(merchant: str, description: str) -> str | None:
     """Per-row category override from merchant + description. None if no rule."""
     merchant = str(merchant or "").strip()
     description = str(description or "").strip()
+    description_lower = description.lower()
 
     if merchant == NYU_SHANGHAI_MERCHANT:
         if any(marker in description for marker in NYU_SERVICE_DESCRIPTION_MARKERS):
@@ -340,6 +700,12 @@ def special_category(merchant: str, description: str) -> str | None:
 
     if merchant == "上海蕤盛工贸":
         return "Transportation"
+
+    # Description-based disambiguation for unseen merchants.
+    # High-confidence product/action keywords that clearly indicate a category.
+    for category, keywords in DESCRIPTION_KEYWORD_RULES:
+        if any(kw in description_lower for kw in keywords):
+            return category
 
     return None
 
