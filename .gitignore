@@ -252,3 +252,7 @@ candidates_*.csv
 review_*.csv
 low_confidence*.csv
 keyword_search*.txt
+
+# Root-level script-generated debug artifacts (contain transaction text)
+/_*.png
+/_*.txt
