@@ -19,26 +19,51 @@ import seaborn as sns
 import joblib
 
 sys.path.insert(0, str(Path(__file__).parent))
-from segment import vectorize, build_vectorizer, clean_text, LR_HYPERPARAMS
+from segment import LR_HYPERPARAMS
+from feature_engineering import (
+    extract_numeric_features,
+    build_hybrid_vectorizers,
+    create_hybrid_feature_matrix,
+)
+from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 
 
 def load_data():
     """Load labeled transactions and filter to labeled ones."""
     df = pd.read_csv('data/labeled/labeled_transactions.csv')
     df = df[df['labeled'] == True].copy()
-    df['text'] = df.apply(
-        lambda row: clean_text(row['merchant'], row['description']),
-        axis=1
-    )
+    df['category'] = df['category'].replace(CATEGORY_NORMALIZE)
+    df = df[df['category'].isin(ML_CATEGORIES)]
     return df
 
 
 def build_feature_matrix(df):
-    """Build feature matrix from cleaned text."""
-    print(f"\n1. Building vectorizer from {len(df)} texts...")
-    vectorizer = build_vectorizer(df['text'].tolist())  # Uses default max_features=3000
-    X = vectorize(df['text'].tolist(), vectorizer)
-    y = df['category']
+    """Build hybrid feature matrix (semantic-weighted text + numeric features)."""
+    print(f"\n1. Building hybrid feature matrix from {len(df)} transactions...")
+
+    # Extract numeric contextual features
+    numeric_features, valid_indices = extract_numeric_features(df)
+
+    # Filter DataFrame to only valid rows (those with time/amount)
+    df_valid = df.iloc[valid_indices].copy()
+
+    # Build separate vectorizers for description and merchant
+    desc_texts = df_valid['description'].tolist()
+    merch_texts = df_valid['merchant'].tolist()
+    desc_vec, merch_vec = build_hybrid_vectorizers(desc_texts, merch_texts)
+
+    # Create hybrid feature matrix
+    X = create_hybrid_feature_matrix(df_valid, desc_vec, merch_vec, numeric_features)
+
+    y = df['category'].iloc[valid_indices]
+
+    vectorizer = {'desc': desc_vec, 'merch': merch_vec}
+
+    print(f"   Description vectorizer: {len(desc_vec.get_feature_names_out())} features")
+    print(f"   Merchant vectorizer: {len(merch_vec.get_feature_names_out())} features")
+    print(f"   Numeric features: 6 (hour, day, lunch, dinner, amount_bucket, merchant_freq)")
+    print(f"   Total hybrid features: {X.shape[1]}")
+
     return X, y, vectorizer
 
 
