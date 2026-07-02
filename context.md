@@ -39,6 +39,9 @@ A pipeline that:
 | Training data | ~200–500 manual labels minimum; bootstrap seeds from rules | Supervised learning needs labels |
 | New-user onboarding | `src/app.py` web wizard + `src/bootstrap.py` CLI | No personal data in repo |
 | Visualization | Web HTML dashboard + Streamlit (`dashboard.py`) | 5-tab layout |
+| Refunds | Kept, netted as negative amount in same category/merchant | Purchase + refund should cancel out, not just vanish |
+| Internal transfers (credit card repayment, withdrawal) | Excluded entirely at parse (`_TRANSFER_KEYWORDS` in `parse.py`) | Not real spending; would double-count |
+| Peer-to-peer transfers (转账/红包) | Left as expense (not auto-excluded) | Ambiguous — could be a real gift/spend; user can extend `_TRANSFER_KEYWORDS` if they want these excluded too |
 
 ## Key Terms
 
@@ -51,7 +54,7 @@ A pipeline that:
 
 - [ ] Wire `merchants_to_label` editing into Streamlit dashboard
 - [ ] Re-add multi-year trends (`src/trends.py`) to dashboard UI
-- [ ] How to handle refunds / internal transfers long-term (currently filtered at parse)
+- [x] How to handle refunds / internal transfers — resolved Session 22, see Key Decisions
 
 ## Next Suggested Step
 
@@ -71,6 +74,15 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 22 (2026-07-02) — Refund netting & internal transfer exclusion
+- Resolved the open question on refunds/transfers in `src/parse.py`:
+  - **Refunds** (交易状态/Transaction Status contains 退款/Refund): kept as a negative-amount row instead of dropped, so they net against the original purchase in category/merchant totals
+  - **Internal transfers** (交易分类/交易类型 contains 信用卡还款, 花呗还款, 提现): excluded entirely — moving your own money isn't spend
+  - **P2P transfers** (转账/红包): deliberately left as-is (still counted as expense) — ambiguous whether a transfer to another person is "spending"; `_TRANSFER_KEYWORDS` in `parse.py` documents how to add them if wanted
+  - Native Chinese Alipay/WeChat exports get the full split (both column types available); English-translated fallback formats (`parse_alipay_english`, `parse_wechat_csv`) only get refund netting since they lack a transaction-type column — documented as a limitation in their docstrings
+- Verified with synthetic CSV/XLSX fixtures (no real user data available): confirmed refund nets correctly, credit card repayment excluded, unrelated expense/closed transactions unaffected
+- Downstream code (dashboard, forecast, visualize) all aggregate `amount` via `.sum()`/`.groupby()` — confirmed negative refund amounts net correctly with no other code changes needed
 
 ### Session 21 (2026-07-02) — Documentation Review
 - Read through codebase: web UI fully functional, merchant rules comprehensive, pipeline modular

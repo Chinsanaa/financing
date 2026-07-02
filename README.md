@@ -390,6 +390,8 @@ Monthly workflow to identify ambiguous transactions, collect labels, retrain mod
 - ✅ Duplicate transactions → preserved (intentional for monthly totals)
 - ✅ Low-confidence predictions → flagged for manual review
 - ✅ Entirely new merchants → predicted based on description text alone
+- ✅ Refunds → netted as a negative amount against the original category/merchant instead of vanishing
+- ✅ Internal transfers (credit card repayment, withdrawal) → excluded at parse; not counted as spend
 
 ---
 
