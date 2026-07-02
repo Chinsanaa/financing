@@ -34,7 +34,7 @@ from paths import (
     TRANSACTIONS,
     TRANSACTIONS_CLASSIFIED,
 )
-from classify import classify_all, load_models, save_classification_outputs
+from classify import classify_all, load_model_bundle, save_classification_outputs
 from retrain import retrain_model
 
 
@@ -218,8 +218,8 @@ def apply_label_queue_and_retrain() -> dict:
     trainable, train_message = can_train(merged)
     train_result = retrain_model() if trainable else None
 
-    vectorizer, classifier = load_models()
-    df_classified = classify_all(df, vectorizer, classifier, rules=rules)
+    bundle = load_model_bundle()
+    df_classified = classify_all(df, rules=rules, bundle=bundle)
     save_classification_outputs(df_classified)
 
     export_merchants_to_label(df, rules)
@@ -329,8 +329,8 @@ def run_bootstrap(income: Optional[float] = None, force_rules: bool = False, ski
         print(f"   Fill suggested_category in {MERCHANTS_TO_LABEL.name}, re-run bootstrap.")
 
     print("\n6. Classify all transactions")
-    vectorizer, classifier = load_models()
-    df_classified = classify_all(df, vectorizer, classifier, rules=rules)
+    bundle = load_model_bundle()
+    df_classified = classify_all(df, rules=rules, bundle=bundle)
     save_classification_outputs(df_classified)
 
     n_rules = (df_classified['confidence'] == 1.0).sum()

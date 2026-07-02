@@ -44,8 +44,10 @@ def extract_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     # Filter out rows with missing critical values
     df = df.dropna(subset=['time', 'amount'])
 
-    # Convert time to datetime if string
-    if df['time'].dtype == 'object':
+    # Convert time to datetime unless it already is one.
+    # (Robust across pandas versions: pandas 3.0 gives string columns dtype
+    # 'str', not 'object', so an == 'object' check silently skips conversion.)
+    if not pd.api.types.is_datetime64_any_dtype(df['time']):
         df['time'] = pd.to_datetime(df['time'], errors='coerce')
 
     # Ensure amount is numeric

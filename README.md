@@ -128,6 +128,45 @@ Metrics are **per-user** — generated when you run `python src/bootstrap.py` an
 
 For details on usage, see `src/feature_engineering.py` docstrings and `tests/test_feature_engineering.py`.
 
+### Semantic Layer & Graduated Trust (Session 31)
+
+**Problem**: GroupKFold showed the honest ceiling — ~36.5% on genuinely unseen
+merchants, with confidence badly miscalibrated (predictions in the 0.8–0.9
+confidence bin were only ~44% correct). Every model prediction was therefore
+routed to manual review, no matter how confident it looked, because raw
+confidence couldn't be trusted.
+
+**Solution**: a second classifier built on **embeddings** instead of TF-IDF,
+paired with the original model through a **calibrated agreement gate**:
+
+| Component | What it does | File |
+|---|---|---|
+| **Semantic classifier** | LogisticRegression on Model2Vec `potion-multilingual-128M` embeddings (or an offline LSA fallback if weights can't be downloaded) — knows "麦当劳" ≈ "KFC" without ever training on either | `src/semantic.py` |
+| **Calibration** | Top-label Platt scaling on grouped out-of-fold predictions, so "0.9 confident" means ~90% correct *on unseen merchants*, not the raw (and badly miscalibrated) `predict_proba` | `src/calibration.py` |
+| **Honest threshold** | Sweeps confidence cutoffs on grouped-CV data; picks the smallest one where agreed predictions hit a target precision (default 90%) with enough support — or saves none, and the system stays 100%-review, if no cutoff qualifies | `src/eval_grouped.py` |
+| **Graduated trust** | A no-rule prediction auto-applies only when the TF-IDF and semantic models **agree**, their *calibrated* confidence clears the threshold, and it isn't `'Other'` (a heterogeneous catch-all where agreement is weak evidence) | `src/classify.py` |
+
+**Why this is safer than just trusting raw confidence**: agreement between two
+models trained on different signals (sparse keyword statistics vs. dense
+semantic meaning) is much harder to fake than either model being confident
+alone. Combined with calibration, the auto-apply threshold is a number that
+was *measured*, not assumed.
+
+**Smarter as it learns**: every retrain rebuilds the semantic index from the
+latest labeled data — a transaction you review today sharpens tomorrow's
+predictions for similar merchants immediately, both directly (the classifier
+retrains) and visibly (the review queue can show "looks like 麦当劳 → Eating
+Out, cosine 0.83" via `semantic.nearest_examples()`).
+
+**Degrades cleanly**: any missing artifact (no internet for the model
+download, a fresh checkout, a failed retrain) falls back to exactly today's
+behavior — every model prediction routed to review. Nothing is auto-applied
+without the full, verified artifact chain.
+
+See `python src/eval_grouped.py` for real numbers on your data, and
+`tests/test_semantic.py` / `tests/test_calibration.py` / `tests/test_agreement_routing.py`
+for the behavior this section describes, verified with deterministic fakes.
+
 ### How accuracy is measured
 
 There are two very different ways to cross-validate this system, and they give
