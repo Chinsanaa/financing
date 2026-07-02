@@ -297,8 +297,66 @@ for low-confidence Stage-2 residuals awaiting review.
 **Decision needed before Phase 3:** (1) which tiny-class option, (2) whether to
 adopt this two-stage framing in the docs/pipeline. Nothing changes until you pick.
 
-## Phase 3 — Tests & reproducibility *(pending)*
+### Decisions (confirmed by user, 2026-07-02)
 
-## Phase 4 — Calibration & honest tuning *(pending)*
+- **Tiny classes → Option B (rule-only).** Utilities & Services (and other rare,
+  cleanly-ruleable categories) are assigned only by high-precision merchant
+  rules, never predicted by the model; "Other" is the explicit residual/review
+  bucket. Not merged into Misc; not blocked on collecting more labels.
+- **Two-stage framing → adopted.** Docs/pipeline narrative becomes: rules are the
+  engine (~91% coverage), the model is a suggester on the no-rule residual,
+  low-confidence routes to human review, and the system improves by accumulating
+  rules. Implemented in docs/README in Phase 5; the confidence gate is validated
+  honestly in Phase 4 before any threshold is asserted.
+
+## Phase 3 — Tests & reproducibility
+
+**Status: complete — 18 tests pass. Awaiting user confirmation before Phase 4.**
+
+### pytest suite (`tests/`, all synthetic data — no personal transactions)
+
+Run: `pytest tests/ -q` → **18 passed**.
+
+- **`test_parse.py`** (7 tests) — schema normalization (exact 5-column unified
+  output), **encoding handling** (a UTF-8-sig and a GBK copy of the same Alipay
+  export parse to identical frames), **refund netting** (退款 kept as −20.0),
+  **internal-transfer exclusion** (信用卡还款 dropped), income-row exclusion,
+  generic-bank direction/amount filtering, and **duplicate handling** (validator
+  reports the injected duplicate).
+- **`test_leakage_guard.py`** (3 tests) — the required guard. A reusable
+  `assert_no_group_leakage(groups, train_idx, test_idx)` (in `src/cv_utils.py`)
+  raises `GroupLeakageError` if any merchant lands in both train and test.
+  Tests prove: GroupKFold passes it on every fold; a naive StratifiedKFold split
+  **trips it** (so the guard actually catches the Phase-1 leakage); and it raises
+  on an explicit hand-built overlap.
+- **`test_reproducibility.py`** (3 tests) — running the CV twice with a fixed
+  seed yields **identical** accuracy and F1-macro (stratified and GroupKFold),
+  and a check that `LR_HYPERPARAMS` pins `random_state`.
+- **`test_validate.py`** (5 tests) — schema/amount/date checks behave (clean
+  frame → no violations; missing column → error; zero amount → error; negative
+  amount → *warning* not error, because refunds are legitimately negative;
+  future/ancient dates → errors).
+
+### Data validation (`src/validate.py`)
+
+Returns a list of typed `Violation`s (error vs warning) rather than raising, so
+callers choose whether to fail. Checks: required-column **schema**; **amounts**
+non-zero/non-null (negatives allowed = refunds, flagged as warning); **dates**
+parseable and within `2000-01-01 .. now`; **duplicate** rows on the natural key
+(no transaction-ID column exists in this schema, so identical (time, merchant,
+desc, amount) rows are the closest check — a warning, since repeats can be real).
+On the real 863-row data: **0 errors, 1 warning** (30 refund rows) — clean.
+
+### One reproducible command (`run_all.py`)
+
+`python run_all.py` runs raw → parse → label → train → classify, then validates,
+then emits the stratified-CV metrics report; `--honest` adds the
+GroupKFold-by-merchant evaluation. Verified end-to-end on the restored data.
+**Determinism confirmed:** two back-to-back `retrain.py` runs gave byte-identical
+`Accuracy: 95.4% (±2.2%)`. The one missing seed found in the codebase
+(`label.py`'s display `.sample()`) was pinned to `random_state=42`; every
+other randomness source was already seeded.
+
+## Phase 4 — Calibration & honest tuning *(pending user confirmation)*
 
 ## Phase 5 — Doc reconciliation *(pending)*
