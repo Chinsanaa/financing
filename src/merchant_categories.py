@@ -307,6 +307,8 @@ LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
     # NYU Shanghai split by description in special_category() — no blanket rule here
     ("上海蕤盛工贸", "Transportation"),  # Shanghai metro (~¥5 rides)
     ("上海都畅数字技术有限公司", "Transportation"),  # metro payment tech
+
+    # --- Eating Out (from manual review) ---
     ("济明路蘭州牛肉面", "Eating Out"),
     ("美淑家", "Eating Out"),
     ("饿梨酱", "Eating Out"),
@@ -314,9 +316,66 @@ LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
     ("马永胜牛肉面", "Eating Out"),
     ("豹喵酒吧", "Eating Out"),
     ("橘柚梧桐", "Eating Out"),
+    ("Holy Bagel", "Eating Out"),
+    ("Habibi", "Eating Out"),
+    ("13DE MARZO", "Eating Out"),
+    ("AMINO AMIGO", "Eating Out"),
+    ("LA BARAKA UV", "Eating Out"),
+    ("鹈鹕镇大王", "Eating Out"),
+    ("上海英和企业管理有限公司", "Eating Out"),
+    ("floating kitchen", "Eating Out"),
+
+    # --- Groceries (from manual review) ---
+    ("高青西门市", "Groceries"),
+    ("K-MART", "Groceries"),
+    ("上海香雪海国际贸易有限公司", "Groceries"),
+    ("上海优悠生活商业管理有限公司", "Groceries"),
+
+    # --- Shopping (from manual review) ---
+    ("JUNGLEplus", "Shopping"),
+    ("上海谱墨品牌管理有限公司", "Shopping"),
+    ("ws**1", "Shopping"),
+    ("**店", "Shopping"),  # masked Taobao stores
+
+    # --- Transfers & Gifts (from manual review - personal names & P2P transfers) ---
     ("Sydney Yuen", "Transfers & Gifts"),
     ("Evie", "Transfers & Gifts"),
-    ("**店", "Shopping"),  # masked Taobao stores
+    ("Tara", "Transfers & Gifts"),
+    ("sydney", "Transfers & Gifts"),
+    ("Steve", "Transfers & Gifts"),
+    ("dudu", "Transfers & Gifts"),
+    ("enni", "Transfers & Gifts"),
+    ("urnma", "Transfers & Gifts"),
+    ("UYANGA", "Transfers & Gifts"),
+    ("Margad", "Transfers & Gifts"),
+    ("O. A. OCHIR", "Transfers & Gifts"),
+    ("Yesui Battogtokh", "Transfers & Gifts"),
+    ("Munkh-Erdene", "Transfers & Gifts"),
+    ("ERDENE", "Transfers & Gifts"),
+    ("Tselmeg Bayarjargal", "Transfers & Gifts"),
+    ("Tsolmon Khurelbaatar", "Transfers & Gifts"),
+    ("Ujin", "Transfers & Gifts"),
+    ("ujin", "Transfers & Gifts"),
+    ("Uranmaa", "Transfers & Gifts"),
+    ("Udval Lkhagvadorj", "Transfers & Gifts"),
+    ("Ari", "Transfers & Gifts"),
+    ("Anar", "Transfers & Gifts"),
+    ("E. DULGUUN", "Transfers & Gifts"),
+    ("B. E. DULGUUN", "Transfers & Gifts"),
+    ("P2P Transfer", "Transfers & Gifts"),
+    ("River", "Transfers & Gifts"),
+    ("S. MISHEEL", "Transfers & Gifts"),
+    ("Laine", "Transfers & Gifts"),
+    ("M.i", "Transfers & Gifts"),
+    ("Misheel.S", "Transfers & Gifts"),
+    ("Erkhkhongor", "Transfers & Gifts"),
+    ("G. A. ERDENE", "Transfers & Gifts"),
+    ("Hi", "Transfers & Gifts"),
+    ("ODAY", "Transfers & Gifts"),
+    ("Naransuvd", "Transfers & Gifts"),
+    ("Yugi", "Transfers & Gifts"),
+    ("alex", "Transfers & Gifts"),
+    ("murun", "Transfers & Gifts"),
 ]
 
 # NYU Shanghai: cafeteria POS charges vs campus admin fees (match on description).
