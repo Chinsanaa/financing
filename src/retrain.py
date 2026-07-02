@@ -35,6 +35,11 @@ def retrain_model():
     df_labeled = df[df['labeled'] == True].copy()
     df_labeled['category'] = df_labeled['category'].replace(CATEGORY_NORMALIZE)
     df_labeled = df_labeled[df_labeled['category'].isin(ML_CATEGORIES)]
+
+    # Labeled CSV stores the datetime as 'timestamp'; feature engineering
+    # expects 'time'. Normalize once here.
+    if 'time' not in df_labeled.columns and 'timestamp' in df_labeled.columns:
+        df_labeled['time'] = df_labeled['timestamp']
     print(f"\n1. Loaded {len(df_labeled)} labeled transactions")
     print(f"   Category distribution:")
     for cat, count in df_labeled['category'].value_counts().sort_values(ascending=False).items():
@@ -73,9 +78,9 @@ def retrain_model():
 
         # Save vectorizers with '_hybrid' suffix to distinguish from legacy
         vectorizer = {'desc': desc_vec, 'merch': merch_vec}
-        print(f"   Description vectorizer: {desc_vec.n_features_in_} features")
-        print(f"   Merchant vectorizer: {merch_vec.n_features_in_} features")
-        print(f"   Numeric features: 4 (hour, day, amount_bucket, merchant_frequency)")
+        print(f"   Description vectorizer: {len(desc_vec.get_feature_names_out())} features")
+        print(f"   Merchant vectorizer: {len(merch_vec.get_feature_names_out())} features")
+        print(f"   Numeric features: 6 (hour, day, lunch, dinner, amount_bucket, merchant_freq)")
         print(f"   Total hybrid features: {X.shape[1]}")
 
     else:
@@ -142,6 +147,46 @@ def retrain_model():
     joblib.dump(clf, 'data/processed/classifier.pkl')
     print(f"   [OK] classifier.pkl")
     print(f"   [OK] vectorizer_config.pkl")
+
+    # 5b. Semantic layer: embedding model + calibrators + agreement threshold.
+    # All rebuilt from THIS label snapshot in the same pass, so the two models
+    # never drift apart. On any failure, delete semantic artifacts so classify
+    # degrades cleanly to review-everything (never pair stale artifacts).
+    print(f"\n5b. Training semantic (embedding) layer...")
+    from paths import (SEMANTIC_MODEL, SEMANTIC_INDEX, SEMANTIC_CALIBRATOR,
+                       TFIDF_CALIBRATOR, ENSEMBLE_CONFIG)
+    try:
+        import semantic as sem
+        encoder = sem.get_encoder()  # retrain is the one moment downloads may happen
+        if encoder is None:
+            print(f"   Model2Vec unavailable — fitting LsaEncoder fallback "
+                  f"(string similarity only, no pretrained knowledge)")
+            encoder = sem.fit_lsa_encoder(sem.build_semantic_texts(df_labeled))
+        else:
+            print(f"   Using Model2Vec encoder (pretrained multilingual)")
+
+        sem_model = sem.train_semantic_model(df_labeled, encoder)
+        sem.save_semantic_artifacts(sem_model)
+        print(f"   [OK] semantic_classifier.pkl + semantic_index.pkl "
+              f"({len(sem_model['index']['labels'])} indexed examples)")
+
+        # Honest grouped evaluation: fits + saves both calibrators, derives
+        # + saves the auto-apply threshold (or records that none qualifies).
+        import eval_grouped
+        eval_results = eval_grouped.run_report(df_labeled=df_labeled, encoder=encoder)
+        thr = eval_results.get('threshold')
+        if thr:
+            print(f"   [OK] Graduated trust ENABLED: threshold {thr['threshold']} "
+                  f"(precision {thr['precision']:.1%} on unseen merchants)")
+        else:
+            print(f"   [OK] No safe threshold found — auto-apply stays OFF "
+                  f"(all model predictions go to review)")
+    except Exception as e:
+        print(f"   [WARN] Semantic layer failed ({type(e).__name__}: {e}) — "
+              f"removing semantic artifacts; classifier falls back to review-everything")
+        for p in (SEMANTIC_MODEL, SEMANTIC_INDEX, SEMANTIC_CALIBRATOR,
+                  TFIDF_CALIBRATOR, ENSEMBLE_CONFIG):
+            p.unlink(missing_ok=True)
 
     # Per-category evaluation on all labeled data
     print(f"\n6. PER-CATEGORY PERFORMANCE (on all {len(df_labeled)} labeled examples):")

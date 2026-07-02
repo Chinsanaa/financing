@@ -42,6 +42,8 @@ A pipeline that:
 | Refunds | Kept, netted as negative amount in same category/merchant | Purchase + refund should cancel out, not just vanish |
 | Internal transfers (credit card repayment, withdrawal) | Excluded entirely at parse (`_TRANSFER_KEYWORDS` in `parse.py`) | Not real spending; would double-count |
 | Peer-to-peer transfers (转账/红包) | Left as expense (not auto-excluded) | Ambiguous — could be a real gift/spend; user can extend `_TRANSFER_KEYWORDS` if they want these excluded too |
+| Semantic classifier | Model2Vec static embeddings + LogisticRegression, LSA fallback when weights unavailable | Numpy-only (no torch), captures merchant meaning TF-IDF can't (Session 31) |
+| Auto-apply threshold | Derived from grouped-CV data (target precision 90%, min support 30); no threshold saved if unreachable | Never invent a trust boundary — honest "stays in review" beats a guessed number (Session 31) |
 
 ## Key Terms
 
@@ -67,7 +69,7 @@ enough merchant-specific data, even the ML model could eventually generalize
 better. For now, the 2.2% uncategorized rate is near-optimal without more
 training data.
 
-## Current State (Session 30, 2026-07-02)
+## Current State (Session 31, 2026-07-02)
 
 | Item | Status |
 |---|---|
@@ -75,12 +77,112 @@ training data.
 | Raw exports | User adds locally (`data/raw/`) |
 | Merchant rules | `data/templates/merchant_rules_starter.csv` + in-code rules in `src/merchant_categories.py` (~600 patterns: merchant/brand names + description disambiguation keywords) |
 | Labeled training data | Created per-user by bootstrap + manual labeling |
-| Classifier | Trained per-user via `retrain.py` / bootstrap |
+| TF-IDF classifier | Trained per-user via `retrain.py` / bootstrap |
+| Semantic (embedding) classifier | Trained alongside TF-IDF in `retrain.py`; Model2Vec `potion-multilingual-128M` when downloadable, else an offline `LsaEncoder` fallback (see Session 31) |
+| Graduated trust | Model predictions on unseen merchants auto-apply only when both models agree at a calibrated confidence ≥ a data-derived threshold; otherwise routed to review as before |
 | Budget config | `data/templates/budget_config.example.json` → user `budget_config.json` |
 | Web UI | Flask app (`src/app.py`) with interactive wizard; per-session workspaces (`data/sessions/`, gitignored) |
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 31 (2026-07-02) — Semantic embeddings + calibrated confidence + graduated trust
+
+**Motivation**: the ML fallback scored only 36.5% on genuinely unseen merchants
+(GroupKFold-by-merchant, docs/FULL_AUDIT.md) with confidence badly miscalibrated
+(ECE 0.184) — so every model prediction was routed to manual review, no matter
+how confident it looked. This session made the "confident" number actually mean
+something, and let the system act on it when it's trustworthy.
+
+**1. Semantic classifier (`src/semantic.py`, new)** — a second, independent
+classifier built on text **embeddings** instead of TF-IDF. Embeddings place
+semantically similar text near each other in vector space (learned from a huge
+pretraining corpus), so "麦当劳" and "KFC" land close together even though they
+share zero characters — something TF-IDF can never do. Pluggable backend:
+- **Model2Vec** `potion-multilingual-128M` (distilled from BGE-M3, 101 languages
+  incl. Chinese, numpy-only — no torch) when its weights can be downloaded.
+- **`LsaEncoder` fallback** (char n-gram TF-IDF → TruncatedSVD) when they can't —
+  fully offline, captures string similarity only (not world knowledge), keeps
+  the whole pipeline testable anywhere.
+- A `LogisticRegression` sits on top of whichever encoder's vectors (same model
+  family as the TF-IDF path — interpretable, and it retrains in a fraction of a
+  second whenever new labels arrive).
+- `nearest_examples()` gives the review queue a "reasoning" trail: "looks like
+  麦当劳 → Eating Out (cosine 0.83)".
+
+**2. Calibrated confidence (`src/calibration.py`, new)** — raw
+`predict_proba().max()` lies on unseen merchants (0.8-0.9 confidence bin was
+only ~44% accurate per the audit). Fixed with **top-label Platt scaling**: fit
+a 1-feature logistic regression mapping raw confidence → P(correct), using
+grouped out-of-fold predictions so it reflects unseen-merchant behavior.
+Sigmoid, not isotonic — isotonic overfits below ~1000 samples. Sidesteps
+tiny-class sparsity entirely (never looks at *which* class, only "was the top
+prediction right").
+
+**3. Honest evaluation (`src/eval_grouped.py`, new; promotes patterns from
+`docs/phase4_analysis.py`)** — GroupKFold-by-merchant out-of-fold predictions
+for both models, ECE before/after calibration, and **data-derived threshold
+selection**: the smallest confidence cutoff where agreed, non-'Other'
+predictions reach a target precision (default 90%) with enough support
+(≥30 rows). If no threshold clears the bar, none is saved — the system
+honestly stays at 100%-review rather than lowering the bar silently. Run via
+`python src/eval_grouped.py`; writes `data/reports/EVAL_GROUPED.txt`.
+
+**4. Graduated trust (`src/classify.py`)** — a `ModelBundle` dataclass loads
+every artifact once (`load_model_bundle()`); any missing piece degrades that
+capability gracefully. A no-rule prediction now auto-applies
+(`label_source='model_agreed'`) **only** when: the TF-IDF and semantic models
+agree, the smaller of their two *calibrated* confidences clears the derived
+threshold, and the prediction isn't 'Other' (a heterogeneous catch-all —
+agreement on it is weak evidence). Everything else still routes to review,
+exactly as before. Verified via a degradation drill: removing the semantic
+artifacts falls back to 100%-review with zero exceptions.
+
+**5. Retraining loop (`src/retrain.py`)** — trains both models from the same
+label snapshot in one pass (never lets them drift apart), then runs
+`eval_grouped.run_report()` to fit calibrators and derive the threshold. Any
+failure deletes all semantic artifacts so `classify.py` degrades cleanly
+rather than pairing a stale semantic model with a fresh TF-IDF one. This is
+also the "smarter as it learns" hook — every retrain (triggered by the
+existing label-queue loop in `bootstrap.py`) rebuilds the semantic index from
+the latest `labeled_transactions.csv`, so a newly reviewed label immediately
+sharpens both the classifier and the nearest-example explanations.
+
+**Bug fixed along the way**: `bootstrap.py` (2 call sites) called
+`vectorizer, classifier = load_models()`, but Session 29 made `load_models()`
+return a 3-tuple `(vectorizer, classifier, config)` — this raised `ValueError`
+at runtime and was never caught until now. Both call sites migrated to
+`load_model_bundle()`.
+
+**Verified on synthetic data** (no personal data in this environment): full
+retrain → eval → classify → degradation-drill loop runs end-to-end. On a
+287-row/38-merchant synthetic set, Model2Vec downloaded successfully and
+calibration cut ECE from ~0.36 raw to ~0.05-0.08; a real threshold (0.5,
+99.6% precision, 87.8% coverage) was derived — real numbers on the user's
+data will differ and should be checked via `python src/eval_grouped.py`.
+
+**Tests**: `tests/test_semantic.py`, `tests/test_calibration.py`,
+`tests/test_agreement_routing.py` (new, 23 tests total) — all use deterministic
+stubs/fakes, no model2vec install or network access required. Full suite:
+71 passing (48 pre-existing, unmodified — confirms backward compatibility).
+
+**Files added**: `src/semantic.py`, `src/calibration.py`, `src/eval_grouped.py`,
+`tests/test_semantic.py`, `tests/test_calibration.py`, `tests/test_agreement_routing.py`.
+**Files modified**: `src/classify.py` (ModelBundle + agreement layer),
+`src/retrain.py` (semantic training step), `src/bootstrap.py` (bug fix),
+`src/paths.py` (new artifact paths), `src/feature_engineering.py` (pandas 3.0
+dtype-check fix — `== 'object'` silently failed to detect string columns;
+now uses `pd.api.types.is_datetime64_any_dtype`), `requirements.txt`
+(`model2vec>=0.3.0`).
+
+**Open / next**: run `python src/eval_grouped.py` on the user's real labeled
+data once available, to see the actual (not synthetic) threshold and coverage.
+`src/web_pipeline.py`'s per-session classify path was left on the TF-IDF-only
+two-stage design intentionally — it trains a session-scoped model from
+scratch per onboarding session, and wiring per-session semantic training was
+judged out of scope for this pass (`classify_all`'s existing
+`isinstance(vectorizer, dict)` guard already fixes the one substantive bug
+there — a hybrid vectorizer being silently treated as legacy).
 
 ### Session 30 (2026-07-02) — Rule expansion + matching-speed optimization
 Two pieces of work this session.
