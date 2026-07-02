@@ -5,19 +5,20 @@
 
 ## Executive Summary
 
-**Automated transaction categorization system** for Alipay + WeChat Pay exports: supervised ML (Logistic Regression + TF-IDF + jieba), merchant rules, confidence thresholds, and a five-tab Streamlit dashboard for budgeting.
+**Automated transaction categorization system** for Alipay + WeChat Pay exports: a **rules-first** pipeline (high-precision merchant rules) with a Logistic Regression + TF-IDF + jieba model as a suggester for merchants the rules don't cover, plus a Streamlit dashboard for budgeting.
 
-**Typical performance** (after labeling ~200+ transactions on your own data):
-- ~90–96% stratified CV accuracy on held-out labels
-- Merchant rules give instant 100% confidence on known chains (Meituan, DiDi, etc.)
-- Low-confidence rows flagged for manual review
+**How it actually performs** (measured honestly — see [How accuracy is measured](#how-accuracy-is-measured)):
+- **Merchant rules are the engine.** On a representative run they matched ~91% of transactions at ~100% precision. This is where the accuracy comes from.
+- **On merchants a rule already knows**, the model re-identifies the category at ~95% (stratified CV).
+- **On genuinely new merchants** (no rule yet), the model generalizes poorly — ~45% under merchant-grouped CV, only a little above the 38.5% majority-class baseline. So model predictions on unseen merchants are treated as **suggestions routed to manual review**, not trusted labels.
+- The system improves by **accumulating rules** (you review new merchants → they become rules), not by the model getting smarter on its own.
 
-**Day-one expectation** (starter rules only): ~75–85% category accuracy until you fill `merchants_to_label.csv` and retrain.
+**Your own metrics** are generated when you run the pipeline:
+- CV accuracy, F1-weighted, F1-macro → `data/reports/TRAINING_REPORT.txt`
+- Merchants awaiting review → `data/processed/needs_manual_review.csv`
+- Budget variance → Streamlit dashboard
 
-**Key Metrics (your run — run `bootstrap.py` to generate):**
-- CV accuracy, F1-weighted, F1-macro from `data/reports/TRAINING_REPORT.txt`
-- Manual review queue in `data/processed/needs_manual_review.csv`
-- Budget variance in Streamlit dashboard
+> ⚠️ Earlier versions of this README quoted 99.1% / 97.3% / 95.5% accuracy as if the model were that good in general. Those were single stratified-CV runs on a dataset where the **same merchant appeared in both train and test** — the model was memorizing merchants, not learning to categorize new ones. See `docs/FULL_AUDIT.md` for the full integrity audit.
 
 ---
 
@@ -60,17 +61,18 @@ Raw Data (CSV Exports)
   • Starter merchant rules (~60 national chains) + your custom rules
     ↓
 [Stage 4] Vectorize
-  • TF-IDF feature extraction
-  • 657 most-distinctive tokens
+  • TF-IDF feature extraction (unigrams + bigrams)
+  • ~660 most-distinctive tokens (varies with your data)
     ↓
 [Stage 5] Train Classifier
   • Logistic Regression with class balancing
-  • Hyperparameter optimization (C=10, balanced weights)
-  • Stratified 5-fold cross-validation
+  • Regularization C=1.0 (chosen under merchant-grouped CV, not leaky stratified CV)
+  • Cross-validation for reporting
     ↓
-[Stage 6] Classify & Score
-  • ML prediction + merchant rule overrides + description rules (e.g. catering/餐饮)
-  • Flag low-confidence (<70%) for manual review
+[Stage 6] Classify & Score (two-stage)
+  • Stage 1: merchant rules + description rules (e.g. catering/餐饮) → trusted label
+  • Stage 2: model predicts the residual (no-rule merchants) → suggestion
+  • Model suggestions on unseen merchants are routed to manual review
     ↓
 [Stage 7] Visualize & Decide
   • Interactive Streamlit dashboard
@@ -83,10 +85,10 @@ Raw Data (CSV Exports)
 | Design Choice | Alternative Considered | Why This Won |
 |---|---|---|
 | **Supervised Classification** | Unsupervised clustering (K-means) | We know target categories in advance; clustering requires manual re-labeling each run and produces inconsistent clusters |
-| **Logistic Regression** | Deep learning (LSTM/BERT) | Simple, interpretable, fast; outperforms complex models for this problem size (~1000 samples); tokens directly show what model learned |
+| **Logistic Regression** | Deep learning (LSTM/BERT) | Simple, interpretable, fast; tokens directly show what the model learned. Given that merchant memorization (not text generalization) drives most of the accuracy, a heavier model would not help here |
 | **TF-IDF Vectorization** | Word embeddings (Word2Vec) | Interpretable, distinctive merchant names (Meituan, Taobao, DiDi) score high naturally; no need for heavy compute |
 | **jieba Tokenization** | English tokenizer on Chinese | Chinese has no spaces; jieba is the standard library for correct segmentation |
-| **Class Weighting** | Balanced train/test split | Data is naturally imbalanced (47% Eating Out); weighting prevents minority categories from being ignored |
+| **Class Weighting** | Balanced train/test split | Data is naturally imbalanced (~38% Eating Out, <1% Utilities); weighting prevents minority categories from being ignored |
 
 ---
 
@@ -101,10 +103,30 @@ Metrics are **per-user** — generated when you run `python src/bootstrap.py` an
 | Manual review queue | `data/processed/needs_manual_review.csv` |
 | Rule vs ML coverage | Bootstrap / classify stdout |
 
-**Reference design targets** (on ~1k labeled mixed CN/EN transactions):
-- Stratified 5-fold CV accuracy: often **90–96%** after sufficient labeling
-- F1-macro improves materially with `class_weight='balanced'` vs unweighted baseline
-- Well-calibrated confidence: wrong predictions tend to score lower than correct ones
+### How accuracy is measured
+
+There are two very different ways to cross-validate this system, and they give
+very different numbers. Both are honest — they answer different questions.
+
+| Scheme | What it measures | Representative result |
+|---|---|---|
+| **Stratified 5-fold CV** | Accuracy on merchants the model has *already seen* (they appear in both train and test folds) | ~95% accuracy, ~0.85 F1-macro |
+| **GroupKFold by merchant** | Accuracy on **new** merchants (no merchant is in both train and test) | ~45% accuracy, ~0.44 F1-macro |
+
+The gap is the point: because the merchant name is part of the text the model
+reads, stratified CV mostly measures **merchant memorization**, not the ability
+to categorize a merchant it has never seen. GroupKFold is the honest measure of
+generalization — and it sits only a little above the 38.5% majority-class
+baseline.
+
+**Which do we report?** Both, labeled for what they are. `retrain.py` prints the
+stratified number (useful for known merchants); `run_all.py --honest` prints the
+GroupKFold number (the real generalization). We do **not** headline the
+stratified number as if it were the model's real-world accuracy — that was the
+mistake this project's earlier docs made.
+
+Full methodology, per-category metrics, calibration curves, and the
+documented-vs-actual reconciliation are in **`docs/FULL_AUDIT.md`**.
 
 ---
 
@@ -129,19 +151,18 @@ Metrics are **per-user** — generated when you run `python src/bootstrap.py` an
 ```
 
 **2. Class-Balanced Logistic Regression**
-- Minority categories (Transfers: 27 samples) were invisible to unweighted model
-- `class_weight='balanced'` auto-scales loss inversely to class frequency
-- Result: all categories get fair representation, F1-macro +39%
+- The data is heavily imbalanced (~38% Eating Out, <1% Utilities)
+- `class_weight='balanced'` auto-scales loss inversely to class frequency so minority categories aren't ignored
+- `C=1.0` regularization: an earlier `C=10` was tuned on the leaky stratified CV; under honest merchant-grouped CV, `C=1.0` generalizes better to unseen merchants
 
-**3. Confidence Calibration**
-- Well-calibrated: correct predictions average 82.4% confidence, wrong predictions 41.7%
-- Threshold strategy: auto-classify ≥80%, manual review 70-79%, reject <70%
-- Prevents unreliable predictions from silently failing
+**3. Confidence Calibration (honest)**
+- On **known** merchants the model is well calibrated (confidence tracks accuracy; ECE ≈ 0.04)
+- On **new** merchants it is **overconfident** — even 0.9+ confidence is only ~89% accurate (ECE ≈ 0.18)
+- Because confidence is unreliable exactly where the model is used (unseen merchants), model predictions on no-rule merchants are routed to review rather than auto-accepted on a confidence threshold
 
-**4. Stratified Cross-Validation**
-- 5-fold stratified split preserves category distribution in each fold
-- Honest metric: prevents accidental overfitting to majority class
-- Discovered real accuracy (95.5%) vs. misleading single-split (99.1%)
+**4. Cross-Validation — two schemes, honestly labeled**
+- Stratified 5-fold measures accuracy on *known* merchants; GroupKFold-by-merchant measures generalization to *new* merchants (see [How accuracy is measured](#how-accuracy-is-measured))
+- The large gap between them revealed that earlier single-number accuracy claims were merchant-memorization artifacts, not real generalization
 
 ### Model Complexity & Trade-offs
 
@@ -151,11 +172,11 @@ Metrics are **per-user** — generated when you run `python src/bootstrap.py` an
 | Training time | ~0.1s | ~30s |
 | Interpretability | ✅ Can see which tokens matter | ❌ Black box |
 | Data needed | 200-500 samples | 10,000+ samples |
-| Production stability | ✅ No randomness | ⚠️ Requires careful seeding |
-| Accuracy on this task | 96.2% | ~96.5% (marginal gain) |
+| Production stability | ✅ Deterministic (fixed seed) | ⚠️ Requires careful seeding |
+| Fit for this problem | ✅ Merchant memorization dominates; a heavier model wouldn't generalize better on unseen merchants either | ❌ Needs far more data; still bottlenecked by the same memorization issue |
 | Maintenance burden | Low | High |
 
-**Decision**: Logistic Regression wins on simplicity, speed, and interpretability with acceptable accuracy trade-off.
+**Decision**: Logistic Regression wins on simplicity, speed, and interpretability. The limiting factor here is the data (few unique merchants, heavy repetition), not model capacity — so a bigger model would not meaningfully improve honest generalization.
 
 ---
 
@@ -180,7 +201,7 @@ Six-tab Streamlit dashboard (`streamlit run src/dashboard.py`). Filters (date, c
 
 ### Web UI (recommended)
 
-Interactive Flask wizard: upload files, define categories, label merchants, auto-train until **70%+** accuracy, then view the 5-tab dashboard.
+Interactive Flask wizard: upload files, define categories, label merchants (each becomes a trusted rule), retrain, then view the dashboard.
 
 ```bash
 pip install -r requirements.txt
@@ -191,7 +212,7 @@ python src/app.py
 **Workflow:**
 1. **Upload** — drag Alipay `.csv` and/or WeChat `.xlsx` files
 2. **Categories** — review and customize the 7 default spending categories
-3. **Label** — assign a category per merchant; repeat until accuracy ≥ 70%
+3. **Label** — assign a category per merchant (each becomes a trusted rule); repeat to expand coverage
 4. **Dashboard** — explore 5 interactive tabs (Overview, Budget & Forecast, Savings & Anomalies, Action Plan, Reports)
 
 **How it works:**
@@ -216,7 +237,7 @@ pip install -r requirements.txt
 # 3. One-command first-run setup (parse → seed rules → train → classify → budget)
 python src/bootstrap.py --income 8000   # set your monthly income in CNY
 
-# 4. Label your top merchants (improves accuracy from ~75% → 90%+)
+# 4. Label your top merchants (each becomes a trusted rule → more coverage)
 #    Open data/exports/merchants_to_label.csv, fill suggested_category, re-run bootstrap
 
 # 5. Dashboard
@@ -225,13 +246,15 @@ streamlit run src/dashboard.py
 
 **What to expect**
 
-| Stage | Category accuracy | Notes |
-|-------|-------------------|-------|
-| Day 1 (starter rules only) | ~75–85% | National chains (Meituan, DiDi, 麦当劳) auto-labeled |
-| After filling `merchants_to_label.csv` | ~85–92% | Your local shops get rules |
-| After 200+ labels + retrain | ~90–96% | Full ML pipeline kicks in |
+| Stage | What happens | Notes |
+|-------|--------------|-------|
+| Day 1 (starter rules only) | National chains (Meituan, DiDi, 麦当劳) auto-labeled; everything else → review | Coverage depends on how many of your merchants are national chains |
+| After filling `merchants_to_label.csv` | Your local shops become rules | Each rule you add is trusted at 100% precision next run |
+| Ongoing | New merchants get model *suggestions* → you confirm → they become rules | Accuracy grows by accumulating rules, not by the model self-improving |
 
-Budget numbers in the dashboard come from **your** `data/budget_config.json` (auto-generated from spend history on bootstrap, then editable).
+The percentage of transactions that land correctly is driven by **how much of
+your spending is at merchants you've already ruled** — not by a single model
+accuracy number. Budget numbers in the dashboard come from **your** `data/budget_config.json` (auto-generated from spend history on bootstrap, then editable).
 
 ### Quick Start (existing setup)
 
@@ -361,11 +384,11 @@ Correctly tokenizes Chinese + English text using jieba segmentation. Prevents th
 ### 3. **Rule-Based Pre-Labeling + Post-Classification Overrides**
 Starter merchant rules (national chains) auto-label during bootstrap; your custom rules override ML at inference. Description rules handle `餐饮` / `catering` → Eating Out.
 
-### 4. **Production-Ready Confidence Thresholds**
-Merchant rules set confidence to 100% on match; ML predictions below 70% go to `needs_manual_review.csv`.
+### 4. **Two-Stage Routing with Honest Review**
+Merchant rules set confidence to 100% on match (trusted). Model predictions on merchants no rule covers are treated as **suggestions** and written to `needs_manual_review.csv` — because the model is unreliable on unseen merchants regardless of its confidence. A `label_source` column records whether each row was labeled by `rule`, `override`, or `model`.
 
 ### 5. **Fairness-Aware Model Training**
-Class weighting ensures minority spending categories (Transfers, Shopping) are learned equally well, not ignored in favor of majority categories.
+Class weighting scales the training loss inversely to class frequency so minority spending categories (Transfers, Shopping) aren't drowned out by the majority. It does not overcome the underlying data limitation on unseen merchants — it just keeps small classes represented.
 
 ### 6. **Interactive Dashboard**
 Five tabs: spending overview, budget & forecast, savings & anomalies, action plan, and monthly reports/export — decision-making tools (savings calculator, investment readiness) plus IQR-based anomaly detection.
@@ -378,21 +401,24 @@ Monthly workflow to identify ambiguous transactions, collect labels, retrain mod
 ## Validation & Robustness
 
 ### Cross-Validation Strategy
-- **5-fold stratified cross-validation** ensures category distribution is preserved in each fold
-- **Why stratified?** Dataset is imbalanced (47% Eating Out). Regular k-fold might accidentally put all minority samples in one fold, making metrics unreliable.
-- **Result**: Honest accuracy (95.5%) instead of overfitted claims (99.1%)
+- Two schemes, reported for what they measure: **stratified 5-fold** (known merchants) and **GroupKFold by merchant** (new merchants). See [How accuracy is measured](#how-accuracy-is-measured).
+- **Why this matters:** stratified CV alone let earlier versions of this project report ~95–99% accuracy that was really merchant memorization. GroupKFold exposed ~45% generalization to new merchants.
+- A **leakage-guard test** (`tests/test_leakage_guard.py`) fails if a split ever puts the same merchant in both train and test when grouping is expected.
 
 ### Confidence Calibration
-- **Correct predictions**: 82.4% average confidence
-- **Incorrect predictions**: 41.7% average confidence
-- **Calibration ratio**: 2:1, indicating model is well-calibrated (knows when to be uncertain)
+- Well calibrated on **known** merchants (ECE ≈ 0.04); **overconfident** on **new** merchants (ECE ≈ 0.18, even 0.9+ confidence only ~89% accurate).
+- Consequence: predictions on unseen merchants go to review rather than being auto-accepted on a confidence threshold.
+
+### Testing & Reproducibility
+- `pytest tests/` covers parsing (encoding, refund netting, transfer filtering, schema, duplicates), the leakage guard, two-stage routing, data validation, and fixed-seed reproducibility.
+- `python run_all.py` reproduces raw → parse → label → train → classify → metrics deterministically (all `random_state`s pinned). `--honest` adds the GroupKFold evaluation.
+- `src/validate.py` checks schema, amounts, date ranges, and duplicate rows.
 
 ### Edge Cases Handled
 - ✅ Empty merchant names → fallback to description
 - ✅ All-numeric merchant IDs → handled gracefully
 - ✅ Duplicate transactions → preserved (intentional for monthly totals)
-- ✅ Low-confidence predictions → flagged for manual review
-- ✅ Entirely new merchants → predicted based on description text alone
+- ✅ Unseen merchants → model *suggestion* routed to review (not silently trusted)
 - ✅ Refunds → netted as a negative amount against the original category/merchant instead of vanishing
 - ✅ Internal transfers (credit card repayment, withdrawal) → excluded at parse; not counted as spend
 
@@ -467,17 +493,17 @@ streamlit run src/dashboard.py
 - ✅ Version control and documentation
 
 **Soft Skills:**
-- ✅ Problem-solving: identified and fixed misleading accuracy claims
-- ✅ Honesty: reported real 95.5% instead of inflated 99.1%
-- ✅ Iteration: improved fairness (F1-macro +39%) without sacrificing accuracy
-- ✅ Documentation: detailed audit report, context tracking, decision rationale
+- ✅ Integrity: ran a full evaluation audit that found the reported accuracy was a merchant-memorization artifact, and rewrote the docs to say so (`docs/FULL_AUDIT.md`)
+- ✅ Honesty over vanity: report both stratified (~95%, known merchants) and GroupKFold (~45%, new merchants) rather than headlining the flattering number
+- ✅ Testing: leakage-guard test, reproducibility test, one deterministic run command
+- ✅ Documentation: audit report, context tracking, decision rationale
 
 ### Technical Decisions Worth Discussing
-1. **Why Logistic Regression over neural networks?** → Interpretability, speed, data efficiency (see table above)
+1. **Why report two accuracy numbers?** → Stratified CV measures known-merchant recall; GroupKFold measures generalization to new merchants. The gap revealed leakage (see How accuracy is measured).
 2. **How does jieba help?** → Chinese segmentation enables TF-IDF to work correctly (see Technical Implementation)
-3. **Why class weighting?** → Prevents majority category from dominating; ensures all categories learned fairly
-4. **Why stratified CV?** → Honest metric that accounts for class imbalance; discovered real accuracy
-5. **How do you handle low-confidence predictions?** → Thresholding strategy; confidence well-calibrated for safe auto-classification
+3. **Why a rules-first, two-stage design?** → On this data the model can't generalize to unseen merchants, so high-precision rules do the trusted labeling and the model only suggests for the residual
+4. **Why C=1.0 and not C=10?** → C=10 was tuned on the leaky CV; under honest GroupKFold, C=1.0 generalizes better
+5. **How do you handle predictions on new merchants?** → Route to manual review, because model confidence is unreliable there regardless of its value
 
 ---
 
@@ -506,4 +532,4 @@ Open source (MIT License)
 
 For questions about the implementation or technical decisions, see `context.md` for detailed session logs and decision rationale.
 
-**Last Updated:** Session 21 (2026-07-02) — Web UI complete; merchant category rules comprehensive (295+ patterns); documentation verified
+**Last Updated:** 2026-07-02 — ML integrity audit (`docs/FULL_AUDIT.md`): reconciled all accuracy claims to honest stratified + GroupKFold numbers, adopted the rules-first two-stage design, added tests and a deterministic run command.

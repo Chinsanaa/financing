@@ -56,12 +56,14 @@ A pipeline that:
 - [x] Re-add multi-year trends (`src/trends.py`) to dashboard UI — resolved Session 25
 - [x] How to handle refunds / internal transfers — resolved Session 22, see Key Decisions
 
-No open questions remain. Next work should come from new user feedback or the
-README's Future Enhancements list.
+Open items are tracked in the Session 27 audit entry below (privacy/git-history
+scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Run `python src/app.py` and complete the web wizard with your Alipay/WeChat exports.
+Decide on the git-history privacy scrub (Session 27 open item #1). Otherwise run
+`python run_all.py` (deterministic full pipeline) or `python src/app.py` for the
+web wizard with your Alipay/WeChat exports.
 
 ## Current State (Session 21, 2026-07-02)
 
@@ -77,6 +79,49 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 27 (2026-07-02) — ML integrity audit (honest evaluation & reproducibility)
+Full audit written to `docs/FULL_AUDIT.md`. Worked phase by phase with user sign-off.
+
+- **The big finding — merchant leakage.** The dataset is 863 labeled rows but only
+  **109 unique merchants** (top 10 = 73%, one merchant = 16.5%; 568/863 texts are
+  duplicates). The merchant name is part of the vectorized text, so the model
+  memorizes merchant→category. Honest numbers:
+  - Stratified 5-fold CV (known merchants): **~95% acc, F1-macro ~0.85**
+  - **GroupKFold by merchant (NEW merchants): ~45% acc, F1-macro ~0.44** — barely above the 38.5% majority baseline.
+  - So ~50 points of the old headline was memorization, not generalization.
+- **Old docs were wrong.** 99.1% / 97.3% / 95.5% were single stratified runs on
+  different dataset sizes, quoted as if one true number. Feature counts (275/639/657)
+  and label counts (776/850) were all stale — real: **~660 features, 863 labeled rows**.
+- **`retrain.py`'s per-category table is in-sample** (model scored on its own training
+  data) → inflated by construction. Don't quote it as accuracy.
+- **Tiny classes → rule-only (user decision).** Utilities & Services (5 rows, 2 unique
+  texts; its 1.000 F1 was a duplicate/empty-fold artifact → 0.000 under GroupKFold) and
+  other rare cleanly-ruleable categories are assigned by rules only; "Other" is the
+  explicit review/residual bucket. Not merged, not blocked on more labels.
+- **Two-stage design adopted (user decision) + implemented.** `classify.py`: rules/
+  overrides are trusted; model predictions on no-rule (unseen) merchants are *suggestions
+  routed to review* regardless of confidence (Phase 4 showed even 0.9+ confidence is only
+  ~89% accurate on unseen merchants). Added `label_source` column. The 0.70 gate no longer
+  auto-accepts.
+- **Tuning (honest).** `C=10 → C=1.0` in `segment.py` (C=10 had been tuned on the leaky CV);
+  under GroupKFold C=1.0 gives +8.9pts acc / +0.106 F1-macro with stratified unchanged.
+- **Tests + reproducibility.** New `tests/` suite (18→20 passing): parse (encoding, refund
+  netting, transfer filtering, schema, duplicates), **leakage guard** (`src/cv_utils.py` —
+  fails if a merchant is in both train & test), two-stage routing, data validation
+  (`src/validate.py`), fixed-seed reproducibility. One command: **`python run_all.py`**
+  (raw→parse→label→train→classify→metrics, deterministic; `--honest` adds GroupKFold). Pinned
+  the one missing seed (`label.py` display sample).
+- **README reconciled** to one source of truth: added a "How accuracy is measured" section
+  (stratified vs GroupKFold), removed every stale figure, reframed around rules-first.
+- **Open items:**
+  1. ⚠️ **Privacy:** Session 19's data purge removed personal data from the working tree
+     but **not from git history** — raw exports + labels are still recoverable from the
+     public repo. Proper fix = history rewrite (`git filter-repo`) + force-push. **User decision needed.**
+  2. Even at C=1.0, unseen-merchant accuracy (~45%) is only just above baseline. Real
+     improvement would come from more *distinct* merchants/labels, not model tuning.
+  3. Consider enforcing rule-only for Utilities in code (currently a data/labeling
+     convention, not enforced in the training label set).
 
 ### Session 26 (2026-07-02) — Monthly spending trend line (Overview tab)
 - Added a plain "Monthly Spending Trend" line chart (total ¥ per month, not stacked by category, not cumulative) right under the KPI cards on Overview — the stacked bar and cumulative line already there don't make month-to-month direction easy to read at a glance.

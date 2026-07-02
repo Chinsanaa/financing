@@ -77,7 +77,9 @@ def show_labeling_stats(df: pd.DataFrame) -> None:
     print("-" * 70)
 
     # Show 5 random labeled examples
-    labeled_df = df[df['labeled'] == True].sample(min(5, len(df[df['labeled'] == True])))
+    labeled_df = df[df['labeled'] == True].sample(
+        min(5, len(df[df['labeled'] == True])), random_state=42
+    )
 
     sample_path = Path('output/samples/_labeling_sample.txt')
     sample_path.parent.mkdir(parents=True, exist_ok=True)
