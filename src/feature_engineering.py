@@ -26,10 +26,16 @@ def extract_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     Extract contextual numeric features from transactions.
 
     Returns DataFrame with:
-    - amount_bucket: Quantized amount (0-9 by percentiles per category)
+    - amount_bucket: Quantized amount (0-9 by percentiles)
     - hour_of_day: 0-23 (from time column)
     - day_of_week: 0-6 (Monday=0, Sunday=6)
-    - merchant_frequency: How many times this merchant appears in dataset
+    - is_lunch_time: Binary flag for lunch hours (11am-3pm)
+    - is_dinner_time: Binary flag for dinner hours (6pm-10pm)
+    - merchant_frequency: How often this merchant appears in dataset
+
+    Meal time windows (user preferences):
+    - Lunch: 11:00-14:59 (11am to 3pm)
+    - Dinner: 18:00-21:59 (6pm to 10pm)
 
     Skips rows with missing time or amount (as per user decision).
     """
@@ -54,6 +60,13 @@ def extract_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     # Day of week (0=Monday, 6=Sunday)
     df['day_of_week'] = df['time'].dt.dayofweek
 
+    # Meal time flags (user preferences)
+    # Lunch: 11am to 3pm (11:00-14:59, so hour 11-14)
+    df['is_lunch_time'] = ((df['hour_of_day'] >= 11) & (df['hour_of_day'] < 15)).astype(np.float32)
+
+    # Dinner: 6pm to 10pm (18:00-21:59, so hour 18-21)
+    df['is_dinner_time'] = ((df['hour_of_day'] >= 18) & (df['hour_of_day'] < 22)).astype(np.float32)
+
     # Amount bucket: discretize by percentiles (0-9 buckets)
     # This is normalized within the entire dataset (not per-category, to preserve generalization)
     df['amount_bucket'] = pd.qcut(df['amount'], q=10, labels=False, duplicates='drop')
@@ -70,6 +83,8 @@ def extract_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     numeric_features = df[[
         'hour_of_day',
         'day_of_week',
+        'is_lunch_time',
+        'is_dinner_time',
         'amount_bucket',
         'merchant_frequency_norm'
     ]].fillna(0).astype(np.float32)
@@ -186,7 +201,13 @@ def create_hybrid_feature_matrix(
     Create hybrid feature matrix combining:
     - Description TF-IDF (weight: 1.0)
     - Merchant TF-IDF (weight: 0.3)
-    - Numeric features (normalized)
+    - Numeric contextual features (6 features):
+      * hour_of_day (0-23)
+      * day_of_week (0-6, Monday=0)
+      * is_lunch_time (binary, 11am-3pm)
+      * is_dinner_time (binary, 6pm-10pm)
+      * amount_bucket (0-9 quantiles)
+      * merchant_frequency_norm (0-1, log scale)
 
     Args:
         df: DataFrame with 'merchant' and 'description' columns

@@ -49,13 +49,13 @@ class TestNumericFeatureExtraction:
         numeric_features, indices = extract_numeric_features(sample_transactions)
 
         assert numeric_features.shape[0] <= len(sample_transactions)
-        assert numeric_features.shape[1] == 4  # hour, day, amount_bucket, merchant_freq
+        assert numeric_features.shape[1] == 6  # hour, day, is_lunch, is_dinner, amount_bucket, merchant_freq
 
     def test_extract_numeric_features_columns(self, sample_transactions):
         """Test that all required columns are present."""
         numeric_features, _ = extract_numeric_features(sample_transactions)
 
-        expected_cols = ['hour_of_day', 'day_of_week', 'amount_bucket', 'merchant_frequency_norm']
+        expected_cols = ['hour_of_day', 'day_of_week', 'is_lunch_time', 'is_dinner_time', 'amount_bucket', 'merchant_frequency_norm']
         assert list(numeric_features.columns) == expected_cols
 
     def test_extract_numeric_features_valid_ranges(self, sample_transactions):
@@ -186,9 +186,10 @@ class TestHybridFeatureMatrix:
 
         assert X.shape[0] == len(df_valid)
         # Shape should be: (samples, desc_features + merch_features + numeric_features)
+        # numeric_features now has 6 columns: hour, day, is_lunch, is_dinner, amount_bucket, merchant_freq
         desc_features = len(desc_vec.get_feature_names_out()) if hasattr(desc_vec, 'get_feature_names_out') else len(desc_vec.vocabulary_)
         merch_features = len(merch_vec.get_feature_names_out()) if hasattr(merch_vec, 'get_feature_names_out') else len(merch_vec.vocabulary_)
-        expected_cols = desc_features + merch_features + 4
+        expected_cols = desc_features + merch_features + 6
         assert X.shape[1] == expected_cols
 
     def test_create_hybrid_feature_matrix_sparse(self, sample_transactions):
