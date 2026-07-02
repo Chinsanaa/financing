@@ -67,7 +67,7 @@ enough merchant-specific data, even the ML model could eventually generalize
 better. For now, the 2.2% uncategorized rate is near-optimal without more
 training data.
 
-## Current State (Session 28, 2026-07-02)
+## Current State (Session 29, 2026-07-02)
 
 | Item | Status |
 |---|---|
@@ -81,6 +81,55 @@ training data.
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 29 (2026-07-02) — Hybrid feature engineering to reduce merchant overfitting
+Implemented Option B: semantic-weighted features to reduce model memorization and improve generalization to unseen merchants.
+
+**Problem**: Model achieved ~95% accuracy on known merchants but only ~45% on new merchants (barely above 38.5% baseline). Root cause: merchant name was part of the vectorized text, so model learned "Holy Bagel" → "Eating Out" rather than generalizable patterns.
+
+**Solution Implemented**:
+- **Feature engineering module** (`src/feature_engineering.py`): separates merchant (downweighted 0.3x) and description (full weight 1.0x) text features; adds 4 numeric features (hour, day, amount_bucket, merchant_frequency)
+- **Hybrid vectorizer support**: `build_hybrid_vectorizers()` creates separate TF-IDF models for each text component
+- **Updated retrain.py**: added `USE_HYBRID_FEATURES=True` flag to enable/disable new approach; training pipeline switches between legacy (combined text) and hybrid (semantic-weighted) modes
+- **Updated segment.py**: added `MERCHANT_WEIGHT=0.3` constant (tunable) and new `clean_description_only()` / `clean_merchant_only()` functions
+- **Comprehensive testing**: 24 tests in `tests/test_feature_engineering.py` (100% passing)
+  - Numeric feature extraction: valid ranges, missing value handling, no nulls
+  - Text cleaning: description/merchant separation, edge cases, Unicode handling
+  - Vectorizer building: correct feature counts, separate sizing
+  - Hybrid matrix creation: shape validation, sparsity, feature combination
+  - Edge cases: single transaction, all same merchant, mixed language
+
+**Architecture**:
+```
+Description TF-IDF (weight 1.0x) 
+        +
+Merchant TF-IDF (weight 0.3x)
+        +
+4 numeric features (hour, day, amount, merchant_frequency)
+        ↓
+Concatenate → Sparse + Dense hybrid matrix → LogisticRegression
+```
+
+**Design Decisions**:
+- Skip rows with missing time/amount values (cleaner training data)
+- MERCHANT_WEIGHT as hyperparameter (can tune if needed)
+- Keep legacy pipeline (backward compatible; can compare old vs new)
+- Hybrid vectorizers saved separately (`tfidf_vectorizer_hybrid.pkl`)
+
+**Files Modified**:
+- `src/segment.py`: +MERCHANT_WEIGHT constant, +2 new cleaning functions
+- `src/retrain.py`: +hybrid feature engineering support, dual-mode training logic, split artifact saving
+- `src/feature_engineering.py` (NEW): full module with 5 core functions
+- `tests/test_feature_engineering.py` (NEW): 24 comprehensive tests
+- `README.md`: added "Feature Engineering Strategy" section explaining the approach
+- `context.md`: this session log
+
+**What's Left for Next Session**:
+- [ ] Run `retrain.py` on your labeled data with `USE_HYBRID_FEATURES=True`
+- [ ] Test on eval.py to compare old vs new metrics
+- [ ] Update classify.py to use hybrid features in production
+- [ ] Run GroupKFold CV to measure real improvement on unseen merchants
+- [ ] Decide whether to make hybrid the default or keep as opt-in
 
 ### Session 28 (2026-07-02) — Manual merchant categorization review & rule generation
 Closed the iterative feedback loop for merchant rules. User reviewed all uncategorized transactions and manually assigned categories.

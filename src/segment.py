@@ -22,6 +22,11 @@ LR_HYPERPARAMS = {
     'random_state': 42
 }
 
+# Hybrid feature engineering: merchant weight for semantic-weighted text features.
+# Merchant name is downweighted (0.3x) relative to description (1.0x) to reduce
+# overfitting on merchant names and improve generalization to unseen merchants.
+MERCHANT_WEIGHT = 0.3
+
 
 # ============================================================================
 # STAGE 2: TEXT CLEANING
@@ -60,6 +65,73 @@ def clean_text(merchant: str, description: str) -> str:
     # Lowercase English, leave Chinese
     result = []
     for char in combined:
+        if '一' <= char <= '鿿':  # Chinese character range
+            result.append(char)
+        elif char.isalpha():
+            result.append(char.lower())
+        else:
+            result.append(char)
+
+    return ''.join(result).strip()
+
+
+def clean_description_only(merchant: str, description: str) -> str:
+    r"""
+    Clean description text only (merchant excluded).
+
+    Used for high-weight (1.0x) features in hybrid feature engineering.
+    Rules match clean_text() but omit merchant name.
+    """
+    if pd.isna(description) or not description:
+        return ""
+
+    d = str(description).strip()
+    if d == '/':  # WeChat blank marker
+        return ""
+
+    # Remove long order numbers
+    d = re.sub(r'\d{10,}', '', d)
+    d = re.sub(r'\bOrder\s+No\.\s*\d+', '', d, flags=re.IGNORECASE)
+
+    if not d.strip():
+        return ""
+
+    # Lowercase English, leave Chinese as-is for jieba
+    result = []
+    for char in d:
+        if '一' <= char <= '鿿':  # Chinese character range
+            result.append(char)
+        elif char.isalpha():
+            result.append(char.lower())
+        else:
+            result.append(char)
+
+    return ''.join(result).strip()
+
+
+def clean_merchant_only(merchant: str) -> str:
+    r"""
+    Clean merchant text only (description excluded).
+
+    Used for low-weight (0.3x) features in hybrid feature engineering.
+    Rules match clean_text() but omit description.
+    """
+    if pd.isna(merchant) or not merchant:
+        return ""
+
+    m = str(merchant).strip()
+    if not m:
+        return ""
+
+    # Remove long order numbers
+    m = re.sub(r'\d{10,}', '', m)
+
+    if not m.strip():
+        return ""
+
+    # Lowercase English, leave Chinese as-is for jieba
+    result = []
+    for char in m:
         if '一' <= char <= '鿿':  # Chinese character range
             result.append(char)
         elif char.isalpha():

@@ -103,6 +103,31 @@ Metrics are **per-user** — generated when you run `python src/bootstrap.py` an
 | Manual review queue | `data/processed/needs_manual_review.csv` |
 | Rule vs ML coverage | Bootstrap / classify stdout |
 
+### Feature Engineering Strategy (Hybrid Semantic Weighting)
+
+**Problem**: The ML model was memorizing merchant names ("Holy Bagel" → Eating Out) instead of learning generalizable patterns. This showed up as a 50-point accuracy gap between stratified CV (merchants we've seen) and GroupKFold CV (new merchants) — the model generalized poorly.
+
+**Solution (Session 29)**: Hybrid feature engineering with semantic-weighted text + contextual numeric features.
+
+| Component | Description | Impact |
+|---|---|---|
+| **Description text (weight: 1.0x)** | TF-IDF on "steamed buns", "coffee order", etc. | High importance — distinctive item descriptions predict category |
+| **Merchant text (weight: 0.3x)** | TF-IDF on merchant names, downweighted | Supporting signal only — prevents overfitting to specific merchant names |
+| **Numeric features** | Hour of day, day of week, transaction amount, merchant frequency | Context — e.g., "restaurants often ¥30–80 at noon/dinner" |
+
+**Why it works**:
+- Model learns **patterns** ("transactions with food keywords at lunch" → Eating Out) not **memorization** ("Holy Bagel" → Eating Out)
+- Downweighting merchant names (0.3x) reduces their dominance in feature space
+- Time + amount context adds real signal (refunds → negative amounts, lunch patterns → eating times)
+- Logistic Regression's interpretability makes it easy to inspect which features drive decisions
+
+**Current status**: 
+- Hybrid feature engineering module created and tested (`src/feature_engineering.py`, 24 tests ✅)
+- Integrated into `retrain.py` with `USE_HYBRID_FEATURES=True` flag (can be disabled for legacy mode)
+- **Next**: Run on your labeled data and measure honest improvement via GroupKFold validation
+
+For details on usage, see `src/feature_engineering.py` docstrings and `tests/test_feature_engineering.py`.
+
 ### How accuracy is measured
 
 There are two very different ways to cross-validate this system, and they give

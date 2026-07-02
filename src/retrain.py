@@ -7,10 +7,18 @@ from datetime import datetime
 sys.path.insert(0, str(Path.cwd()))
 
 from segment import clean_text, vectorize, build_vectorizer, LR_HYPERPARAMS
+from feature_engineering import (
+    extract_numeric_features,
+    build_hybrid_vectorizers,
+    create_hybrid_feature_matrix,
+)
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
+
+# Enable/disable hybrid semantic-weighted feature engineering
+USE_HYBRID_FEATURES = True
 
 
 def retrain_model():
@@ -33,13 +41,6 @@ def retrain_model():
         pct = 100 * count / len(df_labeled)
         print(f"      {cat:30s}: {count:3d} ({pct:5.1f}%)")
 
-    # Clean and vectorize
-    print(f"\n2. Cleaning and vectorizing text...")
-    df_labeled['text'] = df_labeled.apply(
-        lambda row: clean_text(row['merchant'], row['description']),
-        axis=1
-    )
-
     # Filter out categories with fewer than 2 samples (StratifiedKFold requirement)
     min_class_count = df_labeled['category'].value_counts().min()
     if min_class_count < 2:
@@ -48,11 +49,48 @@ def retrain_model():
         df_labeled = df_labeled[df_labeled['category'].isin(classes_to_keep)].copy()
         print(f"   Kept {len(classes_to_keep)} categories, now training on {len(df_labeled)} samples")
 
-    vectorizer = build_vectorizer(df_labeled['text'].tolist())
-    X = vectorize(df_labeled['text'].tolist(), vectorizer)
     y = df_labeled['category']
 
-    print(f"   Vectorizer: {X.shape[1]} features extracted")
+    # Clean and vectorize using either hybrid or legacy approach
+    print(f"\n2. Cleaning and vectorizing text...")
+    if USE_HYBRID_FEATURES:
+        print(f"   Using HYBRID feature engineering (semantic-weighted text + numeric features)")
+
+        # Extract numeric contextual features
+        numeric_features, valid_indices = extract_numeric_features(df_labeled)
+
+        # Filter DataFrame to only valid rows (those with time/amount)
+        df_valid = df_labeled.iloc[valid_indices].copy()
+        y = y.iloc[valid_indices]
+
+        # Build separate vectorizers for description and merchant
+        desc_texts = df_valid['description'].tolist()
+        merch_texts = df_valid['merchant'].tolist()
+        desc_vec, merch_vec = build_hybrid_vectorizers(desc_texts, merch_texts)
+
+        # Create hybrid feature matrix
+        X = create_hybrid_feature_matrix(df_valid, desc_vec, merch_vec, numeric_features)
+
+        # Save vectorizers with '_hybrid' suffix to distinguish from legacy
+        vectorizer = {'desc': desc_vec, 'merch': merch_vec}
+        print(f"   Description vectorizer: {desc_vec.n_features_in_} features")
+        print(f"   Merchant vectorizer: {merch_vec.n_features_in_} features")
+        print(f"   Numeric features: 4 (hour, day, amount_bucket, merchant_frequency)")
+        print(f"   Total hybrid features: {X.shape[1]}")
+
+    else:
+        print(f"   Using LEGACY feature engineering (combined text only)")
+
+        # Classic approach: combine merchant + description
+        df_labeled['text'] = df_labeled.apply(
+            lambda row: clean_text(row['merchant'], row['description']),
+            axis=1
+        )
+
+        vectorizer = build_vectorizer(df_labeled['text'].tolist())
+        X = vectorize(df_labeled['text'].tolist(), vectorizer)
+
+        print(f"   Vectorizer: {X.shape[1]} features extracted")
 
     # Retrain with stratified cross-validation
     print(f"\n3. Training Logistic Regression with stratified CV...")
@@ -90,10 +128,20 @@ def retrain_model():
 
     # Save artifacts
     print(f"\n5. Saving updated model artifacts...")
-    joblib.dump(vectorizer, 'data/processed/tfidf_vectorizer.pkl')
+    if USE_HYBRID_FEATURES:
+        # Save hybrid vectorizers with metadata
+        joblib.dump(vectorizer, 'data/processed/tfidf_vectorizer_hybrid.pkl')
+        joblib.dump({'use_hybrid': True}, 'data/processed/vectorizer_config.pkl')
+        print(f"   [OK] tfidf_vectorizer_hybrid.pkl (desc + merch vectorizers)")
+    else:
+        # Save legacy vectorizer
+        joblib.dump(vectorizer, 'data/processed/tfidf_vectorizer.pkl')
+        joblib.dump({'use_hybrid': False}, 'data/processed/vectorizer_config.pkl')
+        print(f"   [OK] tfidf_vectorizer.pkl")
+
     joblib.dump(clf, 'data/processed/classifier.pkl')
-    print(f"   [OK] tfidf_vectorizer.pkl")
     print(f"   [OK] classifier.pkl")
+    print(f"   [OK] vectorizer_config.pkl")
 
     # Per-category evaluation on all labeled data
     print(f"\n6. PER-CATEGORY PERFORMANCE (on all {len(df_labeled)} labeled examples):")
