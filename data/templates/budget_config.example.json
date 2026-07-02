@@ -1,0 +1,76 @@
+{
+  "_comment": "Edit income, saving goals, and monthly_budget per category. Run bootstrap.py to auto-fill from your spend history.",
+  "income": 8000.0,
+  "currency": "CNY",
+  "period": "Jan 2026 - Dec 2026",
+  "total_budget": 0,
+  "saving_goal_monthly": 1000.0,
+  "saving_goal_annual": 12000.0,
+  "categories": {
+    "Eating Out": {
+      "type": "Want",
+      "avg_monthly": 0,
+      "monthly_budget": 800.0,
+      "annual_budget": 9600.0,
+      "monthly": []
+    },
+    "Groceries": {
+      "type": "Need",
+      "avg_monthly": 0,
+      "monthly_budget": 600.0,
+      "annual_budget": 7200.0,
+      "monthly": []
+    },
+    "Transportation": {
+      "type": "Need",
+      "avg_monthly": 0,
+      "monthly_budget": 400.0,
+      "annual_budget": 4800.0,
+      "monthly": []
+    },
+    "Shopping": {
+      "type": "Want",
+      "avg_monthly": 0,
+      "monthly_budget": 300.0,
+      "annual_budget": 3600.0,
+      "monthly": []
+    },
+    "Transfers & Gifts": {
+      "type": "Want",
+      "avg_monthly": 0,
+      "monthly_budget": 200.0,
+      "annual_budget": 2400.0,
+      "monthly": []
+    },
+    "Utilities & Services": {
+      "type": "Need",
+      "avg_monthly": 0,
+      "monthly_budget": 150.0,
+      "annual_budget": 1800.0,
+      "monthly": []
+    },
+    "Other": {
+      "type": "Want",
+      "avg_monthly": 0,
+      "monthly_budget": 200.0,
+      "annual_budget": 2400.0,
+      "monthly": []
+    },
+    "Saving": {
+      "type": "Need",
+      "avg_monthly": 0,
+      "monthly_budget": 0,
+      "annual_budget": 0,
+      "monthly": [],
+      "note": "Increase when you start tracking savings transfers"
+    },
+    "Investing": {
+      "type": "Need",
+      "avg_monthly": 0,
+      "monthly_budget": 0,
+      "annual_budget": 0,
+      "monthly": [],
+      "note": "Increase when you start tracking investment transfers"
+    }
+  }
+}

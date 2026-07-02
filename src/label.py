@@ -2,20 +2,13 @@
 import pandas as pd
 import re
 from pathlib import Path
+import sys
 
+sys.path.insert(0, str(Path(__file__).parent))
 
-CATEGORIES = [
-    'Eating Out',
-    'Shopping',
-    'Groceries',
-    'Transportation',
-    'Transfers & Gifts',
-    'Other',
-    'Health & Wellness',
-    'Travel',
-    'Utilities & Services',
-    'Entertainment',
-]
+from categories import LABEL_CATEGORIES
+
+CATEGORIES = LABEL_CATEGORIES
 
 
 def load_merchant_rules(rules_path: str) -> dict:

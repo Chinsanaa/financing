@@ -1,40 +1,26 @@
 """
-Load and parse budget configuration from Excel file.
+Load and parse budget configuration from Excel or JSON.
 """
-import pandas as pd
+import argparse
 import json
+import pandas as pd
 from pathlib import Path
 
-BUDGET_FILE = r'c:\Users\User\Downloads\Finances_1st year\Personal_finance.xlsx'
+from paths import BUDGET_CONFIG, BUDGET_EXAMPLE, DATA
 
 
-def load_budget_from_excel(excel_path=BUDGET_FILE):
+def load_budget_from_excel(excel_path: str):
     """
-    Parse the Monthly Budget tab from Personal_finance.xlsx.
+    Parse the Monthly Budget tab from a personal finance Excel workbook.
 
-    Returns dict with budget config:
-    {
-        'income': float,
-        'currency': 'CNY',
-        'period': 'Sep 2026 - Jun 2027',
-        'total_budget': float,
-        'saving_goal_monthly': float,
-        'categories': {
-            'Category Name': {
-                'type': 'Need|Want',
-                'annual_budget': float,
-                'avg_monthly': float,
-                'monthly': [list of 12 monthly allocations]
-            },
-            ...
-        }
-    }
+    Returns dict with budget config (income, categories, saving goals).
     """
+    excel_path = Path(excel_path)
+    if not excel_path.exists():
+        raise FileNotFoundError(f"Budget Excel not found: {excel_path}")
 
-    # Read Monthly Budget tab
     df = pd.read_excel(excel_path, sheet_name='Monthly Budget', header=None)
 
-    # Find the header row (contains "Category", "Type", etc.)
     header_row = None
     for i, row in df.iterrows():
         if 'Category' in str(row.values) and 'Type' in str(row.values):
@@ -44,17 +30,13 @@ def load_budget_from_excel(excel_path=BUDGET_FILE):
     if header_row is None:
         raise ValueError("Could not find header row in Monthly Budget tab")
 
-    # Re-read with proper header
     df = pd.read_excel(excel_path, sheet_name='Monthly Budget', header=header_row)
 
-    # Extract key metrics
     monthly_income_row = df[df.iloc[:, 0].astype(str).str.contains('Monthly Income', na=False, case=False)]
     monthly_income = None
     if not monthly_income_row.empty:
-        # Income value is typically in column index 1
         monthly_income = float(monthly_income_row.iloc[0, 1]) if pd.notna(monthly_income_row.iloc[0, 1]) else None
 
-    # Find and extract category data
     categories = {}
     month_cols = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
 
@@ -62,14 +44,12 @@ def load_budget_from_excel(excel_path=BUDGET_FILE):
         cat_name = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else None
         cat_type = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else None
 
-        # Skip if this is a header, total, or invalid row
         if not cat_name or cat_name in ['Category', 'Total', 'NaN', ''] or cat_type in ['Type', 'NaN', '']:
             continue
 
         if cat_type not in ['Need', 'Want']:
             continue
 
-        # Get average monthly
         avg_monthly_val = row.iloc[2]
         if pd.isna(avg_monthly_val):
             continue
@@ -79,10 +59,8 @@ def load_budget_from_excel(excel_path=BUDGET_FILE):
         except (ValueError, TypeError):
             continue
 
-        # Get monthly budget target (column 3)
         budget_target = float(row.iloc[3]) if pd.notna(row.iloc[3]) else avg_monthly
 
-        # Get monthly allocations (columns 4 onwards)
         monthly_values = []
         for i in range(4, min(4 + len(month_cols), len(row))):
             val = row.iloc[i]
@@ -94,7 +72,6 @@ def load_budget_from_excel(excel_path=BUDGET_FILE):
             else:
                 monthly_values.append(budget_target)
 
-        # Pad if needed (9 months of data, use budget_target for missing)
         while len(monthly_values) < 9:
             monthly_values.append(budget_target)
 
@@ -103,31 +80,26 @@ def load_budget_from_excel(excel_path=BUDGET_FILE):
             'avg_monthly': avg_monthly,
             'monthly_budget': budget_target,
             'annual_budget': avg_monthly * 12,
-            'monthly': monthly_values[:9]  # Sep-May (9 months)
+            'monthly': monthly_values[:9],
         }
 
-    # Calculate total budget
     total_budget = sum(cat['annual_budget'] for cat in categories.values())
-
-    # Saving goal (typically ¥600/month)
     saving_goal_monthly = 600.0
 
-    config = {
-        'income': monthly_income or 2986.0,
+    return {
+        'income': monthly_income or 8000.0,
         'currency': 'CNY',
-        'period': 'Sep 2026 - Jun 2027',
+        'period': 'Jan 2026 - Dec 2026',
         'total_budget': total_budget,
         'saving_goal_monthly': saving_goal_monthly,
         'saving_goal_annual': saving_goal_monthly * 12,
-        'categories': categories
+        'categories': categories,
     }
 
-    return config
 
-
-def save_budget_config(config, output_path='data/budget_config.json'):
+def save_budget_config(config, output_path=None):
     """Save budget config to JSON file."""
-    output_path = Path(output_path)
+    output_path = Path(output_path or BUDGET_CONFIG)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -136,26 +108,34 @@ def save_budget_config(config, output_path='data/budget_config.json'):
     return str(output_path)
 
 
-def load_budget_config(config_path='data/budget_config.json'):
+def load_budget_config(config_path=None):
     """Load budget config from JSON file."""
-    with open(config_path, 'r', encoding='utf-8') as f:
+    path = Path(config_path or BUDGET_CONFIG)
+    if not path.exists():
+        path = BUDGET_EXAMPLE
+    with open(path, encoding='utf-8') as f:
         return json.load(f)
 
 
 if __name__ == '__main__':
-    # Generate budget config
-    print("Loading budget from Excel...")
-    config = load_budget_from_excel()
+    parser = argparse.ArgumentParser(description='Import budget from Excel or show current config')
+    parser.add_argument('--excel', help='Path to Personal_finance.xlsx (Monthly Budget tab)')
+    parser.add_argument('--output', default=str(BUDGET_CONFIG), help='Output JSON path')
+    args = parser.parse_args()
 
-    print(f"\nBudget Summary:")
-    print(f"  Monthly Income: ¥{config['income']:.2f}")
-    print(f"  Total Annual Budget: ¥{config['total_budget']:.2f}")
-    print(f"  Saving Goal: ¥{config['saving_goal_monthly']:.2f}/month (¥{config['saving_goal_annual']:.2f}/year)")
+    if args.excel:
+        print(f"Loading budget from {args.excel}...")
+        config = load_budget_from_excel(args.excel)
+    else:
+        print(f"Loading budget from {BUDGET_CONFIG}...")
+        config = load_budget_config()
+
+    print(f"\n  Monthly Income: ¥{config['income']:.2f}")
+    print(f"  Saving Goal: ¥{config['saving_goal_monthly']:.2f}/month")
     print(f"  Categories: {len(config['categories'])}")
 
-    for cat, data in config['categories'].items():
-        print(f"    {cat:30s}: {data['type']:5s} | Avg: ¥{data['avg_monthly']:7.2f} | Annual: ¥{data['annual_budget']:8.2f}")
-
-    # Save to JSON
-    output_path = save_budget_config(config)
-    print(f"\nSaved to: {output_path}")
+    if args.excel:
+        out = save_budget_config(config, args.output)
+        print(f"\nSaved to: {out}")
+    else:
+        print("\nTip: import from Excel with  python src/budget_loader.py --excel your_file.xlsx")

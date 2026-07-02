@@ -217,8 +217,32 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Project-generated output (charts, debug samples)
-output/
+# User-specific financial data (see data/templates/)
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/README.md
+!data/raw/source_config.example.json
+data/labeled/*
+!data/labeled/.gitkeep
+data/budget_config.json
+data/processed/*
+!data/processed/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+data/intermediate/*
+!data/intermediate/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
+data/sessions/
+
+# Archived experiments may contain old personal exports
+_archive/*.txt
+_archive/*.png
+_archive/*.csv
+_archive/*.backup
+_archive/*_output.txt
+_archive/verification_results.txt
+
 
 search_*.csv
 *_candidates*.csv

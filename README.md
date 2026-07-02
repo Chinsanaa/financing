@@ -5,15 +5,19 @@
 
 ## Executive Summary
 
-**Automated transaction categorization system** that classifies 900+ financial transactions from multiple payment sources (Alipay, WeChat Pay) into spending categories using supervised machine learning. Achieves **96.2% accuracy** (stratified CV) with production-ready confidence thresholds and an interactive decision-making dashboard.
+**Automated transaction categorization system** for Alipay + WeChat Pay exports: supervised ML (Logistic Regression + TF-IDF + jieba), merchant rules, confidence thresholds, and a five-tab Streamlit dashboard for budgeting.
 
-**Key Metrics:**
-- ✅ **96.2% accuracy** (stratified 5-fold cross-validation)
-- ✅ **0.965 F1-weighted** (overall performance)
-- ✅ **0.855 F1-macro** (fairness across all categories)
-- ✅ **99.0% average confidence** (789 merchant rule overrides at 100%; ML-only remainder 91.7%)
-- ✅ **901/901 transactions classified** (100% coverage)
-- ✅ **8 flagged for manual review** (down from 40 pre-Session 13)
+**Typical performance** (after labeling ~200+ transactions on your own data):
+- ~90–96% stratified CV accuracy on held-out labels
+- Merchant rules give instant 100% confidence on known chains (Meituan, DiDi, etc.)
+- Low-confidence rows flagged for manual review
+
+**Day-one expectation** (starter rules only): ~75–85% category accuracy until you fill `merchants_to_label.csv` and retrain.
+
+**Key Metrics (your run — run `bootstrap.py` to generate):**
+- CV accuracy, F1-weighted, F1-macro from `data/reports/TRAINING_REPORT.txt`
+- Manual review queue in `data/processed/needs_manual_review.csv`
+- Budget variance in Streamlit dashboard
 
 ---
 
@@ -53,7 +57,7 @@ Raw Data (CSV Exports)
   • Remove noise, lowercase English
     ↓
 [Stage 3] Rule-Based Pre-Label
-  • 172 merchant rules → auto-label during training + post-classification override
+  • Starter merchant rules (~60 national chains) + your custom rules
     ↓
 [Stage 4] Vectorize
   • TF-IDF feature extraction
@@ -65,7 +69,7 @@ Raw Data (CSV Exports)
   • Stratified 5-fold cross-validation
     ↓
 [Stage 6] Classify & Score
-  • ML prediction + merchant rule overrides + description rules (e.g. NYU POS)
+  • ML prediction + merchant rule overrides + description rules (e.g. catering/餐饮)
   • Flag low-confidence (<70%) for manual review
     ↓
 [Stage 7] Visualize & Decide
@@ -88,63 +92,19 @@ Raw Data (CSV Exports)
 
 ## Results & Performance
 
-### Accuracy Metrics (current — Session 17, July 2026)
+Metrics are **per-user** — generated when you run `python src/bootstrap.py` and `python src/retrain.py`.
 
-| Metric | Value | Status |
-|---|---|---|
-| **Overall Accuracy (CV)** | 96.2% | ✅ Production-ready |
-| **F1-weighted** | 0.965 | ✅ Excellent balanced performance |
-| **F1-macro** | 0.855 | ✅ Fair across all categories |
-| **Mean Confidence (all 901)** | 99.0% | ✅ High (789 rule overrides at 100%) |
-| **Mean Confidence (ML-only, 112 rows)** | 91.7% | ✅ Remaining edge cases |
-| **Needs Manual Review** | 8 / 901 | ✅ Down from 40 |
-| **Transactions Classified** | 901/901 | ✅ 100% coverage |
-| **`???` placeholder category** | 0 | ✅ Resolved (Session 14) |
+| Metric | Where to find it |
+|---|---|
+| CV accuracy, F1-weighted, F1-macro | `data/reports/TRAINING_REPORT.txt` |
+| Per-category precision/recall | Same report, after retrain |
+| Manual review queue | `data/processed/needs_manual_review.csv` |
+| Rule vs ML coverage | Bootstrap / classify stdout |
 
-**Per-category summary** (863 labeled training samples at last retrain · 901 live transactions, ¥23,895 total):
-
-| Category | Training Samples | Precision | Recall | F1 | Live Count | % of Spend | Avg Confidence |
-|---|---|---|---|---|---|---|---|
-| Eating Out | 330 | 100% | 98% | **0.992** | 359 | 41.1% | 98.6% |
-| Shopping | 55 | 96% | 98% | **0.973** | 56 | 15.7% | 98.7% |
-| Groceries | 269 | 100% | 99% | **0.994** | 272 | 13.8% | 99.2% |
-| Transportation | 169 | 100% | 100% | **1.000** | 169 | 10.0% | 100% |
-| Other | 11 | 65% | 100% | **0.786** | 11 | 8.9% | 90.5% |
-| Transfers & Gifts | 22 | 91% | 95% | **0.933** | 26 | 8.4% | 99.6% |
-| Utilities & Services | 5 | 100% | 100% | **1.000** | 5 | 0.4% | 100% |
-
-### Key Improvements (Recent Sessions)
-
-**Session 14: Catering, HEYTEA, anomaly cleanup**
-- Fixed all `???` placeholder rules (12 → 0); catering/`餐饮` → Eating Out
-- Added `喜茶` (HEYTEA) rule; La Baraka confirmed Eating Out
-- Mean confidence **93.8% → 99.0%**; manual review **40 → 8**
-
-**Session 13: Manual Other-Bucket Review + Rule Overrides**
-- User corrected 17 misclassified "Other" transactions (restaurants, groceries, gifts)
-- Expanded merchant rules; `classify.py` post-classification overrides
-- Retrained (96.2% CV accuracy); **Other bucket 31 → 11**
-
-**Session 6: Discovered & Fixed Accuracy Reporting**
-- Initial 99.1% was misleading (single train/test split)
-- Implemented stratified 5-fold cross-validation → revealed real 95.5%
-- Applied `class_weight='balanced'` + `C=10` hyperparameter tuning
-- **Result**: F1-macro improved from 0.549 → 0.765 (+39% fairness improvement)
-
-**Session 8A: Automated ML Workflow**
-- Built `src/retrain.py` for automated monthly retraining
-- Implemented `find_other_candidates.py` to surface ambiguous transactions
-- Monthly pipeline: label → retrain → evaluate → classify
-- **Result**: 3-6 week automation lifecycle established
-
-**Sessions 16–17: Dashboard restructure + pipeline enhancements**
-- **Session 16:** `src/trends.py` (multi-year YoY analysis); generic bank/card CSV parser in `parse.py`; EWMA forecast option in `forecast.py`
-- **Session 17:** Rebuilt dashboard from 8→3→**5 tabs** (see [Dashboard Features](#dashboard-features)); merged Overview+Merchants, Budget+Forecast, Savings+Anomalies; restored full Action Plan (savings-gap sliders, investment readiness); Reports as dedicated export tab
-- Multi-year trend charts removed from dashboard UI in Session 17 (`trends.py` remains available to re-wire)
-
-**Sessions 9-10: Decision-making tools + anomaly detection fix** *(now in Tabs 3–4)*
-- Need vs Want efficiency, cuttable merchants, savings gap calculator, investment readiness → **Action Plan** tab
-- IQR+¥150 anomaly detection (was 100+ false positives → ~5) → **Savings & Anomalies** tab
+**Reference design targets** (on ~1k labeled mixed CN/EN transactions):
+- Stratified 5-fold CV accuracy: often **90–96%** after sufficient labeling
+- F1-macro improves materially with `class_weight='balanced'` vs unweighted baseline
+- Well-calibrated confidence: wrong predictions tend to score lower than correct ones
 
 ---
 
@@ -206,7 +166,7 @@ Five-tab Streamlit dashboard (`streamlit run src/dashboard.py`). Filters (date, 
 |---|---|
 | **📊 Overview** | Where did money go? KPIs (total spend, avg txn, daily avg, top category); monthly stacked bar by category; pie breakdown; top 15 merchants; cumulative spend line |
 | **💳 Budget & Forecast** | Am I on track? Per-category budget cards (green/orange/red); variance table (¥ and %); 9-month risk; budget vs actual bar; forecast heatmap (Sep→May); seasonal vs EWMA toggle |
-| **💰 Savings & Anomalies** | What's unusual or off-track? Monthly income, YTD savings rate, year-end projection vs ¥7,200 goal; need/want split; daily burn rate; cumulative savings trend; high-value outliers and one-off merchants (IQR-based) |
+| **💰 Savings & Anomalies** | What's unusual or off-track? Monthly income, YTD savings rate, year-end projection vs savings goal; need/want split; daily burn rate; cumulative savings trend; high-value outliers (IQR-based) |
 | **🎯 Action Plan** | What should I cut? Efficiency score (% months met ¥600 goal); ranked discretionary transactions; cuttable merchants chart; interactive savings-gap sliders; investment readiness (3/3 recent months) |
 | **📋 Reports** | Export utility — month picker, category summary table, CSV download |
 
@@ -216,20 +176,60 @@ Five-tab Streamlit dashboard (`streamlit run src/dashboard.py`). Filters (date, 
 
 ## How to Use
 
-### Quick Start (5 minutes)
+### Web UI (recommended)
+
+Interactive wizard: upload files, define categories, label merchants, auto-train until **70%+** accuracy, then view the 5-tab dashboard.
+
+```bash
+pip install -r requirements.txt
+python src/app.py
+# Open http://127.0.0.1:5000
+```
+
+1. **Upload** — drag Alipay `.csv` and/or WeChat `.xlsx`
+2. **Categories** — edit the default 7 spending categories
+3. **Label** — assign a category per merchant (covers all their transactions); repeat until accuracy ≥ 70%
+4. **Dashboard** — Overview, Budget, Savings & Anomalies, Action Plan, Reports
+
+Session data lives in `data/sessions/` (gitignored). On completion, artifacts sync to `data/` for `streamlit run src/dashboard.py` if you prefer the full Streamlit dashboard.
+
+### CLI setup (alternative)
+
+This repo ships **starter templates**, not someone else's transactions or budget. Your financial data stays local (gitignored).
 
 ```bash
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the pipeline (parse → classify → visualize)
-python3 src/parse.py          # Parse Alipay/WeChat exports
-python3 src/classify.py       # Classify all transactions
-python3 src/visualize.py      # Generate summaries
+# 2. Export Alipay + WeChat bills → drop in data/raw/
+#    See data/raw/README.md for file names and export tips
 
-# 3. Launch interactive dashboard
+# 3. One-command first-run setup (parse → seed rules → train → classify → budget)
+python src/bootstrap.py --income 8000   # set your monthly income in CNY
+
+# 4. Label your top merchants (improves accuracy from ~75% → 90%+)
+#    Open data/exports/merchants_to_label.csv, fill suggested_category, re-run bootstrap
+
+# 5. Dashboard
 streamlit run src/dashboard.py
-# Opens at http://localhost:8501
+```
+
+**What to expect**
+
+| Stage | Category accuracy | Notes |
+|-------|-------------------|-------|
+| Day 1 (starter rules only) | ~75–85% | National chains (Meituan, DiDi, 麦当劳) auto-labeled |
+| After filling `merchants_to_label.csv` | ~85–92% | Your local shops get rules |
+| After 200+ labels + retrain | ~90–96% | Full ML pipeline kicks in |
+
+Budget numbers in the dashboard come from **your** `data/budget_config.json` (auto-generated from spend history on bootstrap, then editable).
+
+### Quick Start (existing setup)
+
+```bash
+pip install -r requirements.txt
+python src/bootstrap.py       # or: parse.py → classify.py
+streamlit run src/dashboard.py
 ```
 
 ### Classify New Transactions
@@ -298,9 +298,12 @@ financing/
 │
 ├── data/
 │   ├── raw/                  # Original exports (Alipay CSV, WeChat Excel) — do not edit
-│   ├── labeled/
-│   │   ├── merchant_rules_expanded.csv   # 172 merchant rules
-│   │   └── labeled_transactions.csv      # 863 training examples
+│   ├── templates/            # Starter files copied on first bootstrap
+│   │   ├── merchant_rules_starter.csv    # ~60 portable chain rules
+│   │   └── budget_config.example.json
+│   ├── labeled/              # Your rules + labels (gitignored)
+│   │   ├── merchant_rules_expanded.csv
+│   │   └── labeled_transactions.csv
 │   ├── processed/            # Pipeline outputs (used by dashboard)
 │   │   ├── transactions.csv
 │   │   ├── transactions_classified.csv
@@ -317,6 +320,8 @@ financing/
 │   └── samples/
 │
 ├── src/                      # Active pipeline scripts
+│   ├── bootstrap.py          # First-run setup for new users
+│   ├── paths.py              # Central data path constants
 │   ├── parse.py              # Stage 1: Parse CSV/Excel
 │   ├── segment.py            # Stage 2 & 4: Tokenization + TF-IDF
 │   ├── label.py              # Stage 3: Rule-based pre-labeling
@@ -345,10 +350,10 @@ Seamlessly combines Alipay CSV and WeChat Excel exports into a unified schema, h
 Correctly tokenizes Chinese + English text using jieba segmentation. Prevents the common pitfall of applying English tokenizers to Chinese (which would fail to segment).
 
 ### 3. **Rule-Based Pre-Labeling + Post-Classification Overrides**
-172 merchant rules auto-label training data and override ML predictions at inference time (789/901 transactions matched). Description rules handle edge cases (e.g. NYU cafeteria POS → Eating Out, catering/餐饮 → Eating Out).
+Starter merchant rules (national chains) auto-label during bootstrap; your custom rules override ML at inference. Description rules handle `餐饮` / `catering` → Eating Out.
 
 ### 4. **Production-Ready Confidence Thresholds**
-Well-calibrated confidence scores with a two-layer strategy: merchant rules set confidence to 100% on match; remaining ML predictions flagged below 70% for manual review (currently **8 items**).
+Merchant rules set confidence to 100% on match; ML predictions below 70% go to `needs_manual_review.csv`.
 
 ### 5. **Fairness-Aware Model Training**
 Class weighting ensures minority spending categories (Transfers, Shopping) are learned equally well, not ignored in favor of majority categories.
@@ -385,10 +390,10 @@ Monthly workflow to identify ambiguous transactions, collect labels, retrain mod
 ## Limitations & Future Work
 
 ### Current Limitations
-1. **Fixed monthly income assumption** (¥2,986) — varies for users with irregular income
-2. **~10 months of transaction data** (Aug 2025 – May 2026) — multi-year YoY charts live in `src/trends.py` but not yet wired back into the dashboard UI
-3. **7 spending categories** — could expand with more training data
-4. **No real-time classification** — batch processing only (acceptable for monthly use)
+1. **Requires initial labeling** — starter rules cover national chains; local merchants need `merchants_to_label.csv` or manual labels
+2. **7 spending categories** — Travel/Health/Entertainment map to Other unless you expand the category list
+3. **Batch processing only** — monthly export workflow, not real-time
+4. **WeChat export format** — parser assumes current Excel layout (`skiprows=17`); may need update if WeChat changes exports
 
 ### Future Enhancements
 - [x] Multi-year trend analysis — `src/trends.py` built (Session 16); dashboard UI removed in Session 17 restructure — re-add when desired
@@ -410,7 +415,7 @@ Monthly workflow to identify ambiguous transactions, collect labels, retrain mod
 
 ```bash
 # Clone repository
-git clone https://github.com/Chinsanaa/financing.git
+git clone <your-repo-url>
 cd financing
 
 # Install dependencies

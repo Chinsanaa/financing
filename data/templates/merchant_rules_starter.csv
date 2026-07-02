@@ -1,0 +1,63 @@
+merchant_pattern,category
+7-ELEVEN,Groceries
+7-11,Groceries
+LAWSON,Groceries
+FamilyMart,Groceries
+全家,Groceries
+喜士多,Groceries
+ALDI,Groceries
+奥乐齐,Groceries
+盒马,Groceries
+永辉,Groceries
+大润发,Groceries
+华润万家,Groceries
+DiDi,Transportation
+滴滴,Transportation
+滴滴出行,Transportation
+高德打车,Transportation
+哈啰,Transportation
+哈啰出行,Transportation
+地铁,Transportation
+上海地铁,Transportation
+上海公共交通卡,Transportation
+Meituan,Eating Out
+美团,Eating Out
+饿了么,Eating Out
+McDonald's,Eating Out
+麦当劳,Eating Out
+KFC,Eating Out
+肯德基,Eating Out
+BURGER KING,Eating Out
+汉堡王,Eating Out
+Pizza Hut,Eating Out
+必胜客,Eating Out
+SUBWAY,Eating Out
+Saizeriya,Eating Out
+萨莉亚,Eating Out
+luckin coffee,Eating Out
+瑞幸,Eating Out
+HEYTEA,Eating Out
+喜茶,Eating Out
+Mixue,Eating Out
+蜜雪冰城,Eating Out
+CHAGEE,Eating Out
+霸王茶姬,Eating Out
+Taobao,Shopping
+淘宝,Shopping
+淘宝平台,Shopping
+Pinduoduo,Shopping
+拼多多,Shopping
+MINISO,Shopping
+名创优品,Shopping
+MUJI,Shopping
+无印良品,Shopping
+得物,Shopping
+Dewu,Shopping
+China Mobile,Utilities & Services
+中国移动,Utilities & Services
+中国联通,Utilities & Services
+中国电信,Utilities & Services
+Sinopec,Utilities & Services
+中石化,Utilities & Services
+餐饮,Eating Out
+catering,Eating Out

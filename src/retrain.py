@@ -7,6 +7,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path.cwd()))
 
 from segment import clean_text, vectorize, build_vectorizer, LR_HYPERPARAMS
+from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
@@ -24,6 +25,8 @@ def retrain_model():
 
     # Filter to only explicitly labeled rows (labeled==True) to match train.py
     df_labeled = df[df['labeled'] == True].copy()
+    df_labeled['category'] = df_labeled['category'].replace(CATEGORY_NORMALIZE)
+    df_labeled = df_labeled[df_labeled['category'].isin(ML_CATEGORIES)]
     print(f"\n1. Loaded {len(df_labeled)} labeled transactions")
     print(f"   Category distribution:")
     for cat, count in df_labeled['category'].value_counts().sort_values(ascending=False).items():

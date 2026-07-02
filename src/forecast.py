@@ -236,13 +236,15 @@ def calculate_ytd_summary(df_transactions, budget_config, forecast_df):
     return summary
 
 
-def calculate_savings_projection(df_transactions, budget_config, monthly_income=2986):
+def calculate_savings_projection(df_transactions, budget_config, monthly_income=None):
     """
     Project savings at year-end.
 
     Returns:
         dict with savings metrics
     """
+    if monthly_income is None:
+        monthly_income = budget_config.get('income', 8000.0)
 
     df_trans = df_transactions.copy()
     df_trans['timestamp'] = pd.to_datetime(df_trans['timestamp'])
