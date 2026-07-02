@@ -115,7 +115,8 @@ Metrics are **per-user** — generated when you run `python src/bootstrap.py` an
 - **ML Framework**: scikit-learn (Logistic Regression)
 - **NLP**: jieba (Chinese tokenization), TF-IDF vectorization
 - **Data Processing**: pandas, NumPy
-- **Dashboard**: Streamlit
+- **Web UI**: Flask (interactive onboarding wizard)
+- **Dashboard**: Streamlit (5-tab analytics dashboard)
 - **File Format**: CSV (normalized), PKL (model serialization)
 
 ### Key Algorithms
@@ -178,7 +179,7 @@ Five-tab Streamlit dashboard (`streamlit run src/dashboard.py`). Filters (date, 
 
 ### Web UI (recommended)
 
-Interactive wizard: upload files, define categories, label merchants, auto-train until **70%+** accuracy, then view the 5-tab dashboard.
+Interactive Flask wizard: upload files, define categories, label merchants, auto-train until **70%+** accuracy, then view the 5-tab dashboard.
 
 ```bash
 pip install -r requirements.txt
@@ -186,12 +187,17 @@ python src/app.py
 # Open http://127.0.0.1:5000
 ```
 
-1. **Upload** — drag Alipay `.csv` and/or WeChat `.xlsx`
-2. **Categories** — edit the default 7 spending categories
-3. **Label** — assign a category per merchant (covers all their transactions); repeat until accuracy ≥ 70%
-4. **Dashboard** — Overview, Budget, Savings & Anomalies, Action Plan, Reports
+**Workflow:**
+1. **Upload** — drag Alipay `.csv` and/or WeChat `.xlsx` files
+2. **Categories** — review and customize the 7 default spending categories
+3. **Label** — assign a category per merchant; repeat until accuracy ≥ 70%
+4. **Dashboard** — explore 5 interactive tabs (Overview, Budget & Forecast, Savings & Anomalies, Action Plan, Reports)
 
-Session data lives in `data/sessions/` (gitignored). On completion, artifacts sync to `data/` for `streamlit run src/dashboard.py` if you prefer the full Streamlit dashboard.
+**How it works:**
+- Starter merchant rules (~295 patterns) auto-label known chains (Meituan, DiDi, etc.) instantly
+- UI iterates: you label ambiguous merchants → ML retrains → confidence updates in real-time
+- Session data lives in `data/sessions/` (gitignored for privacy)
+- On completion, trained model + categorized data sync to `data/` for offline use or Streamlit dashboard
 
 ### CLI setup (alternative)
 
@@ -495,4 +501,4 @@ Open source (MIT License)
 
 For questions about the implementation or technical decisions, see `context.md` for detailed session logs and decision rationale.
 
-**Last Updated:** Session 17 (2026-07-01) — 5-tab dashboard restructure; per-category results table consolidated
+**Last Updated:** Session 21 (2026-07-02) — Web UI complete; merchant category rules comprehensive (295+ patterns); documentation verified

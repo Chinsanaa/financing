@@ -57,26 +57,34 @@ A pipeline that:
 
 Run `python src/app.py` and complete the web wizard with your Alipay/WeChat exports.
 
-## Current State (Session 20, 2026-07-01)
+## Current State (Session 21, 2026-07-02)
 
 | Item | Status |
 |---|---|
 | Personal transaction data in repo | **Removed** — gitignored; templates only |
 | Raw exports | User adds locally (`data/raw/`) |
-| Merchant rules | `data/templates/merchant_rules_starter.csv` copied on bootstrap |
+| Merchant rules | `data/templates/merchant_rules_starter.csv` + in-code rules in `src/merchant_categories.py` (295+ patterns) |
 | Labeled training data | Created per-user by bootstrap + manual labeling |
 | Classifier | Trained per-user via `retrain.py` / bootstrap |
 | Budget config | `data/templates/budget_config.example.json` → user `budget_config.json` |
+| Web UI | Flask app (`src/app.py`) with interactive wizard; per-session workspaces (`data/sessions/`, gitignored) |
+| English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
 
-### Session 20 (2026-07-01) — Web onboarding UI
+### Session 21 (2026-07-02) — Documentation Review
+- Read through codebase: web UI fully functional, merchant rules comprehensive, pipeline modular
+- Verified current file state: no uncommitted changes on `claude/update-readme-context-j82rsk`
+- Updated context.md and README.md for accuracy and completeness
+- All prior commits (Sessions 0–20) verified; repo is adoptable by new users
+
+### Session 20 (2026-07-01) — Web onboarding UI & merchant rules
 - `src/app.py` Flask server + `web/templates/index.html` wizard
 - Steps: upload → define categories → label merchants → iterate to 70%+ → 5-tab HTML dashboard
 - `src/session_context.py`, `src/web_pipeline.py`, `src/dashboard_data.py`
 - Per-session workspaces under `data/sessions/` (gitignored)
 - **English-only UI**: `src/translate.py` + fix in `merchant_display.display_merchant()` — Streamlit and web both route display through translation when no chain mapping exists (was returning raw Chinese)
-- **Merchant category rules**: `src/merchant_categories.py` — 295 chain/local patterns mapped to Groceries, Eating Out, Shopping, Transportation, Utilities & Services; synced to `merchant_rules_*.csv`; longest-pattern-first matching in `label.py`
+- **Merchant category rules**: `src/merchant_categories.py` — 295+ chain/local patterns mapped to 7 categories; synced to `merchant_rules_*.csv`; longest-pattern-first matching in `label.py`
 
 ### Session 19 (2026-07-01) — Personal data purge
 - Deleted all raw exports, labeled data, models, processed CSVs, budget config, exports, reports
