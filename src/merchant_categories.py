@@ -321,7 +321,7 @@ LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
 
 # NYU Shanghai: cafeteria POS charges vs campus admin fees (match on description).
 NYU_SHANGHAI_MERCHANT = "上海纽约大学"
-NYU_OTHER_DESCRIPTION_MARKERS = (
+NYU_SERVICE_DESCRIPTION_MARKERS = (
     "Campus Card Top Up",
     "Tuition and Fees",
     "NYUCard Print Fee",
@@ -334,8 +334,8 @@ def special_category(merchant: str, description: str) -> str | None:
     description = str(description or "").strip()
 
     if merchant == NYU_SHANGHAI_MERCHANT:
-        if any(marker in description for marker in NYU_OTHER_DESCRIPTION_MARKERS):
-            return "Other"
+        if any(marker in description for marker in NYU_SERVICE_DESCRIPTION_MARKERS):
+            return "Utilities & Services"
         return "Eating Out"
 
     if merchant == "上海蕤盛工贸":
