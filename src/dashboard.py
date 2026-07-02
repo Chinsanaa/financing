@@ -1,7 +1,7 @@
 """
 Streamlit Dashboard — Personal Finance Categorizer
-5-tab structure: Overview, Budget & Forecast, Savings & Anomalies,
-Action Plan, Reports.
+6-tab structure: Overview, Budget & Forecast, Savings & Anomalies,
+Action Plan, Label Queue, Reports.
 """
 import streamlit as st
 import pandas as pd
@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from bootstrap import apply_label_queue_and_retrain, export_merchants_to_label
+from categories import ML_CATEGORIES
 from dashboard_helpers import (
     load_budget_config,
     calculate_ytd_vs_budget,
@@ -28,7 +30,17 @@ from forecast import (
     project_spending,
     calculate_savings_projection,
 )
+from label import load_merchant_rules
 from merchant_display import add_display_names, aggregate_merchants
+from paths import MERCHANT_RULES, MERCHANTS_TO_LABEL, TRANSACTIONS
+from translate import enrich_label_row
+from trends import (
+    calendar_years_in_data,
+    month_of_year_profile,
+    trend_summary,
+    year_over_year_growth,
+    yearly_totals,
+)
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -467,11 +479,12 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_overview, tab_budget, tab_savings, tab_action, tab_reports = st.tabs([
+tab_overview, tab_budget, tab_savings, tab_action, tab_labels, tab_reports = st.tabs([
     "📊 Overview",
     "💳 Budget & Forecast",
     "💰 Savings & Anomalies",
     "🎯 Action Plan",
+    "🏷️ Label Queue",
     "📋 Reports",
 ])
 
@@ -555,6 +568,44 @@ with tab_overview:
         ))
         apply_chart_theme(fig_cum, height=400)
         st.plotly_chart(fig_cum, use_container_width=True)
+
+    st.markdown('<div class="section-title">Yearly &amp; Seasonal Trends</div>', unsafe_allow_html=True)
+    MONTH_ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    summary = trend_summary(df_filtered)
+    t1, t2 = st.columns(2)
+    with t1:
+        st.caption("Average spend by calendar month (seasonal profile, all years pooled)")
+        profile = month_of_year_profile(df_filtered)
+        fig_season = px.bar(
+            profile, x='month_label', y='mean',
+            category_orders={'month_label': MONTH_ORDER},
+            color_discrete_sequence=[CHART_COLORS[1]],
+        )
+        fig_season.update_layout(yaxis_title='Avg ¥/month', xaxis_title='')
+        apply_chart_theme(fig_season, height=300)
+        st.plotly_chart(fig_season, use_container_width=True)
+    with t2:
+        if summary['multi_year_ready']:
+            st.caption(f"Year-over-year total spend ({', '.join(map(str, summary['years']))})")
+            yearly = yearly_totals(df_filtered)
+            fig_yearly = px.bar(
+                yearly, x='year', y='total_spend',
+                color_discrete_sequence=[CHART_COLORS[0]],
+            )
+            fig_yearly.update_layout(xaxis=dict(type='category'), yaxis_title='¥', xaxis_title='')
+            apply_chart_theme(fig_yearly, height=300)
+            st.plotly_chart(fig_yearly, use_container_width=True)
+            growth = year_over_year_growth(df_filtered)
+            if growth is not None and len(growth) > 0:
+                last = growth.iloc[-1]
+                direction = 'up' if last['yoy_pct'] > 0 else 'down'
+                st.caption(f"{int(last['year'])} vs {int(last['year']) - 1}: spend {direction} {abs(last['yoy_pct']):.1f}%")
+        else:
+            years = calendar_years_in_data(df_filtered)
+            st.info(
+                f"Year-over-year comparison unlocks with 2+ calendar years of data. "
+                f"You currently have: {', '.join(map(str, years)) or 'no data in range'}."
+            )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — BUDGET & FORECAST
@@ -932,7 +983,83 @@ with tab_action:
             )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 5 — REPORTS
+# TAB 5 — LABEL QUEUE
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_labels:
+    st.markdown('<div class="section-title">Merchants Needing a Category</div>', unsafe_allow_html=True)
+    st.caption(
+        "Rule-matched merchants are already categorized automatically. These aren't — "
+        "pick a category for the ones you recognize, then apply to add rules, "
+        "retrain, and reclassify everything."
+    )
+
+    if not TRANSACTIONS.exists():
+        st.info("No parsed transactions yet. Run the CLI bootstrap or web wizard first.")
+    elif not MERCHANTS_TO_LABEL.exists():
+        st.info("No label queue yet.")
+        if st.button("Generate label queue from current data"):
+            df_raw = pd.read_csv(TRANSACTIONS)
+            rules = load_merchant_rules(str(MERCHANT_RULES))
+            export_merchants_to_label(df_raw, rules)
+            st.rerun()
+    else:
+        queue_df = pd.read_csv(MERCHANTS_TO_LABEL)
+        if queue_df.empty:
+            st.success("All top merchants are already rule-matched. Nothing to label.")
+        else:
+            queue_df['suggested_category'] = queue_df['suggested_category'].astype(object).fillna('')
+            queue_df['notes'] = queue_df.get('notes', pd.Series(dtype=object)).astype(object).fillna('')
+            labels = [enrich_label_row(m, d) for m, d in zip(queue_df['merchant'], queue_df['sample_description'])]
+            queue_df['merchant_label'] = [l['merchant_label'] for l in labels]
+            queue_df['description_label'] = [l['description_label'] for l in labels]
+
+            edited = st.data_editor(
+                queue_df,
+                column_order=[
+                    'merchant_label', 'description_label', 'count',
+                    'total_spend', 'suggested_category', 'notes',
+                ],
+                column_config={
+                    'merchant_label': st.column_config.TextColumn('Merchant', disabled=True),
+                    'description_label': st.column_config.TextColumn('Sample', disabled=True),
+                    'count': st.column_config.NumberColumn('Txns', disabled=True),
+                    'total_spend': st.column_config.NumberColumn('Total ¥', format='¥%.0f', disabled=True),
+                    'suggested_category': st.column_config.SelectboxColumn(
+                        'Category', options=[''] + ML_CATEGORIES, required=False,
+                    ),
+                    'notes': st.column_config.TextColumn('Notes'),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key='label_queue_editor',
+            )
+
+            n_filled = int((edited['suggested_category'].astype(str).str.strip() != '').sum())
+            st.caption(f"{n_filled} of {len(edited)} merchants categorized in this batch.")
+
+            if st.button(f"Apply {n_filled} label(s) & retrain", disabled=n_filled == 0):
+                to_save = edited.drop(columns=['merchant_label', 'description_label'])
+                to_save.to_csv(MERCHANTS_TO_LABEL, index=False, encoding='utf-8-sig')
+                with st.spinner("Adding rules, retraining if there's enough data, and reclassifying..."):
+                    result = apply_label_queue_and_retrain()
+                load_data.clear()
+                if result['trainable']:
+                    tr = result['train_result']
+                    st.success(
+                        f"Added {result['added_rules']} rule(s). Retrained: "
+                        f"{tr['accuracy']:.1%} CV accuracy on {tr['n_samples']} samples. "
+                        f"{result['remaining_unlabeled']} merchants still unlabeled."
+                    )
+                else:
+                    st.success(
+                        f"Added {result['added_rules']} rule(s) and reclassified. "
+                        f"Not enough labeled data to retrain yet ({result['train_message']}). "
+                        f"{result['remaining_unlabeled']} merchants still unlabeled."
+                    )
+                st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 6 — REPORTS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_reports:
     st.markdown('<div class="section-title">Monthly Report</div>', unsafe_allow_html=True)

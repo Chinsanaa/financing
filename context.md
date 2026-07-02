@@ -52,9 +52,12 @@ A pipeline that:
 
 ## Open Questions / Not Yet Decided
 
-- [ ] Wire `merchants_to_label` editing into Streamlit dashboard
-- [ ] Re-add multi-year trends (`src/trends.py`) to dashboard UI
+- [x] Wire `merchants_to_label` editing into Streamlit dashboard — resolved Session 25
+- [x] Re-add multi-year trends (`src/trends.py`) to dashboard UI — resolved Session 25
 - [x] How to handle refunds / internal transfers — resolved Session 22, see Key Decisions
+
+No open questions remain. Next work should come from new user feedback or the
+README's Future Enhancements list.
 
 ## Next Suggested Step
 
@@ -74,6 +77,15 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 25 (2026-07-02) — Streamlit: Label Queue tab + multi-year trends
+Closed out the two remaining open questions from earlier sessions.
+
+- **Multi-year trends** (`src/dashboard.py`, Overview tab): new "Yearly & Seasonal Trends" section using `src/trends.py` (built Session 16, never wired up). Seasonal profile (avg spend per calendar month, pools all years) always shows; year-over-year bar chart + growth caption only render once `trends.multi_year_ready()` is true (2+ calendar years), otherwise shows an explanatory `st.info`.
+- **Label Queue tab** (`src/dashboard.py`, new 5th tab before Reports): editable `st.data_editor` table backed by `data/exports/merchants_to_label.csv`. Merchant/description shown via `translate.enrich_label_row()` (English-only, consistent with the web UI); raw Chinese merchant id kept in the underlying dataframe for saving but hidden from display via `column_order`. "Apply & retrain" button calls a new `bootstrap.apply_label_queue_and_retrain()`.
+- **New backend function** `bootstrap.apply_label_queue_and_retrain()`: applies filled-in categories to merchant rules, seeds `labeled_transactions.csv` from the updated rules, retrains only if `can_train()` passes (otherwise reports why not), reclassifies all transactions, and refreshes the queue with whatever's still unlabeled. Reuses the same building blocks `run_bootstrap()` already had imported — no new dependencies.
+- **Bug found and fixed while verifying**: `export_merchants_to_label()` skipped writing the CSV entirely when nothing was left to label, so a fully-labeled queue kept showing stale already-applied rows forever (in both the CLI flow and, more visibly, this new tab's "apply until empty" loop). Fixed to always overwrite, writing an empty (headers-only) CSV when there's nothing left.
+- **Verified live**: ran `streamlit run src/dashboard.py` against synthetic 2-year, multi-category data with one deliberately unlabeled merchant; drove it with headless Chromium (Playwright) — confirmed the trends section renders (seasonal bars + YoY bars + caption), the Label Queue tab renders with no exceptions, and clicking "Apply" actually adds the rule, retrains (83% CV accuracy in the synthetic run), reclassifies, and empties the queue.
 
 ### Session 24 (2026-07-02) — PWA: mobile app for quick transaction review
 - Turned the existing Flask web UI into an installable PWA rather than building a separate native/React Native app — ticked the README future-enhancement box

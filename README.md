@@ -161,17 +161,18 @@ Metrics are **per-user** — generated when you run `python src/bootstrap.py` an
 
 ## Dashboard Features
 
-Five-tab Streamlit dashboard (`streamlit run src/dashboard.py`). Filters (date, category, source, confidence) apply on the **Overview** tab; other tabs use full dataset or their own month selectors.
+Six-tab Streamlit dashboard (`streamlit run src/dashboard.py`). Filters (date, category, source, confidence) apply on the **Overview** tab; other tabs use full dataset or their own month selectors.
 
 | Tab | What it answers |
 |---|---|
-| **📊 Overview** | Where did money go? KPIs (total spend, avg txn, daily avg, top category); monthly stacked bar by category; pie breakdown; top 15 merchants; cumulative spend line |
+| **📊 Overview** | Where did money go? KPIs (total spend, avg txn, daily avg, top category); monthly stacked bar by category; pie breakdown; top 15 merchants; cumulative spend line; seasonal profile + year-over-year trend (once 2+ calendar years of data exist) |
 | **💳 Budget & Forecast** | Am I on track? Per-category budget cards (green/orange/red); variance table (¥ and %); 9-month risk; budget vs actual bar; forecast heatmap (Sep→May); seasonal vs EWMA toggle |
 | **💰 Savings & Anomalies** | What's unusual or off-track? Monthly income, YTD savings rate, year-end projection vs savings goal; need/want split; daily burn rate; cumulative savings trend; high-value outliers (IQR-based) |
 | **🎯 Action Plan** | What should I cut? Efficiency score (% months met ¥600 goal); ranked discretionary transactions; cuttable merchants chart; interactive savings-gap sliders; investment readiness (3/3 recent months) |
+| **🏷️ Label Queue** | Which merchants still need a category? Editable table of unlabeled merchants (English display); pick categories and apply to add rules, retrain, and reclassify — no CLI round-trip required |
 | **📋 Reports** | Export utility — month picker, category summary table, CSV download |
 
-**Tab evolution:** Original build had 8 tabs (Overview, Merchants, Budget, Anomalies, Reports, Forecasting, Savings, Action Plan). Session 10 collapsed to 3 priority tabs; Session 17 settled on the 5-tab structure above without losing functionality.
+**Tab evolution:** Original build had 8 tabs (Overview, Merchants, Budget, Anomalies, Reports, Forecasting, Savings, Action Plan). Session 10 collapsed to 3 priority tabs; Session 17 settled on a 5-tab structure; Session 25 added the Label Queue tab (6 tabs) for in-dashboard merchant labeling.
 
 ---
 
@@ -406,7 +407,7 @@ Monthly workflow to identify ambiguous transactions, collect labels, retrain mod
 4. **WeChat export format** — parser assumes current Excel layout (`skiprows=17`); may need update if WeChat changes exports
 
 ### Future Enhancements
-- [x] Multi-year trend analysis — `src/trends.py` built (Session 16); dashboard UI removed in Session 17 restructure — re-add when desired
+- [x] Multi-year trend analysis — `src/trends.py` built (Session 16); re-added to the Overview tab (Session 25) as a seasonal profile + year-over-year comparison, gated on 2+ calendar years of data
 - [x] Support additional payment sources — generic bank/card CSV parser in `parse.py`; see `data/raw/source_config.example.json`
 - [ ] Automated feature engineering with larger datasets (2000+ samples)
 - [x] Mobile app for quick transaction review — installable PWA (manifest + service worker); "Add to Home Screen" on the Label step for on-the-go merchant review
