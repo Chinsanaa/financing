@@ -45,12 +45,16 @@ def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
             df.loc[idx, 'category'] = special
             df.loc[idx, 'confidence'] = 1.0
             df.loc[idx, 'needs_review'] = False
+            if 'label_source' in df.columns:
+                df.loc[idx, 'label_source'] = 'override'
             continue
 
         if 'catering' in merchant_lower or '餐饮' in merchant:
             df.loc[idx, 'category'] = 'Eating Out'
             df.loc[idx, 'confidence'] = 1.0
             df.loc[idx, 'needs_review'] = False
+            if 'label_source' in df.columns:
+                df.loc[idx, 'label_source'] = 'override'
     return df
 
 
@@ -68,10 +72,21 @@ def classify_all(
     confidence_threshold=0.7,
     rules=None,
 ):
-    """Classify transactions via ML model and/or merchant rules.
+    """Classify transactions via a two-stage design: rules first, model on the residual.
+
+    Stage 1 — high-precision merchant rules (and description overrides) assign a
+    trusted category to known merchants. Stage 2 — the model predicts the rest.
+
+    Because the model is badly overconfident on merchants it has never seen
+    (see docs/FULL_AUDIT.md Phase 4: even 0.9+ confidence is only ~89% accurate
+    on unseen merchants, ECE 0.184), a model prediction on a no-rule merchant is
+    treated as a *suggestion routed to review*, not an auto-applied label. The
+    `confidence_threshold` no longer gates auto-acceptance; it is kept for
+    ranking the review queue. `label_source` records how each row was labeled:
+    'rule', 'override', 'model' (needs review), or 'none' (rules-only fallback).
 
     When vectorizer/classifier are None (no trained model yet), uses rules-only
-    mode: matched merchants get their rule category; others → Other at 0% confidence.
+    mode: matched merchants get their rule category; others → Other, flagged for review.
     """
     df = df.copy()
     df['text'] = df.apply(
@@ -83,21 +98,25 @@ def classify_all(
         X = vectorize(df['text'].tolist(), vectorizer)
         df['category'] = classifier.predict(X)
         df['confidence'] = classifier.predict_proba(X).max(axis=1)
-        df['needs_review'] = df['confidence'] < confidence_threshold
+        df['label_source'] = 'model'
     else:
         df['category'] = 'Other'
         df['confidence'] = 0.0
-        df['needs_review'] = True
+        df['label_source'] = 'none'
 
     if rules:
         ruled = apply_merchant_rules(df, rules)
         matched = ruled['labeled'] == True
         df.loc[matched, 'category'] = ruled.loc[matched, 'category']
         df.loc[matched, 'confidence'] = 1.0
-        df.loc[matched, 'needs_review'] = False
+        df.loc[matched, 'label_source'] = 'rule'
 
     df = apply_description_overrides(df)
     df = normalize_categories(df)
+
+    # Two-stage routing: only rule/override rows are trusted. Model suggestions
+    # on unseen (no-rule) merchants — and rules-only-mode fallbacks — go to review.
+    df['needs_review'] = ~df['label_source'].isin(['rule', 'override'])
     return df
 
 
@@ -138,7 +157,9 @@ if __name__ == '__main__':
         print(f"   {cat:30s}: {count:3d} transactions (avg confidence: {avg_conf:.1%})")
 
     needs_review = df_classified[df_classified['needs_review']]
-    print(f"\n4b. LOW-CONFIDENCE ITEMS (confidence < 0.70): {len(needs_review)}")
+    rule_covered = (~df_classified['needs_review']).sum()
+    print(f"\n4b. TRUSTED (rule/override): {rule_covered}  |  "
+          f"MODEL SUGGESTIONS ROUTED TO REVIEW (unseen merchants): {len(needs_review)}")
 
     print(f"\n5. Mean confidence: {df_classified['confidence'].mean():.1%}")
 

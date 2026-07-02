@@ -424,12 +424,19 @@ better, and it is a genuine honest-CV improvement, so it is not rejected.
 improvement but does **not** rescue the model on new merchants. The strategic
 conclusion is unchanged: rules are the engine.
 
-### Phase 4 decisions needed (nothing applied yet)
+### Phase 4 decisions — confirmed by user and APPLIED (2026-07-02)
 
-1. **Apply `C=10 → C=1.0`** in `segment.py` `LR_HYPERPARAMS`? (Recommended:
-   yes — dominates on both CV schemes; other params left as-is since none helped.)
-2. **Review-threshold policy** given confidence is unreliable on new merchants:
-   route no-rule (unseen) merchants to review by default rather than
-   auto-accepting on the 0.70 gate.
+1. **`C=10 → C=1.0`** applied in `segment.py` `LR_HYPERPARAMS`; the misleading
+   "C=10 fits harder on small categories" comment was replaced with the honest
+   rationale. Model retrained. Other params unchanged (none helped under
+   GroupKFold).
+2. **Two-stage routing** implemented in `classify.py`: only rule/override rows
+   are trusted (`needs_review=False`); model predictions on no-rule (unseen)
+   merchants are **suggestions routed to review by default**, regardless of
+   confidence. A new `label_source` column records `rule` / `override` / `model`
+   / `none`. The 0.70 `confidence_threshold` no longer gates auto-acceptance
+   (kept only for ranking the review queue). On the real data this trusts 875
+   rows and routes 56 unseen-merchant suggestions to review. Locked in by
+   `tests/test_classify_routing.py`.
 
 ## Phase 5 — Doc reconciliation *(pending)*

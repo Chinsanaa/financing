@@ -7,14 +7,18 @@ from sklearn.linear_model import LogisticRegression
 import joblib
 from pathlib import Path
 
-# Production hyperparameters (tuned via grid search in previous audit)
-# class_weight='balanced' addresses 40:1 class imbalance (Eating Out vs Utilities)
-# C=10 reduces regularization to fit harder on small categories (Shopping, Transfers & Gifts)
+# Production hyperparameters.
+# class_weight='balanced' addresses the ~40:1 class imbalance (Eating Out vs Utilities).
+# C=1.0: the earlier C=10 was tuned on stratified CV, which leaks merchants across
+# folds (see docs/FULL_AUDIT.md Phase 4). Under honest GroupKFold-by-merchant CV,
+# C=1.0 strictly dominates C=10 (accuracy +8.9pts, F1-macro +0.106) while leaving
+# stratified accuracy essentially unchanged — less overfitting generalizes better
+# to unseen merchants.
 LR_HYPERPARAMS = {
     'max_iter': 1000,
     'solver': 'lbfgs',
     'class_weight': 'balanced',
-    'C': 10,
+    'C': 1.0,
     'random_state': 42
 }
 
