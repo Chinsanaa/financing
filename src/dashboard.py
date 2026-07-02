@@ -521,6 +521,35 @@ with tab_overview:
     ]) + '</div>'
     st.markdown(kpi_html, unsafe_allow_html=True)
 
+    st.markdown('<div class="section-title">Monthly Spending Trend</div>', unsafe_allow_html=True)
+    monthly_total = df_filtered.groupby('month')['amount'].sum().reset_index()
+    monthly_total['month_dt'] = monthly_total['month'].dt.to_timestamp()
+    avg_monthly = monthly_total['amount'].mean()
+
+    fig_trend = go.Figure()
+    fig_trend.add_trace(go.Scatter(
+        x=monthly_total['month_dt'], y=monthly_total['amount'],
+        mode='lines+markers',
+        line=dict(color='#7c6af7', width=2),
+        marker=dict(size=8, color='#7c6af7', line=dict(width=2, color='#1a1d24')),
+        fill='tozeroy', fillcolor='rgba(124, 106, 247, 0.1)',
+        hovertemplate='%{x|%b %Y}<br>¥%{y:,.0f}<extra></extra>',
+    ))
+    if len(monthly_total) > 0:
+        fig_trend.add_hline(
+            y=avg_monthly, line_width=1, line_dash='dash', line_color='rgba(255,255,255,0.25)',
+            annotation_text=f'Avg ¥{avg_monthly:,.0f}/mo', annotation_position='top left',
+            annotation_font_color='#8899a6',
+        )
+        last = monthly_total.iloc[-1]
+        fig_trend.add_annotation(
+            x=last['month_dt'], y=last['amount'], text=f"¥{last['amount']:,.0f}",
+            showarrow=False, yshift=18, font=dict(color='#e8eaed', size=12),
+        )
+    fig_trend.update_layout(xaxis_title='', yaxis_title='¥', showlegend=False)
+    apply_chart_theme(fig_trend, height=340)
+    st.plotly_chart(fig_trend, use_container_width=True)
+
     col_a, col_b = st.columns([3, 2])
     with col_a:
         st.markdown('<div class="section-title">Monthly Spend by Category</div>', unsafe_allow_html=True)

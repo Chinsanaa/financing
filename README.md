@@ -165,7 +165,7 @@ Six-tab Streamlit dashboard (`streamlit run src/dashboard.py`). Filters (date, c
 
 | Tab | What it answers |
 |---|---|
-| **📊 Overview** | Where did money go? KPIs (total spend, avg txn, daily avg, top category); monthly stacked bar by category; pie breakdown; top 15 merchants; cumulative spend line; seasonal profile + year-over-year trend (once 2+ calendar years of data exist) |
+| **📊 Overview** | Where did money go? KPIs (total spend, avg txn, daily avg, top category); monthly total spend trend line (avg reference + endpoint label); monthly stacked bar by category; pie breakdown; top 15 merchants; cumulative spend line; seasonal profile + year-over-year trend (once 2+ calendar years of data exist) |
 | **💳 Budget & Forecast** | Am I on track? Per-category budget cards (green/orange/red); variance table (¥ and %); 9-month risk; budget vs actual bar; forecast heatmap (Sep→May); seasonal vs EWMA toggle |
 | **💰 Savings & Anomalies** | What's unusual or off-track? Monthly income, YTD savings rate, year-end projection vs savings goal; need/want split; daily burn rate; cumulative savings trend; high-value outliers (IQR-based) |
 | **🎯 Action Plan** | What should I cut? Efficiency score (% months met ¥600 goal); ranked discretionary transactions; cuttable merchants chart; interactive savings-gap sliders; investment readiness (3/3 recent months) |

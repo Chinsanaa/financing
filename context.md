@@ -78,6 +78,11 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 
 ## Session Log
 
+### Session 26 (2026-07-02) — Monthly spending trend line (Overview tab)
+- Added a plain "Monthly Spending Trend" line chart (total ¥ per month, not stacked by category, not cumulative) right under the KPI cards on Overview — the stacked bar and cumulative line already there don't make month-to-month direction easy to read at a glance.
+- Followed the dataviz skill: single series (no legend needed), 2px purple line + ≥8px markers with a surface-color ring, ~10% opacity area wash, dashed muted-gray average reference line, direct endpoint label (latest month's ¥ value), hairline recessive gridlines (reused existing `apply_chart_theme`), hover tooltip via `hovertemplate`.
+- Verified live with Playwright against synthetic 2-year data with deliberate month-to-month variance — renders cleanly, no exceptions.
+
 ### Session 25 (2026-07-02) — Streamlit: Label Queue tab + multi-year trends
 Closed out the two remaining open questions from earlier sessions.
 
