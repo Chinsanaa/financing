@@ -189,6 +189,11 @@ documented-vs-actual reconciliation are in **`docs/FULL_AUDIT.md`**.
 - Stratified 5-fold measures accuracy on *known* merchants; GroupKFold-by-merchant measures generalization to *new* merchants (see [How accuracy is measured](#how-accuracy-is-measured))
 - The large gap between them revealed that earlier single-number accuracy claims were merchant-memorization artifacts, not real generalization
 
+**5. Fast rule matching (unique-key caching)**
+- With ~600 rules, applying them naively (re-sorting every rule inside a per-row loop, `iterrows()` + scalar writes) made rule matching the pipeline bottleneck
+- `apply_merchant_rules()` (`src/label.py`) and `apply_description_overrides()` (`src/classify.py`) now sort patterns once and match only **unique** merchants / (merchant, description) pairs — real exports repeat the same merchants hundreds of times — then map results back with vectorized pandas assignment
+- Measured **~150x** speedup on 2,000 transactions with **byte-identical output** (pinned by equivalence tests in `tests/test_matching_optimization.py`), no new dependencies
+
 ### Model Complexity & Trade-offs
 
 **Why Logistic Regression (not Deep Learning)?**

@@ -67,13 +67,13 @@ enough merchant-specific data, even the ML model could eventually generalize
 better. For now, the 2.2% uncategorized rate is near-optimal without more
 training data.
 
-## Current State (Session 29, 2026-07-02)
+## Current State (Session 30, 2026-07-02)
 
 | Item | Status |
 |---|---|
 | Personal transaction data in repo | **Removed** — gitignored; templates only |
 | Raw exports | User adds locally (`data/raw/`) |
-| Merchant rules | `data/templates/merchant_rules_starter.csv` + in-code rules in `src/merchant_categories.py` (295+ patterns) |
+| Merchant rules | `data/templates/merchant_rules_starter.csv` + in-code rules in `src/merchant_categories.py` (~600 patterns: merchant/brand names + description disambiguation keywords) |
 | Labeled training data | Created per-user by bootstrap + manual labeling |
 | Classifier | Trained per-user via `retrain.py` / bootstrap |
 | Budget config | `data/templates/budget_config.example.json` → user `budget_config.json` |
@@ -81,6 +81,37 @@ training data.
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 30 (2026-07-02) — Rule expansion + matching-speed optimization
+Two pieces of work this session.
+
+**1. Rule expansion (~340 → ~600 patterns)** in `src/merchant_categories.py`:
+- Groceries: `mart`, `grocery`, `supermarket`, `market` + produce/日用品 keywords
+- Shopping: clothing brands (Nike, Adidas, Zara, luxury), electronics/gadgets
+  (Samsung, Sony, DJI, Apple products), product keywords, `**` Taobao pattern
+- Transfers & Gifts: `transfer`/`p2p` keywords, Chinese bank names (Bank of China,
+  工商/农业/建设/招商… + regional banks), Alipay/WeChat transfer, `withdrawal`
+- Added ~131 description-based disambiguation keywords across all 6 categories so
+  unseen merchants can be categorized from the description alone (e.g. unknown
+  merchant + "blue shoes" → Shopping). `special_category()` now checks these.
+
+**2. Matching-speed optimization (behavior-preserving)** — the rule growth exposed
+a bottleneck: both hot paths matched rules row-by-row.
+- **Root cause**: `apply_merchant_rules()` (`src/label.py`) re-sorted all ~600 rules
+  *inside* the per-row loop and used `iterrows()` + `df.loc[idx,...]` scalar writes;
+  `apply_description_overrides()` (`src/classify.py`) had the same `iterrows()` pattern.
+- **Fix**: sort patterns once; match only **unique** merchants / (merchant,desc)
+  pairs (real data repeats merchants heavily), cache, then vectorized `.map()` /
+  mask assignment. Hoisted `special_category()` keyword tuples to a module-level
+  `DESCRIPTION_KEYWORD_RULES` constant.
+- **Result (measured, 2000 txns / 14 unique merchants)**: `apply_merchant_rules`
+  **156x** faster (0.27 → 0.0017 ms/txn); `apply_description_overrides` **145x**
+  faster (0.30 → 0.0021 ms/txn). **No new dependencies.**
+- **Correctness**: `tests/test_matching_optimization.py` keeps the old row-by-row
+  implementations as oracles and asserts byte-identical output. Full suite: 48 passing.
+
+**Files Modified**: `src/merchant_categories.py`, `src/label.py`, `src/classify.py`,
+`tests/test_matching_optimization.py` (new).
 
 ### Session 29 (2026-07-02) — Hybrid feature engineering to reduce merchant overfitting
 Implemented Option B: semantic-weighted features to reduce model memorization and improve generalization to unseen merchants.

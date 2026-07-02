@@ -33,29 +33,47 @@ def normalize_categories(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _override_category(merchant: str, desc: str) -> Optional[str]:
+    """Resolve the override category for one (merchant, description) pair.
+
+    Precedence (unchanged): special_category() wins; otherwise a
+    'catering'/'餐饮' merchant match → Eating Out; otherwise None.
+    """
+    special = special_category(merchant, desc)
+    if special is not None:
+        return special
+    if 'catering' in merchant.lower() or '餐饮' in merchant:
+        return 'Eating Out'
+    return None
+
+
 def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
-    """Override categories using merchant/description patterns."""
+    """Override categories using merchant/description patterns.
+
+    Optimized: overrides are resolved once per unique (merchant, description)
+    pair and applied with vectorized masks instead of row-by-row iteration.
+    Output is identical to the original implementation.
+    """
     df = df.copy()
-    for idx, row in df.iterrows():
-        merchant = str(row['merchant'])
-        desc = str(row['description'])
-        merchant_lower = merchant.lower()
 
-        special = special_category(merchant, desc)
-        if special is not None:
-            df.loc[idx, 'category'] = special
-            df.loc[idx, 'confidence'] = 1.0
-            df.loc[idx, 'needs_review'] = False
-            if 'label_source' in df.columns:
-                df.loc[idx, 'label_source'] = 'override'
-            continue
+    merchants = df['merchant'].astype(str)
+    descs = df['description'].astype(str)
+    pairs = pd.Series(list(zip(merchants, descs)), index=df.index)
 
-        if 'catering' in merchant_lower or '餐饮' in merchant:
-            df.loc[idx, 'category'] = 'Eating Out'
-            df.loc[idx, 'confidence'] = 1.0
-            df.loc[idx, 'needs_review'] = False
-            if 'label_source' in df.columns:
-                df.loc[idx, 'label_source'] = 'override'
+    # Resolve each distinct pair once.
+    cache = {pair: _override_category(pair[0], pair[1]) for pair in set(pairs)}
+    override_cat = pairs.map(cache)
+    mask = override_cat.notna()
+
+    if mask.any():
+        df.loc[mask, 'category'] = override_cat[mask]
+        df.loc[mask, 'confidence'] = 1.0
+        if 'label_source' in df.columns:
+            df.loc[mask, 'label_source'] = 'override'
+        # Matches original: creates the column if absent (False at override
+        # rows, NaN elsewhere); classify_all overwrites it fully afterward.
+        df.loc[mask, 'needs_review'] = False
+
     return df
 
 

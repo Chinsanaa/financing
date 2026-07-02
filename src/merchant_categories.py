@@ -670,12 +670,27 @@ NYU_SERVICE_DESCRIPTION_MARKERS = (
     "NYUCard Print Fee",
 )
 
+# Description-based disambiguation keywords for unseen merchants.
+# Ordered list of (category, keywords) — first category with a keyword hit wins.
+# Module-level so the tuples aren't rebuilt on every special_category() call.
+DESCRIPTION_KEYWORD_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("Eating Out", ("noodle", "ramen", "sushi", "burger", "pizza", "food order",
+                    "takeout", "meal", "dine", "餐", "面", "烧烤", "火锅", "粥", "外卖")),
+    ("Groceries", ("vegetable", "fruit", "produce", "grocery", "生鲜", "蔬菜",
+                   "水果", "食材", "日用品", "菜", "批发")),
+    ("Shopping", ("shoe", "cloth", "dress", "gadget", "toy", "book", "laptop",
+                  "charger", "cable", "camera", "watch", "鞋", "衣服", "玩具", "书籍")),
+    ("Transportation", ("ride", "ticket", "flight", "parking", "airport", "gas", "fuel",
+                        "车费", "机票", "停泊", "加油", "汽油")),
+    ("Transfers & Gifts", ("send money", "gift", "present", "payment", "transfer", "remittance",
+                           "红包", "汇款", "礼物", "赏金")),
+]
+
 
 def special_category(merchant: str, description: str) -> str | None:
     """Per-row category override from merchant + description. None if no rule."""
     merchant = str(merchant or "").strip()
     description = str(description or "").strip()
-    merchant_lower = merchant.lower()
     description_lower = description.lower()
 
     if merchant == NYU_SHANGHAI_MERCHANT:
@@ -686,39 +701,11 @@ def special_category(merchant: str, description: str) -> str | None:
     if merchant == "上海蕤盛工贸":
         return "Transportation"
 
-    # Description-based disambiguation for unseen merchants
-    # High-confidence product/action keywords that clearly indicate a category
-
-    eating_keywords = ("noodle", "ramen", "sushi", "burger", "pizza", "food order",
-                      "takeout", "meal", "dine", "餐", "面", "烧烤", "火锅", "粥", "外卖")
-    groceries_keywords = ("vegetable", "fruit", "produce", "grocery", "生鲜", "蔬菜",
-                         "水果", "食材", "日用品", "菜", "批发")
-    shopping_keywords = ("shoe", "cloth", "dress", "gadget", "toy", "book", "laptop",
-                        "charger", "cable", "camera", "watch", "鞋", "衣服", "玩具", "书籍")
-    transport_keywords = ("ride", "ticket", "flight", "parking", "airport", "gas", "fuel",
-                         "车费", "机票", "停泊", "加油", "汽油")
-    transfer_keywords = ("send money", "gift", "present", "payment", "transfer", "remittance",
-                        "红包", "汇款", "礼物", "赏金")
-
-    # Check for eating out (higher priority for food keywords)
-    if any(kw in description_lower for kw in eating_keywords):
-        return "Eating Out"
-
-    # Check for groceries
-    if any(kw in description_lower for kw in groceries_keywords):
-        return "Groceries"
-
-    # Check for shopping
-    if any(kw in description_lower for kw in shopping_keywords):
-        return "Shopping"
-
-    # Check for transportation
-    if any(kw in description_lower for kw in transport_keywords):
-        return "Transportation"
-
-    # Check for transfers/gifts
-    if any(kw in description_lower for kw in transfer_keywords):
-        return "Transfers & Gifts"
+    # Description-based disambiguation for unseen merchants.
+    # High-confidence product/action keywords that clearly indicate a category.
+    for category, keywords in DESCRIPTION_KEYWORD_RULES:
+        if any(kw in description_lower for kw in keywords):
+            return category
 
     return None
 
