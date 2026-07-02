@@ -359,4 +359,77 @@ other randomness source was already seeded.
 
 ## Phase 4 — Calibration & honest tuning *(pending user confirmation)*
 
+## Phase 4 — Calibration & honest tuning
+
+**Status: complete — awaiting user decision on the two changes below. Nothing
+applied yet.** Everything judged on GroupKFold (honest), not the leaky
+stratified CV.
+
+### Confidence calibration (reliability by bin, not just avg-of-right-vs-wrong)
+
+| Conf bin | Stratified acc (known merchants) | GroupKFold acc (NEW merchants) |
+|---|---|---|
+| 0.7–0.8 | 0.897 | 0.810 |
+| 0.8–0.9 | 0.972 | **0.436** |
+| 0.9–1.0 | 0.994 | **0.886** |
+| **ECE** | **0.041 (well calibrated)** | **0.184 (badly miscalibrated)** |
+
+On **known** merchants the model is well calibrated (ECE 0.041) — confidence
+means what it says. On **new** merchants it is **badly overconfident**: the
+0.8–0.9 confidence bin is only **43.6%** accurate, and even the 0.9–1.0 bin is
+only **88.6%**. There is essentially **no confidence level at which the model is
+trustworthy on an unseen merchant.**
+
+### Is the 0.70 review threshold justified? — **No, not for its actual job.**
+
+| At threshold 0.70 | Stratified (known) | GroupKFold (NEW) |
+|---|---|---|
+| Auto-accepted (conf ≥ 0.70) | 93.4% of rows @ 98.9% acc | 31.6% of rows @ **68.1% acc** |
+| Routed to review (conf < 0.70) | 6.6% @ 45.6% acc | 68.4% @ 21.9% acc |
+| **Wrong predictions auto-accepted (silent errors)** | 9 | **87** |
+
+The 0.70 threshold looks great (98.9% precision) *only* in the known-merchant
+world — but in production a **rule already handles known merchants**, so the
+threshold's real job is gating the model on **new** merchants. There it
+auto-accepts 273 predictions at just 68% precision and **silently misfiles 87 of
+them**. The threshold is not doing the protective work the docs claim.
+
+**Implication for the two-stage design (Phase 2):** since model confidence is
+unreliable on exactly the population the model is used for (unseen, no-rule
+merchants), the honest behavior is to treat model predictions on new merchants
+as *suggestions routed to review by default*, not auto-applied on a 0.70 gate.
+
+### Tuning — evaluated on GroupKFold, before/after
+
+The production `C=10` was chosen by tuning on the leaky stratified CV
+("reduces regularization to fit harder on small categories"). That is exactly
+the mistake this audit is about. Re-tuning honestly:
+
+| Config | Stratified acc | Stratified F1-macro | GroupKFold acc | GroupKFold F1-macro |
+|---|---|---|---|---|
+| **C=10, (1,2), 3000** (current) | 0.954 | 0.838 | 0.365 | 0.338 |
+| **C=1.0, (1,2), 3000** (proposed) | 0.949 | **0.849** | **0.454** | **0.444** |
+| C=0.5, (1,2) | 0.947 | 0.846 | 0.341 | 0.364 |
+| C=10, unigrams (1,1) | 0.954 | 0.833 | 0.446 | 0.395 |
+| C=10, maxf=5000, (1,3) | 0.954 | 0.838 | 0.351 | 0.331 |
+
+**`C=1.0` strictly dominates `C=10`:** GroupKFold accuracy +8.9pts (0.365 →
+0.454), GroupKFold F1-macro +0.106 (0.338 → 0.444), while stratified accuracy is
+essentially unchanged (−0.5pt) and stratified F1-macro even *improves*
+(0.838 → 0.849). This is not a stratified-vs-honest trade — lowering C is just
+better, and it is a genuine honest-CV improvement, so it is not rejected.
+
+**Caveat (no vanity):** even at C=1.0, GroupKFold accuracy (45.4%) is only
+~7pts above the 38.5% majority-class baseline. The change is a real, honest
+improvement but does **not** rescue the model on new merchants. The strategic
+conclusion is unchanged: rules are the engine.
+
+### Phase 4 decisions needed (nothing applied yet)
+
+1. **Apply `C=10 → C=1.0`** in `segment.py` `LR_HYPERPARAMS`? (Recommended:
+   yes — dominates on both CV schemes; other params left as-is since none helped.)
+2. **Review-threshold policy** given confidence is unreliable on new merchants:
+   route no-rule (unseen) merchants to review by default rather than
+   auto-accepting on the 0.70 gate.
+
 ## Phase 5 — Doc reconciliation *(pending)*
