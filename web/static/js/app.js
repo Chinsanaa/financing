@@ -216,6 +216,10 @@ async function goDashboard() {
   await loadDashboardTab('overview');
 }
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   setupDropzone('drop-alipay', 'input-alipay', 'name-alipay', 'alipayFile');
   setupDropzone('drop-wechat', 'input-wechat', 'name-wechat', 'wechatFile');

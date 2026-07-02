@@ -199,6 +199,8 @@ python src/app.py
 - Session data lives in `data/sessions/` (gitignored for privacy)
 - On completion, trained model + categorized data sync to `data/` for offline use or Streamlit dashboard
 
+**Install as a mobile app:** the web UI is an installable PWA. Open `http://<your-server>:5000` on your phone's browser, then "Add to Home Screen" (iOS Safari) or "Install app" (Android Chrome). It launches full-screen without browser chrome — handy for quickly reviewing/labeling merchants (Step 3) between other things.
+
 ### CLI setup (alternative)
 
 This repo ships **starter templates**, not someone else's transactions or budget. Your financial data stays local (gitignored).
@@ -407,7 +409,7 @@ Monthly workflow to identify ambiguous transactions, collect labels, retrain mod
 - [x] Multi-year trend analysis — `src/trends.py` built (Session 16); dashboard UI removed in Session 17 restructure — re-add when desired
 - [x] Support additional payment sources — generic bank/card CSV parser in `parse.py`; see `data/raw/source_config.example.json`
 - [ ] Automated feature engineering with larger datasets (2000+ samples)
-- [ ] Mobile app for quick transaction review
+- [x] Mobile app for quick transaction review — installable PWA (manifest + service worker); "Add to Home Screen" on the Label step for on-the-go merchant review
 - [x] Budget forecasting — EWMA option alongside seasonal+trend in `forecast.py` (Budget & Forecast tab)
 
 ---

@@ -75,6 +75,16 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 
 ## Session Log
 
+### Session 24 (2026-07-02) — PWA: mobile app for quick transaction review
+- Turned the existing Flask web UI into an installable PWA rather than building a separate native/React Native app — ticked the README future-enhancement box
+- Added `web/static/manifest.json` (name, theme colors, icons), `web/static/sw.js` (caches app shell only; `/api/*` always hits network so transaction/label data is never stale), and two hand-generated solid-color PNG icons (`web/static/icons/icon-192.png`, `icon-512.png` — no Pillow dependency, built with stdlib `zlib`/`struct`)
+- `src/app.py`: new `/sw.js` route serving from root (not `/static/`) so the service worker's default scope covers the whole app, not just `/static/`
+- `web/templates/index.html`: manifest link, apple-touch-icon, theme-color and `apple-mobile-web-app-*` meta tags for iOS/Android install prompts
+- `web/static/js/app.js`: registers the service worker on load
+- `web/static/css/app.css`: bumped touch-target size for `.btn`/`.merchant-card select` under 480px — the Label step (Step 3) is the "quick transaction review" screen
+- Verified with a real headless Chromium session (Playwright, iPhone viewport/UA): manifest resolves, service worker reaches `activated` state, existing responsive layout already stacks correctly on a phone screen
+- Did not add a persistent "resume session" feature — the app has no session-resume concept at all today (every page load creates a fresh session), so that's a separate, bigger decision if wanted later
+
 ### Session 23 (2026-07-02) — NYU Shanghai admin fees recategorized
 - `special_category()` in `src/merchant_categories.py`: the 3 NYU Shanghai admin-fee markers (Campus Card Top Up, Tuition and Fees, NYUCard Print Fee) now map to `Utilities & Services` instead of `Other` — they're campus services, not uncategorized spend
 - Renamed `NYU_OTHER_DESCRIPTION_MARKERS` → `NYU_SERVICE_DESCRIPTION_MARKERS` to match
