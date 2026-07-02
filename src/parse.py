@@ -28,6 +28,27 @@ _COLUMN_ALIASES: Dict[str, List[str]] = {
     ],
 }
 
+# 交易类型/交易分类 values that move money between your own accounts (credit
+# card repayment, cash withdrawal) rather than spend it. Excluded entirely so
+# they don't inflate totals. Deliberately NOT included: 转账/红包 (transfers to
+# other people) — whether that counts as "spending" is a judgment call, not
+# something to decide silently. Add to this list if you want those excluded too.
+_TRANSFER_KEYWORDS = ('信用卡还款', '花呗还款', '还呗还款', '提现')
+
+# Status text marking a transaction as refunded. Refund rows are kept (not
+# dropped) with a negated amount, so a purchase and its refund net out in
+# category/merchant totals instead of the purchase silently overstating spend.
+_REFUND_KEYWORDS = ('退款',)
+_REFUND_KEYWORDS_EN = ('Refund',)
+
+
+def _category_column(df: pd.DataFrame) -> Optional[str]:
+    """Find Alipay/WeChat's own transaction-type column, if present."""
+    for col in ('交易分类', '交易类型'):
+        if col in df.columns:
+            return col
+    return None
+
 
 def _find_column(df: pd.DataFrame, field: str, override: Optional[str] = None) -> Optional[str]:
     """Resolve a dataframe column name from aliases or explicit mapping."""
@@ -145,17 +166,34 @@ def _find_alipay_header(csv_path: str) -> Tuple[int, str, bool]:
 
 
 def parse_alipay_english(csv_path: str, encoding: str = 'utf-8', skiprows: int = 0) -> pd.DataFrame:
-    """Parse English-translated Alipay export CSV."""
+    """
+    Parse English-translated Alipay export CSV.
+
+    No transaction-type column in this format, so internal transfers
+    (credit card repayment, withdrawal) can't be detected/excluded here —
+    use the native Chinese export (parse_alipay_native) for that split.
+    """
     df = pd.read_csv(csv_path, encoding=encoding, skiprows=skiprows)
 
-    df = df[df['Type'] == 'Expense']
-    df = df[df['Transaction Status'].str.contains('Successful|Closed', case=False, na=False)]
+    status = df['Transaction Status'].astype(str)
+    is_settled = status.str.contains('Successful|Closed', case=False, na=False)
+    is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS_EN), case=False, na=False)
+
+    is_expense = (df['Type'] == 'Expense') & is_settled
+    df = df[is_expense | is_refund].copy()
+    is_refund = is_refund.loc[df.index]
+
+    amount = df['Amount'].astype(float)
+    amount = amount.mask(is_refund.values, -amount)
+
+    if is_refund.sum():
+        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
 
     return pd.DataFrame({
         'timestamp': pd.to_datetime(df['Transaction Time']),
         'merchant': df['Transaction Counterparty'].fillna('').str.strip(),
         'description': df['Product Description'].fillna('').str.strip(),
-        'amount': df['Amount'].astype(float),
+        'amount': amount,
         'source': 'alipay',
     })
 
@@ -164,10 +202,27 @@ def parse_alipay_native(csv_path: str, encoding: str = 'gbk', skiprows: int = 0)
     """Parse native Chinese Alipay export CSV (GBK/UTF-8)."""
     df = pd.read_csv(csv_path, encoding=encoding, skiprows=skiprows)
 
-    df = df[df['收/支'] == '支出']
-    df = df[df['交易状态'].astype(str).str.contains('交易成功|交易关闭', na=False)]
+    status = df['交易状态'].astype(str)
+    is_settled = status.str.contains('交易成功|交易关闭', na=False)
+    is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS), na=False)
+
+    cat_col = _category_column(df)
+    is_transfer = (
+        df[cat_col].astype(str).str.contains('|'.join(_TRANSFER_KEYWORDS), na=False)
+        if cat_col else pd.Series(False, index=df.index)
+    )
+
+    is_expense = (df['收/支'] == '支出') & is_settled & ~is_transfer
+    df = df[is_expense | is_refund].copy()
+    is_refund = is_refund.loc[df.index]
 
     amount = df['金额'].astype(str).str.replace(',', '', regex=False).astype(float)
+    amount = amount.mask(is_refund.values, -amount)
+
+    if is_refund.sum():
+        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
+    if is_transfer.sum():
+        print(f"  Excluded {is_transfer.sum()} internal transfer(s) (credit card repayment, withdrawal, etc.)")
 
     return pd.DataFrame({
         'timestamp': pd.to_datetime(df['交易时间']),
@@ -202,10 +257,23 @@ def parse_wechat_excel(xlsx_path: str) -> pd.DataFrame:
     else:
         df.columns = expected_cols
 
-    df = df[df['收/支'] == '支出']
-    df = df[df['当前状态'].isin(['支付成功', '已转账'])]
+    status = df['当前状态'].astype(str)
+    is_settled = status.isin(['支付成功', '已转账'])
+    is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS), na=False)
+
+    is_transfer = df['交易类型'].astype(str).str.contains('|'.join(_TRANSFER_KEYWORDS), na=False)
+
+    is_expense = (df['收/支'] == '支出') & is_settled & ~is_transfer
+    df = df[is_expense | is_refund].copy()
+    is_refund = is_refund.loc[df.index]
 
     amount_clean = df['金额(元)'].astype(str).str.replace(',', '').astype(float)
+    amount_clean = amount_clean.mask(is_refund.values, -amount_clean)
+
+    if is_refund.sum():
+        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
+    if is_transfer.sum():
+        print(f"  Excluded {is_transfer.sum()} internal transfer(s) (credit card repayment, withdrawal, etc.)")
 
     return pd.DataFrame({
         'timestamp': pd.to_datetime(df['交易时间']),
@@ -217,17 +285,34 @@ def parse_wechat_excel(xlsx_path: str) -> pd.DataFrame:
 
 
 def parse_wechat_csv(csv_path: str) -> pd.DataFrame:
-    """Parse WeChat export CSV (English-translated version - fallback)."""
+    """
+    Parse WeChat export CSV (English-translated version - fallback).
+
+    No transaction-type column in this format, so internal transfers can't
+    be detected/excluded here — use the Excel export (parse_wechat_excel)
+    for that split.
+    """
     df = pd.read_csv(csv_path, encoding='utf-8', skiprows=17)
 
-    df = df[df['Income/Expense'] == 'Expense']
-    df = df[df['Current Status'].str.contains('successful|Transferred', case=False, na=False)]
+    status = df['Current Status'].astype(str)
+    is_settled = status.str.contains('successful|Transferred', case=False, na=False)
+    is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS_EN), case=False, na=False)
+
+    is_expense = (df['Income/Expense'] == 'Expense') & is_settled
+    df = df[is_expense | is_refund].copy()
+    is_refund = is_refund.loc[df.index]
+
+    amount = df['Amount (CNY)'].astype(float)
+    amount = amount.mask(is_refund.values, -amount)
+
+    if is_refund.sum():
+        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
 
     return pd.DataFrame({
         'timestamp': pd.to_datetime(df['Transaction Time']),
         'merchant': df['Counterparty'].fillna('').str.strip(),
         'description': df['Product'].fillna('').str.strip(),
-        'amount': df['Amount (CNY)'].astype(float),
+        'amount': amount,
         'source': 'wechat',
     })
 

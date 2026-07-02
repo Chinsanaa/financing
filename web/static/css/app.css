@@ -70,3 +70,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 table.data th, table.data td { padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
 table.data th { color: var(--muted); font-weight: 500; }
 .dash-header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+
+@media (max-width: 480px) {
+  .merchant-card select, .btn { padding: 0.75rem 1rem; font-size: 1rem; }
+}

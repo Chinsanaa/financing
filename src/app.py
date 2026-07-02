@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -31,6 +31,13 @@ app.secret_key = 'finance-categorizer-dev-change-in-production'
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/sw.js')
+def service_worker():
+    # Served from root (not /static/) so its default scope covers the whole
+    # app — a service worker can only control paths at or below its own URL.
+    return send_from_directory(str(WEB_ROOT / 'static'), 'sw.js', mimetype='application/javascript')
 
 
 @app.route('/api/sessions', methods=['POST'])

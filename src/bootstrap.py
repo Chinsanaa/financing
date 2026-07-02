@@ -136,7 +136,14 @@ def export_merchants_to_label(df: pd.DataFrame, rules: dict, top_n: int = 40) ->
     """Export top unlabeled merchants for the user to categorize."""
     ruled = apply_merchant_rules(df, rules)
     unlabeled = ruled[ruled['labeled'] == False]
+    EXPORTS.mkdir(parents=True, exist_ok=True)
     if unlabeled.empty:
+        # Overwrite (not skip) — otherwise a stale queue keeps showing
+        # merchants that already got labeled in a prior round.
+        pd.DataFrame(columns=[
+            'merchant', 'count', 'total_spend', 'sample_description',
+            'suggested_category', 'notes',
+        ]).to_csv(MERCHANTS_TO_LABEL, index=False, encoding='utf-8-sig')
         print("  All merchants matched by rules - nothing to export.")
         return MERCHANTS_TO_LABEL
 
@@ -151,7 +158,6 @@ def export_merchants_to_label(df: pd.DataFrame, rules: dict, top_n: int = 40) ->
     stats['suggested_category'] = ''
     stats['notes'] = ''
 
-    EXPORTS.mkdir(parents=True, exist_ok=True)
     stats.to_csv(MERCHANTS_TO_LABEL, index=False, encoding='utf-8-sig')
     print(f"  Exported {len(stats)} merchants -> {MERCHANTS_TO_LABEL}")
     return MERCHANTS_TO_LABEL
@@ -187,6 +193,45 @@ def apply_merchants_to_label(rules_path: Path = MERCHANT_RULES) -> int:
     rules_df.to_csv(rules_path, index=False)
     print(f"  Added {len(new_rows)} merchant rules from {MERCHANTS_TO_LABEL.name}")
     return len(new_rows)
+
+
+def apply_label_queue_and_retrain() -> dict:
+    """
+    Apply suggested_category values from merchants_to_label.csv end to end:
+    add merchant rules, seed training data, retrain if enough labels, reclassify
+    everything, and refresh the queue with what's still unlabeled.
+
+    Same steps as run_bootstrap()'s per-iteration loop, exposed standalone so
+    the Streamlit dashboard's Label Queue tab can trigger it without re-parsing
+    raw exports.
+    """
+    added_rules = apply_merchants_to_label()
+
+    df = pd.read_csv(TRANSACTIONS)
+    rules = load_merchant_rules(str(MERCHANT_RULES))
+
+    seed = seed_labeled_from_rules(df, rules)
+    existing = pd.read_csv(LABELED_TXNS) if LABELED_TXNS.exists() else pd.DataFrame()
+    merged = merge_labeled(existing, seed)
+    merged.to_csv(LABELED_TXNS, index=False)
+
+    trainable, train_message = can_train(merged)
+    train_result = retrain_model() if trainable else None
+
+    vectorizer, classifier = load_models()
+    df_classified = classify_all(df, vectorizer, classifier, rules=rules)
+    save_classification_outputs(df_classified)
+
+    export_merchants_to_label(df, rules)
+    remaining_unlabeled = int((apply_merchant_rules(df, rules)['labeled'] == False).sum())
+
+    return {
+        'added_rules': added_rules,
+        'trainable': trainable,
+        'train_message': train_message,
+        'train_result': train_result,
+        'remaining_unlabeled': remaining_unlabeled,
+    }
 
 
 def generate_budget_from_spend(df_classified: pd.DataFrame, monthly_income: Optional[float] = None):

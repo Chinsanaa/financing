@@ -39,6 +39,9 @@ A pipeline that:
 | Training data | ~200–500 manual labels minimum; bootstrap seeds from rules | Supervised learning needs labels |
 | New-user onboarding | `src/app.py` web wizard + `src/bootstrap.py` CLI | No personal data in repo |
 | Visualization | Web HTML dashboard + Streamlit (`dashboard.py`) | 5-tab layout |
+| Refunds | Kept, netted as negative amount in same category/merchant | Purchase + refund should cancel out, not just vanish |
+| Internal transfers (credit card repayment, withdrawal) | Excluded entirely at parse (`_TRANSFER_KEYWORDS` in `parse.py`) | Not real spending; would double-count |
+| Peer-to-peer transfers (转账/红包) | Left as expense (not auto-excluded) | Ambiguous — could be a real gift/spend; user can extend `_TRANSFER_KEYWORDS` if they want these excluded too |
 
 ## Key Terms
 
@@ -49,9 +52,12 @@ A pipeline that:
 
 ## Open Questions / Not Yet Decided
 
-- [ ] Wire `merchants_to_label` editing into Streamlit dashboard
-- [ ] Re-add multi-year trends (`src/trends.py`) to dashboard UI
-- [ ] How to handle refunds / internal transfers long-term (currently filtered at parse)
+- [x] Wire `merchants_to_label` editing into Streamlit dashboard — resolved Session 25
+- [x] Re-add multi-year trends (`src/trends.py`) to dashboard UI — resolved Session 25
+- [x] How to handle refunds / internal transfers — resolved Session 22, see Key Decisions
+
+No open questions remain. Next work should come from new user feedback or the
+README's Future Enhancements list.
 
 ## Next Suggested Step
 
@@ -71,6 +77,44 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 26 (2026-07-02) — Monthly spending trend line (Overview tab)
+- Added a plain "Monthly Spending Trend" line chart (total ¥ per month, not stacked by category, not cumulative) right under the KPI cards on Overview — the stacked bar and cumulative line already there don't make month-to-month direction easy to read at a glance.
+- Followed the dataviz skill: single series (no legend needed), 2px purple line + ≥8px markers with a surface-color ring, ~10% opacity area wash, dashed muted-gray average reference line, direct endpoint label (latest month's ¥ value), hairline recessive gridlines (reused existing `apply_chart_theme`), hover tooltip via `hovertemplate`.
+- Verified live with Playwright against synthetic 2-year data with deliberate month-to-month variance — renders cleanly, no exceptions.
+
+### Session 25 (2026-07-02) — Streamlit: Label Queue tab + multi-year trends
+Closed out the two remaining open questions from earlier sessions.
+
+- **Multi-year trends** (`src/dashboard.py`, Overview tab): new "Yearly & Seasonal Trends" section using `src/trends.py` (built Session 16, never wired up). Seasonal profile (avg spend per calendar month, pools all years) always shows; year-over-year bar chart + growth caption only render once `trends.multi_year_ready()` is true (2+ calendar years), otherwise shows an explanatory `st.info`.
+- **Label Queue tab** (`src/dashboard.py`, new 5th tab before Reports): editable `st.data_editor` table backed by `data/exports/merchants_to_label.csv`. Merchant/description shown via `translate.enrich_label_row()` (English-only, consistent with the web UI); raw Chinese merchant id kept in the underlying dataframe for saving but hidden from display via `column_order`. "Apply & retrain" button calls a new `bootstrap.apply_label_queue_and_retrain()`.
+- **New backend function** `bootstrap.apply_label_queue_and_retrain()`: applies filled-in categories to merchant rules, seeds `labeled_transactions.csv` from the updated rules, retrains only if `can_train()` passes (otherwise reports why not), reclassifies all transactions, and refreshes the queue with whatever's still unlabeled. Reuses the same building blocks `run_bootstrap()` already had imported — no new dependencies.
+- **Bug found and fixed while verifying**: `export_merchants_to_label()` skipped writing the CSV entirely when nothing was left to label, so a fully-labeled queue kept showing stale already-applied rows forever (in both the CLI flow and, more visibly, this new tab's "apply until empty" loop). Fixed to always overwrite, writing an empty (headers-only) CSV when there's nothing left.
+- **Verified live**: ran `streamlit run src/dashboard.py` against synthetic 2-year, multi-category data with one deliberately unlabeled merchant; drove it with headless Chromium (Playwright) — confirmed the trends section renders (seasonal bars + YoY bars + caption), the Label Queue tab renders with no exceptions, and clicking "Apply" actually adds the rule, retrains (83% CV accuracy in the synthetic run), reclassifies, and empties the queue.
+
+### Session 24 (2026-07-02) — PWA: mobile app for quick transaction review
+- Turned the existing Flask web UI into an installable PWA rather than building a separate native/React Native app — ticked the README future-enhancement box
+- Added `web/static/manifest.json` (name, theme colors, icons), `web/static/sw.js` (caches app shell only; `/api/*` always hits network so transaction/label data is never stale), and two hand-generated solid-color PNG icons (`web/static/icons/icon-192.png`, `icon-512.png` — no Pillow dependency, built with stdlib `zlib`/`struct`)
+- `src/app.py`: new `/sw.js` route serving from root (not `/static/`) so the service worker's default scope covers the whole app, not just `/static/`
+- `web/templates/index.html`: manifest link, apple-touch-icon, theme-color and `apple-mobile-web-app-*` meta tags for iOS/Android install prompts
+- `web/static/js/app.js`: registers the service worker on load
+- `web/static/css/app.css`: bumped touch-target size for `.btn`/`.merchant-card select` under 480px — the Label step (Step 3) is the "quick transaction review" screen
+- Verified with a real headless Chromium session (Playwright, iPhone viewport/UA): manifest resolves, service worker reaches `activated` state, existing responsive layout already stacks correctly on a phone screen
+- Did not add a persistent "resume session" feature — the app has no session-resume concept at all today (every page load creates a fresh session), so that's a separate, bigger decision if wanted later
+
+### Session 23 (2026-07-02) — NYU Shanghai admin fees recategorized
+- `special_category()` in `src/merchant_categories.py`: the 3 NYU Shanghai admin-fee markers (Campus Card Top Up, Tuition and Fees, NYUCard Print Fee) now map to `Utilities & Services` instead of `Other` — they're campus services, not uncategorized spend
+- Renamed `NYU_OTHER_DESCRIPTION_MARKERS` → `NYU_SERVICE_DESCRIPTION_MARKERS` to match
+- No blanket merchant rule involved (NYU Shanghai is description-split, not in `MERCHANT_CATEGORY_RULES`), so no CSV re-sync needed
+
+### Session 22 (2026-07-02) — Refund netting & internal transfer exclusion
+- Resolved the open question on refunds/transfers in `src/parse.py`:
+  - **Refunds** (交易状态/Transaction Status contains 退款/Refund): kept as a negative-amount row instead of dropped, so they net against the original purchase in category/merchant totals
+  - **Internal transfers** (交易分类/交易类型 contains 信用卡还款, 花呗还款, 提现): excluded entirely — moving your own money isn't spend
+  - **P2P transfers** (转账/红包): deliberately left as-is (still counted as expense) — ambiguous whether a transfer to another person is "spending"; `_TRANSFER_KEYWORDS` in `parse.py` documents how to add them if wanted
+  - Native Chinese Alipay/WeChat exports get the full split (both column types available); English-translated fallback formats (`parse_alipay_english`, `parse_wechat_csv`) only get refund netting since they lack a transaction-type column — documented as a limitation in their docstrings
+- Verified with synthetic CSV/XLSX fixtures (no real user data available): confirmed refund nets correctly, credit card repayment excluded, unrelated expense/closed transactions unaffected
+- Downstream code (dashboard, forecast, visualize) all aggregate `amount` via `.sum()`/`.groupby()` — confirmed negative refund amounts net correctly with no other code changes needed
 
 ### Session 21 (2026-07-02) — Documentation Review
 - Read through codebase: web UI fully functional, merchant rules comprehensive, pipeline modular
