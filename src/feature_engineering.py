@@ -27,7 +27,7 @@ def extract_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
 
     Returns DataFrame with:
     - amount_bucket: Quantized amount (0-9 by percentiles)
-    - hour_of_day: 0-23 (from time column)
+    - hour_of_day: 0-23 (from timestamp column)
     - day_of_week: 0-6 (Monday=0, Sunday=6)
     - is_lunch_time: Binary flag for lunch hours (11am-3pm)
     - is_dinner_time: Binary flag for dinner hours (6pm-10pm)
@@ -37,30 +37,48 @@ def extract_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     - Lunch: 11:00-14:59 (11am to 3pm)
     - Dinner: 18:00-21:59 (6pm to 10pm)
 
-    Skips rows with missing time or amount (as per user decision).
+    If timestamp or amount columns are missing, returns zero-valued features
+    for all rows (graceful degradation: still returns valid shape, classifier
+    works with just text features). Skips rows with missing critical values
+    only if columns exist.
     """
     df = df.copy()
 
-    # Filter out rows with missing critical values
-    df = df.dropna(subset=['time', 'amount'])
+    # Graceful degradation: if required columns are missing (e.g., from web UI),
+    # return zero features with correct shape instead of crashing.
+    if 'timestamp' not in df.columns or 'amount' not in df.columns:
+        # Return zero-valued numeric features for all rows
+        num_rows = len(df)
+        numeric_features = pd.DataFrame({
+            'hour_of_day': [0.0] * num_rows,
+            'day_of_week': [0.0] * num_rows,
+            'is_lunch_time': [0.0] * num_rows,
+            'is_dinner_time': [0.0] * num_rows,
+            'amount_bucket': [0.0] * num_rows,
+            'merchant_frequency_norm': [0.0] * num_rows,
+        }, dtype=np.float32)
+        return numeric_features, df.index
 
-    # Convert time to datetime unless it already is one.
+    # Filter out rows with missing critical values
+    df = df.dropna(subset=['timestamp', 'amount'])
+
+    # Convert timestamp to datetime unless it already is one.
     # (Robust across pandas versions: pandas 3.0 gives string columns dtype
     # 'str', not 'object', so an == 'object' check silently skips conversion.)
-    if not pd.api.types.is_datetime64_any_dtype(df['time']):
-        df['time'] = pd.to_datetime(df['time'], errors='coerce')
+    if not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
 
     # Ensure amount is numeric
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
 
     # Drop any rows that failed conversion
-    df = df.dropna(subset=['time', 'amount'])
+    df = df.dropna(subset=['timestamp', 'amount'])
 
     # Hour of day
-    df['hour_of_day'] = df['time'].dt.hour
+    df['hour_of_day'] = df['timestamp'].dt.hour
 
     # Day of week (0=Monday, 6=Sunday)
-    df['day_of_week'] = df['time'].dt.dayofweek
+    df['day_of_week'] = df['timestamp'].dt.dayofweek
 
     # Meal time flags (user preferences)
     # Lunch: 11am to 3pm (11:00-14:59, so hour 11-14)

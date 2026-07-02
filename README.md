@@ -510,6 +510,43 @@ Monthly workflow to identify ambiguous transactions, collect labels, retrain mod
 
 ---
 
+## Roadmap: Multi-Tenant SaaS Rewrite
+
+This project is transitioning from a **single-user, local-file pipeline** to a **real multi-user SaaS product**. The rewrite is being executed in phases; see `./.claude/plans/serene-sprouting-muffin.md` for full details.
+
+### Phase 1: Supabase Foundation ✅ **(Complete, Session 32)**
+
+**What was built:**
+- **Supabase PostgreSQL** schema (9 tables with Row-Level Security):
+  - `profiles`, `categories`, `transactions`, `merchant_rules`, `special_rules`, `uploads`, `model_runs`, `budget_config`
+  - Auto-initialization: when a user signs up → 7 default categories created automatically
+  - 554 global merchant rules seeded (shared baseline for all users)
+- **Authentication**: Supabase Auth (magic link / email OTP)
+- **Data isolation**: RLS policies ensure users see only their own data
+- **Storage**: Supabase Storage bucket for per-user model artifacts + file uploads (versioned by `model_run_id`)
+
+**Files added:**
+- `supabase/migrations/` — SQL migrations (schema, RLS, triggers, seed data)
+- `supabase/config.toml` — Supabase CLI config
+- `.env.local` — API keys (never committed)
+
+**Deliverable**: Empty dashboard placeholder; signup → verify email → login works end-to-end on Supabase.
+
+### Phase 2: Upload + Parse + Onboarding (In Progress)
+
+**What will be built:**
+- **FastAPI backend** (Railway) — wraps existing Python ML pipeline with HTTP endpoints
+- **Next.js frontend** (Vercel) — signup/upload/label/train/dashboard UI
+- Upload validation + parsing + category parameterization rework
+- Interactive ~50-transaction onboarding label batch
+- Background training jobs with real-time status polling
+
+### Phase 3+: Dashboard Tabs, Settings, Security Hardening, Data Migration
+
+See `./.claude/plans/serene-sprouting-muffin.md` for the full 6-phase roadmap.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
