@@ -63,11 +63,7 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Continue manual review cycles: as you add more transactions, re-export the
-"Other" category, categorize them, and the rules will keep improving. With
-enough merchant-specific data, even the ML model could eventually generalize
-better. For now, the 2.2% uncategorized rate is near-optimal without more
-training data.
+**Phase 2 (Upload + Parse + Onboarding)** — build the FastAPI backend (Railway) and Next.js frontend (Vercel) to wire up the signup→verify→upload→label→train→dashboard flow. See the plan at `./.claude/plans/serene-sprouting-muffin.md`.
 
 ## Current State (Session 31, 2026-07-02)
 
@@ -85,6 +81,41 @@ training data.
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 32 (2026-07-03) — Phase 1: Multi-tenant Supabase foundation
+
+**Completed**: Full Phase 1 from the multi-tenant rewrite plan (`serene-sprouting-muffin.md`).
+
+**What was built**:
+- **Supabase CLI setup** — installed, authenticated, linked to remote project (ap-southeast-1 Singapore region)
+- **Schema migration 0001** — 9 tables with RLS policies:
+  - `profiles` (extends auth.users, tracks onboarding phase)
+  - `categories` (7 defaults per user: Food, Transport, Shopping, Entertainment, Health, Work, Other)
+  - `transactions` (parsed Alipay/WeChat rows)
+  - `merchant_rules` (two-tier: 554 global + per-user)
+  - `special_rules` (data-driven merchant+description splits)
+  - `uploads`, `model_runs`, `budget_config`, `budget_category_config`
+  - Auto-create `profiles` trigger when auth user signs up
+  - Cascade-delete trigger on category deletion (reassigns to catch-all)
+- **Schema migration 0001** — seeded 554 global merchant rules from `src/merchant_categories.py`
+- **Schema migration 0001** — auto-initialize function: when a user signs up → profiles created → triggers category creation (7 defaults) + budget config
+- **API keys obtained** — SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET, SUPABASE_SERVICE_ROLE_KEY stored in `.env.local` (never committed)
+
+**Architecture decisions confirmed**:
+- ✅ Option B chosen: 7 default categories per-user created via trigger, not migration-time globals
+- ✅ Global merchant rules are (user_id=NULL) and overlay-able by user rules
+- ✅ RLS policies enforce per-user data isolation at the DB layer
+- ✅ Service role key used only by backend (FastAPI); frontend uses anon key (RLS is the boundary)
+
+**Files created**:
+- `supabase/migrations/20260703000000_initial_schema.sql` (9 tables, RLS, triggers)
+- `supabase/migrations/20260703000001_seed_rules_and_categories.sql` (554 rules + category init function)
+- `supabase/config.toml` (Supabase CLI config, auto-generated)
+- `.env.local` (all API keys, gitignored)
+- `supabase/generate_seed_migration.py` (helper script to generate seed SQL from merchant_categories.py)
+
+**Open / Next**:
+- Phase 2 (Upload + Parse + Onboarding) — FastAPI backend on Railway, Next.js frontend on Vercel, wire up signup→verify→upload→label→train→dashboard
 
 ### Session 31 (2026-07-02) — Semantic embeddings + calibrated confidence + graduated trust
 
