@@ -61,11 +61,13 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Decide on the git-history privacy scrub (Session 27 open item #1). Otherwise run
-`python run_all.py` (deterministic full pipeline) or `python src/app.py` for the
-web wizard with your Alipay/WeChat exports.
+Continue manual review cycles: as you add more transactions, re-export the
+"Other" category, categorize them, and the rules will keep improving. With
+enough merchant-specific data, even the ML model could eventually generalize
+better. For now, the 2.2% uncategorized rate is near-optimal without more
+training data.
 
-## Current State (Session 21, 2026-07-02)
+## Current State (Session 28, 2026-07-02)
 
 | Item | Status |
 |---|---|
@@ -79,6 +81,20 @@ web wizard with your Alipay/WeChat exports.
 | English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
 
 ## Session Log
+
+### Session 28 (2026-07-02) — Manual merchant categorization review & rule generation
+Closed the iterative feedback loop for merchant rules. User reviewed all uncategorized transactions and manually assigned categories.
+
+- **Export & review**: Exported 114 "Other" category transactions from user's Alipay + WeChat feeds to XLSX file with columns: Time, Merchant (English), Description, Price, Current Category, and empty "Manual Category" for user to fill
+- **User categorization**: User reviewed all 114 and categorized them:
+  - 83 → Transfers & Gifts (personal names: Tara, Sydney, Steve, Margad, etc.; P2P transfers)
+  - 13 → Eating Out (Holy Bagel, Habibi, floating kitchen, etc.)
+  - 6 → Shopping (JUNGLEplus, Pumo Brands, ws**1)
+  - 4 → Groceries (Gaoqing Store, K-MART, Xiangxuehai Trading, etc.)
+  - 8 → Other (photo booths, amusement parks, films, ambiguous)
+- **Rule generation**: Added 40+ LOCAL_MERCHANT_RULES to `src/merchant_categories.py` based on the patterns. Used BOTH English merchant names (for P2P transfers) and Chinese names (for retail/restaurants) to match against raw data
+- **Results**: Uncategorized reduced from 114 (11.4%) → 22 (2.2%), an 81% improvement. Remaining 22 are genuinely hard to classify (bank transactions, app cashback, niche venues) and represent the new baseline
+- **Key learning**: LOCAL_MERCHANT_RULES apply pattern-matching to the raw merchant names in input CSVs (not translated names), so rules must include both original language variants and any transliterated names that appear in the feeds
 
 ### Session 27 (2026-07-02) — ML integrity audit (honest evaluation & reproducibility)
 Full audit written to `docs/FULL_AUDIT.md`. Worked phase by phase with user sign-off.
