@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 from segment import clean_text, vectorize
 from label import load_merchant_rules, apply_merchant_rules
+from merchant_categories import special_category
 from paths import (
     CLASSIFIER,
     MERCHANT_RULES,
@@ -36,8 +37,15 @@ def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     for idx, row in df.iterrows():
         merchant = str(row['merchant'])
-        desc = str(row['description']).lower()
+        desc = str(row['description'])
         merchant_lower = merchant.lower()
+
+        special = special_category(merchant, desc)
+        if special is not None:
+            df.loc[idx, 'category'] = special
+            df.loc[idx, 'confidence'] = 1.0
+            df.loc[idx, 'needs_review'] = False
+            continue
 
         if 'catering' in merchant_lower or '餐饮' in merchant:
             df.loc[idx, 'category'] = 'Eating Out'

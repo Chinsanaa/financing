@@ -5,6 +5,7 @@ from typing import Dict, List
 import pandas as pd
 
 from session_context import SessionContext
+from translate import merchant_label_english
 
 
 def _load_classified(ctx: SessionContext) -> pd.DataFrame:
@@ -26,6 +27,7 @@ def overview_tab(ctx: SessionContext) -> dict:
         df.groupby('merchant')['amount'].sum()
         .sort_values(ascending=False).head(15)
     )
+    top_labels = [merchant_label_english(m) for m in top_merchants.index.tolist()]
     return {
         'total_spend': round(float(df['amount'].sum()), 2),
         'transaction_count': len(df),
@@ -43,7 +45,7 @@ def overview_tab(ctx: SessionContext) -> dict:
             'values': [round(float(v), 2) for v in by_month.values],
         },
         'top_merchants': {
-            'labels': top_merchants.index.tolist(),
+            'labels': top_labels,
             'values': [round(float(v), 2) for v in top_merchants.values],
         },
     }
@@ -97,7 +99,7 @@ def savings_tab(ctx: SessionContext) -> dict:
         },
         'outliers': [
             {
-                'merchant': r['merchant'],
+                'merchant': merchant_label_english(r['merchant']),
                 'amount': round(float(r['amount']), 2),
                 'category': r['category'],
                 'date': str(r['timestamp'].date()),
@@ -123,12 +125,12 @@ def action_tab(ctx: SessionContext) -> dict:
     )
     return {
         'cuttable_merchants': {
-            'labels': by_merchant.index.tolist(),
+            'labels': [merchant_label_english(m) for m in by_merchant.index.tolist()],
             'values': [round(float(v), 2) for v in by_merchant.values],
         },
         'top_discretionary': [
             {
-                'merchant': r['merchant'],
+                'merchant': merchant_label_english(r['merchant']),
                 'amount': round(float(r['amount']), 2),
                 'category': r['category'],
             }

@@ -1,5 +1,5 @@
 # CLAUDE.md — Personal Finance Categorizer Project
-2
+
 This file tells Claude Code how to behave while working on this project.
 Read this first, every session, before writing any code.
 
@@ -10,6 +10,7 @@ Read this first, every session, before writing any code.
   get working code dropped on me.
 - I get frustrated by AI that just executes silently and dumps a wall of code.
   I want to follow along.
+- Does not know Chinese so all output should be in English. Translate all Chinese words to English.
 
 ## How to Work With Me
 
@@ -90,3 +91,5 @@ file rather than leaving a stale record.
 /src/                   # active pipeline scripts
 /_archive/              # old experiments and one-off scripts
 ```
+## Automation
+- Always update context.md and readme.md after every file change. Include the most essential parts and try to be concise.

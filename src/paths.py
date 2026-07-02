@@ -24,3 +24,4 @@ CLASSIFIER = PROCESSED / 'classifier.pkl'
 VECTORIZER = PROCESSED / 'tfidf_vectorizer.pkl'
 
 MERCHANTS_TO_LABEL = EXPORTS / 'merchants_to_label.csv'
+TRANSACTIONS_COMBINED_EN_XLSX = EXPORTS / 'transactions_combined_en.xlsx'

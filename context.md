@@ -75,6 +75,8 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 - Steps: upload → define categories → label merchants → iterate to 70%+ → 5-tab HTML dashboard
 - `src/session_context.py`, `src/web_pipeline.py`, `src/dashboard_data.py`
 - Per-session workspaces under `data/sessions/` (gitignored)
+- **English-only UI**: `src/translate.py` + fix in `merchant_display.display_merchant()` — Streamlit and web both route display through translation when no chain mapping exists (was returning raw Chinese)
+- **Merchant category rules**: `src/merchant_categories.py` — 295 chain/local patterns mapped to Groceries, Eating Out, Shopping, Transportation, Utilities & Services; synced to `merchant_rules_*.csv`; longest-pattern-first matching in `label.py`
 
 ### Session 19 (2026-07-01) — Personal data purge
 - Deleted all raw exports, labeled data, models, processed CSVs, budget config, exports, reports

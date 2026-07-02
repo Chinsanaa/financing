@@ -43,8 +43,8 @@ def apply_merchant_rules(df: pd.DataFrame, rules: dict) -> pd.DataFrame:
             df.loc[idx, 'labeled'] = True
             continue
 
-        # Try substring match (pattern appears in merchant name)
-        for pattern, category in rules.items():
+        # Try substring match — longest pattern first to avoid partial overlaps
+        for pattern, category in sorted(rules.items(), key=lambda x: len(x[0]), reverse=True):
             if pattern in merchant:
                 df.loc[idx, 'category'] = category
                 df.loc[idx, 'labeled'] = True

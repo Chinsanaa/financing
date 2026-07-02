@@ -184,14 +184,17 @@ def get_label_queue(ctx: SessionContext, limit: int = 10) -> List[dict]:
         .head(limit)
         .reset_index()
     )
-    return [
-        {
-            **enrich_label_row(row['merchant'], str(row['sample_description'])),
+    out: List[dict] = []
+    for _, row in stats.iterrows():
+        base = enrich_label_row(row['merchant'], str(row['sample_description']))
+        out.append({
+            'merchant': base['merchant'],  # id only; UI must use merchant_label
+            'merchant_label': base['merchant_label'],
+            'description_label': base['description_label'],
             'count': int(row['count']),
             'total_spend': round(float(row['total_spend']), 2),
-        }
-        for _, row in stats.iterrows()
-    ]
+        })
+    return out
 
 
 def apply_merchant_labels(ctx: SessionContext, labels: List[Dict[str, str]]) -> dict:

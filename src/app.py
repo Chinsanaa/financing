@@ -3,11 +3,13 @@ import sys
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_file
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dashboard_data import build_dashboard_tab
 from session_context import SessionContext
+from translate import description_label_english, merchant_label_english
 from web_pipeline import (
     apply_merchant_labels,
     get_label_queue,
@@ -152,11 +154,30 @@ def export_csv(session_id):
         return jsonify({'error': 'Session not found'}), 404
     if not ctx.transactions_classified.exists():
         return jsonify({'error': 'No classified data'}), 404
-    return send_file(
-        ctx.transactions_classified,
-        as_attachment=True,
-        download_name='transactions_classified.csv',
-    )
+    # Export English-only CSV for non-Chinese users
+    df = pd.read_csv(ctx.transactions_classified)
+    df['merchant_en'] = df['merchant'].map(merchant_label_english)
+    df['description_en'] = df['description'].map(description_label_english)
+
+    keep_cols = [
+        'timestamp',
+        'merchant_en',
+        'description_en',
+        'amount',
+        'source',
+        'category',
+    ]
+    if 'confidence' in df.columns:
+        keep_cols.append('confidence')
+    if 'needs_review' in df.columns:
+        keep_cols.append('needs_review')
+
+    df_out = df[[c for c in keep_cols if c in df.columns]].copy()
+    export_path = ctx.root / 'exports' / 'transactions_classified_en.csv'
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    df_out.to_csv(export_path, index=False, encoding='utf-8-sig')
+
+    return send_file(export_path, as_attachment=True, download_name='transactions_classified_en.csv')
 
 
 if __name__ == '__main__':

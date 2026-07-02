@@ -1,63 +1,295 @@
 merchant_pattern,category
+美团买菜,Groceries
+美团优选,Groceries
+叮咚买菜,Groceries
+京东便利店,Groceries
+山姆会员商店,Groceries
+山姆会员店,Groceries
+盒马鲜生,Groceries
+永辉超市,Groceries
 7-ELEVEN,Groceries
 7-11,Groceries
-LAWSON,Groceries
-FamilyMart,Groceries
-全家,Groceries
-喜士多,Groceries
-ALDI,Groceries
-奥乐齐,Groceries
+统一超商,Groceries
+见福便利店,Groceries
+天福便利店,Groceries
+可的便利店,Groceries
+十足便利店,Groceries
+之上便利店,Groceries
+易捷便利店,Groceries
+唐久便利,Groceries
+绝味鸭脖,Groceries
+良品铺子,Groceries
+三只松鼠,Groceries
+荟选集市,Groceries
+山姆,Groceries
+开市客,Groceries
 盒马,Groceries
 永辉,Groceries
 大润发,Groceries
 华润万家,Groceries
-DiDi,Transportation
-滴滴,Transportation
+美宜佳,Groceries
+昆仑好客,Groceries
+易捷,Groceries
+天福,Groceries
+见福,Groceries
+红旗连锁,Groceries
+便利蜂,Groceries
+芙蓉兴盛,Groceries
+唐久,Groceries
+可的,Groceries
+良友金伴,Groceries
+良友,Groceries
+十足,Groceries
+好特卖,Groceries
+ALDI,Groceries
+奥乐齐,Groceries
+LAWSON,Groceries
+FamilyMart,Groceries
+全家,Groceries
+喜士多,Groceries
+罗森,Groceries
+好德,Groceries
+沃尔玛,Groceries
+家乐福,Groceries
+钱大妈,Groceries
+百果园,Groceries
+泸溪河,Groceries
+周黑鸭,Groceries
+绝味,Groceries
+APIO,Groceries
+大黄鹅,Groceries
+友宝,Groceries
+乐科智控,Groceries
+大象智贩,Groceries
+聆动电子科技,Groceries
+聆动,Groceries
+美团单车,Transportation
+上海申通地铁,Transportation
+申通地铁,Transportation
+上海地铁,Transportation
+公共交通卡,Transportation
 滴滴出行,Transportation
 高德打车,Transportation
-哈啰,Transportation
 哈啰出行,Transportation
+曹操出行,Transportation
+T3出行,Transportation
+嘀嗒出行,Transportation
+青桔单车,Transportation
+摩拜单车,Transportation
+一嗨租车,Transportation
+神州租车,Transportation
+中国东方航空,Transportation
+东方航空,Transportation
+南方航空,Transportation
+春秋航空,Transportation
+国际航空,Transportation
+浦东机场,Transportation
+轨道交通,Transportation
+滴滴,Transportation
+高德,Transportation
+哈啰,Transportation
+青桔,Transportation
+摩拜,Transportation
 地铁,Transportation
-上海地铁,Transportation
-上海公共交通卡,Transportation
-Meituan,Eating Out
-美团,Eating Out
+国航,Transportation
+12306,Transportation
+铁路,Transportation
+DiDi,Transportation
 饿了么,Eating Out
+瑞幸咖啡,Eating Out
+luckin coffee,Eating Out
+汉堡王,Eating Out
+BURGER KING,Eating Out
+味千拉面,Eating Out
+杨国福麻辣烫,Eating Out
+张亮麻辣烫,Eating Out
+和府捞面,Eating Out
+遇见小面,Eating Out
+紫燕百味鸡,Eating Out
+沙县小吃,Eating Out
+太二酸菜鱼,Eating Out
+正新鸡排,Eating Out
+巴奴毛肚火锅,Eating Out
+西贝莜面村,Eating Out
+塔可贝尔,Eating Out
+乡村基,Eating Out
+大米先生,Eating Out
+米村拌饭,Eating Out
+永和大王,Eating Out
+大娘水饺,Eating Out
+袁记云饺,Eating Out
+眉州东坡,Eating Out
+南京大牌档,Eating Out
+绿茶餐厅,Eating Out
+Manner咖啡,Eating Out
+Tims咖啡,Eating Out
+CoCo都可,Eating Out
+茶颜悦色,Eating Out
+库迪咖啡,Eating Out
+蜜雪冰城,Eating Out
 McDonald's,Eating Out
 麦当劳,Eating Out
-KFC,Eating Out
 肯德基,Eating Out
-BURGER KING,Eating Out
-汉堡王,Eating Out
-Pizza Hut,Eating Out
+KFC,Eating Out
 必胜客,Eating Out
-SUBWAY,Eating Out
-Saizeriya,Eating Out
+Pizza Hut,Eating Out
+达美乐,Eating Out
+Domino's,Eating Out
 萨莉亚,Eating Out
-luckin coffee,Eating Out
+Saizeriya,Eating Out
 瑞幸,Eating Out
-HEYTEA,Eating Out
+星巴克,Eating Out
 喜茶,Eating Out
-Mixue,Eating Out
-蜜雪冰城,Eating Out
-CHAGEE,Eating Out
+HEYTEA,Eating Out
 霸王茶姬,Eating Out
-Taobao,Shopping
-淘宝,Shopping
+CHAGEE,Eating Out
+Mixue,Eating Out
+蜜雪,Eating Out
+茶百道,Eating Out
+古茗,Eating Out
+奈雪,Eating Out
+沪上阿姨,Eating Out
+书亦烧仙草,Eating Out
+甜啦啦,Eating Out
+益禾堂,Eating Out
+1点点,Eating Out
+一点点,Eating Out
+SUBWAY,Eating Out
+POPEYES,Eating Out
+海底捞,Eating Out
+吉野家,Eating Out
+味千,Eating Out
+真功夫,Eating Out
+老娘舅,Eating Out
+西贝,Eating Out
+华莱士,Eating Out
+德克士,Eating Out
+塔斯汀,Eating Out
+黄记煌,Eating Out
+小肥羊,Eating Out
+老乡鸡,Eating Out
+杨国福,Eating Out
+九毛九,Eating Out
+呷哺呷哺,Eating Out
+小龙坎,Eating Out
+大龙燚,Eating Out
+外婆家,Eating Out
+费大厨,Eating Out
+西少爷,Eating Out
+兰熊鲜奶,Eating Out
+巴奴,Eating Out
+Manner,Eating Out
+M Stand,Eating Out
+库迪,Eating Out
+蘇小柳,Eating Out
+昆仑唐府,Eating Out
+喝清喝理,Eating Out
+正三熙,Eating Out
+小满手工粉,Eating Out
+卯时六点半,Eating Out
+餐饮,Eating Out
+catering,Eating Out
+Meituan,Eating Out
+美团,Eating Out
+淘宝闪购,Shopping
 淘宝平台,Shopping
-Pinduoduo,Shopping
+淘天物流,Shopping
+京东物流,Shopping
+京东秒送,Shopping
+小米有品,Shopping
+网易严选,Shopping
+淘宝,Shopping
+Taobao,Shopping
+天猫,Shopping
+京东,Shopping
+JD.com,Shopping
 拼多多,Shopping
-MINISO,Shopping
-名创优品,Shopping
-MUJI,Shopping
-无印良品,Shopping
+Pinduoduo,Shopping
 得物,Shopping
 Dewu,Shopping
-China Mobile,Utilities & Services
+闲鱼,Shopping
+1688,Shopping
+唯品会,Shopping
+抖音,Shopping
+快手,Shopping
+小红书,Shopping
+京喜,Shopping
+菜鸟,Shopping
+名创优品,Shopping
+MINISO,Shopping
+无印良品,Shopping
+MUJI,Shopping
+优衣库,Shopping
+泡泡玛特,Shopping
+迪卡侬,Shopping
+宜家家居,Shopping
+宜家,Shopping
+全棉时代,Shopping
+孩子王,Shopping
+苏宁易购,Shopping
+苏宁,Shopping
+国美电器,Shopping
+国美,Shopping
+万达影城,Shopping
+万达,Shopping
+中免日上,Shopping
+中免,Shopping
+杜福睿,Shopping
+杂物社,Shopping
+屈臣氏,Shopping
+万宁,Shopping
+绿联,Shopping
+KKV,Shopping
+小米之家,Shopping
+小米,Shopping
+华为,Shopping
+苹果,Shopping
+华润,Groceries
+国际旅行卫生保健,Utilities & Services
+一网通办,Utilities & Services
+国家电网,Utilities & Services
+南方电网,Utilities & Services
 中国移动,Utilities & Services
 中国联通,Utilities & Services
 中国电信,Utilities & Services
-Sinopec,Utilities & Services
+China Mobile,Utilities & Services
 中石化,Utilities & Services
-餐饮,Eating Out
-catering,Eating Out
+中石油,Utilities & Services
+Sinopec,Utilities & Services
+PetroChina,Utilities & Services
+申通快递,Utilities & Services
+中通快递,Utilities & Services
+圆通速递,Utilities & Services
+韵达快递,Utilities & Services
+极兔速递,Utilities & Services
+德邦快递,Utilities & Services
+邮政EMS,Utilities & Services
+顺丰,Utilities & Services
+中通,Utilities & Services
+圆通,Utilities & Services
+韵达,Utilities & Services
+极兔,Utilities & Services
+德邦,Utilities & Services
+EMS,Utilities & Services
+共享按摩椅,Utilities & Services
+爱奇艺,Utilities & Services
+腾讯视频,Utilities & Services
+优酷,Utilities & Services
+芒果TV,Utilities & Services
+汽水音乐,Utilities & Services
+哔哩哔哩,Utilities & Services
+B站,Utilities & Services
+网易,Utilities & Services
+个人收款,Transfers & Gifts
+上海蕤盛工贸,Transportation
+上海都畅数字技术有限公司,Transportation
+济明路蘭州牛肉面,Eating Out
+美淑家,Eating Out
+饿梨酱,Eating Out
+YogurtDay,Eating Out
+马永胜牛肉面,Eating Out
+豹喵酒吧,Eating Out
+橘柚梧桐,Eating Out
+Sydney Yuen,Transfers & Gifts
+Evie,Transfers & Gifts
+**店,Shopping

@@ -89,21 +89,15 @@ async function loadLabelQueue() {
     const card = document.createElement('div');
     card.className = 'merchant-card';
     card.dataset.merchant = m.merchant;
-    const title = m.merchant_en || m.merchant;
-    const showMerchantOriginal = m.merchant_en && m.merchant_en !== m.merchant;
-    const descEn = m.sample_description_en || m.sample_description || '';
-    const showDescOriginal = m.sample_description_en
-      && m.sample_description
-      && m.sample_description_en !== m.sample_description;
+    const title = m.merchant_label || 'Unknown merchant';
+    const descEn = m.description_label || '';
     const sel = document.createElement('select');
     sel.innerHTML = '<option value="">Choose category…</option>' +
       state.categories.map((c) => `<option value="${c}">${c}</option>`).join('');
     card.innerHTML = `
       <h3>${escapeHtml(title)}</h3>
-      ${showMerchantOriginal ? `<div class="merchant-original">${escapeHtml(m.merchant)}</div>` : ''}
       <div class="merchant-meta">${m.count} txns · ¥${m.total_spend.toLocaleString()}</div>
       ${descEn ? `<div class="merchant-sample">${escapeHtml(descEn)}</div>` : ''}
-      ${showDescOriginal ? `<div class="merchant-original">${escapeHtml(m.sample_description)}</div>` : ''}
     `;
     card.appendChild(sel);
     container.appendChild(card);
