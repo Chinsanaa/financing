@@ -75,6 +75,27 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("supermarket", "Groceries"),
     ("mart", "Groceries"),
     ("market", "Groceries"),
+    # --- Groceries: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("produce", "Groceries"),
+    ("vegetables", "Groceries"),
+    ("fruits", "Groceries"),
+    ("fruit", "Groceries"),
+    ("meat market", "Groceries"),
+    ("fish market", "Groceries"),
+    ("bakery", "Groceries"),
+    ("daily essentials", "Groceries"),
+    ("household items", "Groceries"),
+    ("bulk buy", "Groceries"),
+    ("wholesale", "Groceries"),
+    ("蔬菜", "Groceries"),
+    ("水果", "Groceries"),
+    ("生鲜", "Groceries"),
+    ("菜市场", "Groceries"),
+    ("日用品", "Groceries"),
+    ("家用", "Groceries"),
+    ("批发", "Groceries"),
+    ("食材", "Groceries"),
+    ("粮油", "Groceries"),
     # Vending machines
     ("友宝", "Groceries"),
     ("乐科智控", "Groceries"),
@@ -114,6 +135,33 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("12306", "Transportation"),
     ("铁路", "Transportation"),
     ("DiDi", "Transportation"),
+    # --- Transportation: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("ride", "Transportation"),
+    ("driver", "Transportation"),
+    ("passenger", "Transportation"),
+    ("ticket", "Transportation"),
+    ("fare", "Transportation"),
+    ("transit", "Transportation"),
+    ("train", "Transportation"),
+    ("bus", "Transportation"),
+    ("subway", "Transportation"),
+    ("metro", "Transportation"),
+    ("flight", "Transportation"),
+    ("airport", "Transportation"),
+    ("airline", "Transportation"),
+    ("parking", "Transportation"),
+    ("toll", "Transportation"),
+    ("gas", "Transportation"),
+    ("fuel", "Transportation"),
+    ("车费", "Transportation"),
+    ("乘坐", "Transportation"),
+    ("班车", "Transportation"),
+    ("高铁", "Transportation"),
+    ("火车票", "Transportation"),
+    ("飞机票", "Transportation"),
+    ("机票", "Transportation"),
+    ("停泊费", "Transportation"),
+    ("汽油", "Transportation"),
   # --- Eating Out: food delivery & restaurant chains ---
     ("饿了么", "Eating Out"),
     ("瑞幸咖啡", "Eating Out"),
@@ -211,6 +259,37 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("catering", "Eating Out"),
     ("Meituan", "Eating Out"),
     ("美团", "Eating Out"),
+    # --- Eating Out: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("restaurant", "Eating Out"),
+    ("cafe", "Eating Out"),
+    ("coffee", "Eating Out"),
+    ("café", "Eating Out"),
+    ("food delivery", "Eating Out"),
+    ("takeout", "Eating Out"),
+    ("takeaway", "Eating Out"),
+    ("order food", "Eating Out"),
+    ("menu", "Eating Out"),
+    ("dine", "Eating Out"),
+    ("snack", "Eating Out"),
+    ("noodle", "Eating Out"),
+    ("ramen", "Eating Out"),
+    ("sushi", "Eating Out"),
+    ("burger", "Eating Out"),
+    ("pizza", "Eating Out"),
+    ("taco", "Eating Out"),
+    ("kebab", "Eating Out"),
+    ("boba", "Eating Out"),
+    ("bubble tea", "Eating Out"),
+    ("面馆", "Eating Out"),
+    ("饭店", "Eating Out"),
+    ("饮食", "Eating Out"),
+    ("外卖", "Eating Out"),
+    ("订餐", "Eating Out"),
+    ("小吃", "Eating Out"),
+    ("烧烤", "Eating Out"),
+    ("火锅", "Eating Out"),
+    ("粥店", "Eating Out"),
+    ("炸鸡", "Eating Out"),
     # --- Shopping: retail & e-commerce ---
     ("淘宝闪购", "Shopping"),
     ("淘宝平台", "Shopping"),
@@ -348,6 +427,38 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("router", "Shopping"),  # Routers
     ("speaker", "Shopping"),  # Speakers
     ("microphone", "Shopping"),  # Microphones
+    # --- Shopping: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("product", "Shopping"),
+    ("item", "Shopping"),
+    ("clothing", "Shopping"),
+    ("apparel", "Shopping"),
+    ("shoes", "Shopping"),
+    ("shoe", "Shopping"),
+    ("outfit", "Shopping"),
+    ("dress", "Shopping"),
+    ("pants", "Shopping"),
+    ("shirt", "Shopping"),
+    ("jacket", "Shopping"),
+    ("gadget", "Shopping"),
+    ("device", "Shopping"),
+    ("toy", "Shopping"),
+    ("toy store", "Shopping"),
+    ("pet store", "Shopping"),
+    ("pet", "Shopping"),
+    ("book", "Shopping"),
+    ("bookstore", "Shopping"),
+    ("office supplies", "Shopping"),
+    ("office", "Shopping"),
+    ("craft", "Shopping"),
+    ("服装", "Shopping"),
+    ("衣服", "Shopping"),
+    ("鞋子", "Shopping"),
+    ("玩具", "Shopping"),
+    ("宠物", "Shopping"),
+    ("书籍", "Shopping"),
+    ("图书", "Shopping"),
+    ("办公", "Shopping"),
+    ("手工", "Shopping"),
     # Taobao-like patterns (merchants with ** in name)
     ("**", "Shopping"),
     # 华润万家 listed above; bare 华润 often appears on supermarket charges
@@ -388,6 +499,24 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("哔哩哔哩", "Utilities & Services"),
     ("B站", "Utilities & Services"),
     ("网易", "Utilities & Services"),
+    # --- Utilities & Services: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("subscription", "Utilities & Services"),
+    ("monthly fee", "Utilities & Services"),
+    ("annual fee", "Utilities & Services"),
+    ("renewal", "Utilities & Services"),
+    ("service charge", "Utilities & Services"),
+    ("membership", "Utilities & Services"),
+    ("premium", "Utilities & Services"),
+    ("bill", "Utilities & Services"),
+    ("invoice", "Utilities & Services"),
+    ("service", "Utilities & Services"),
+    ("续费", "Utilities & Services"),
+    ("会费", "Utilities & Services"),
+    ("月费", "Utilities & Services"),
+    ("年费", "Utilities & Services"),
+    ("服务费", "Utilities & Services"),
+    ("订阅", "Utilities & Services"),
+    ("会员", "Utilities & Services"),
     # --- Transfers & Gifts ---
     # Keywords
     ("transfer", "Transfers & Gifts"),
@@ -395,6 +524,24 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("p2p", "Transfers & Gifts"),
     ("P2P", "Transfers & Gifts"),
     ("个人收款", "Transfers & Gifts"),
+    # --- Transfers & Gifts: disambiguation keywords (for unseen merchants/descriptions) ---
+    ("send money", "Transfers & Gifts"),
+    ("payment", "Transfers & Gifts"),
+    ("remittance", "Transfers & Gifts"),
+    ("gift", "Transfers & Gifts"),
+    ("present", "Transfers & Gifts"),
+    ("tip", "Transfers & Gifts"),
+    ("gratuity", "Transfers & Gifts"),
+    ("allowance", "Transfers & Gifts"),
+    ("personal loan", "Transfers & Gifts"),
+    ("reimbursement", "Transfers & Gifts"),
+    ("汇款", "Transfers & Gifts"),
+    ("红包", "Transfers & Gifts"),
+    ("礼物", "Transfers & Gifts"),
+    ("赏金", "Transfers & Gifts"),
+    ("补贴", "Transfers & Gifts"),
+    ("报销", "Transfers & Gifts"),
+    ("打赏", "Transfers & Gifts"),
     # Bank withdrawals & transfers between banks
     ("Bank of China", "Transfers & Gifts"),
     ("中国银行", "Transfers & Gifts"),
@@ -528,6 +675,8 @@ def special_category(merchant: str, description: str) -> str | None:
     """Per-row category override from merchant + description. None if no rule."""
     merchant = str(merchant or "").strip()
     description = str(description or "").strip()
+    merchant_lower = merchant.lower()
+    description_lower = description.lower()
 
     if merchant == NYU_SHANGHAI_MERCHANT:
         if any(marker in description for marker in NYU_SERVICE_DESCRIPTION_MARKERS):
@@ -536,6 +685,40 @@ def special_category(merchant: str, description: str) -> str | None:
 
     if merchant == "上海蕤盛工贸":
         return "Transportation"
+
+    # Description-based disambiguation for unseen merchants
+    # High-confidence product/action keywords that clearly indicate a category
+
+    eating_keywords = ("noodle", "ramen", "sushi", "burger", "pizza", "food order",
+                      "takeout", "meal", "dine", "餐", "面", "烧烤", "火锅", "粥", "外卖")
+    groceries_keywords = ("vegetable", "fruit", "produce", "grocery", "生鲜", "蔬菜",
+                         "水果", "食材", "日用品", "菜", "批发")
+    shopping_keywords = ("shoe", "cloth", "dress", "gadget", "toy", "book", "laptop",
+                        "charger", "cable", "camera", "watch", "鞋", "衣服", "玩具", "书籍")
+    transport_keywords = ("ride", "ticket", "flight", "parking", "airport", "gas", "fuel",
+                         "车费", "机票", "停泊", "加油", "汽油")
+    transfer_keywords = ("send money", "gift", "present", "payment", "transfer", "remittance",
+                        "红包", "汇款", "礼物", "赏金")
+
+    # Check for eating out (higher priority for food keywords)
+    if any(kw in description_lower for kw in eating_keywords):
+        return "Eating Out"
+
+    # Check for groceries
+    if any(kw in description_lower for kw in groceries_keywords):
+        return "Groceries"
+
+    # Check for shopping
+    if any(kw in description_lower for kw in shopping_keywords):
+        return "Shopping"
+
+    # Check for transportation
+    if any(kw in description_lower for kw in transport_keywords):
+        return "Transportation"
+
+    # Check for transfers/gifts
+    if any(kw in description_lower for kw in transfer_keywords):
+        return "Transfers & Gifts"
 
     return None
 
