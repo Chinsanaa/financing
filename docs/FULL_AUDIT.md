@@ -439,4 +439,26 @@ conclusion is unchanged: rules are the engine.
    rows and routes 56 unseen-merchant suggestions to review. Locked in by
    `tests/test_classify_routing.py`.
 
-## Phase 5 — Doc reconciliation *(pending)*
+## Phase 5 — Doc reconciliation
+
+**Status: complete.**
+
+- **README.md rewritten to one source of truth.** Removed every stale/contradictory
+  figure (99.1% / 97.3% / 95.5% / 96.2%, 275/639/657 features, 776/850 labels,
+  82.4%/41.7% confidence, "F1-macro +39%", "47% Eating Out", the "70%+ accuracy"
+  gates). Added a **"How accuracy is measured"** section explaining stratified
+  (known merchants) vs GroupKFold (new merchants) and stating we report both,
+  labeled. Reframed the whole README around the rules-first two-stage design, and
+  added an up-front warning that earlier accuracy claims were merchant-memorization
+  artifacts, pointing here.
+- **context.md** got a Session 27 entry: real metrics, the leakage finding, the
+  tiny-class and two-stage decisions, tests added, and open items (chief among them
+  the git-history privacy scrub).
+
+### Remaining open items (need user decision, out of audit scope)
+
+1. **Privacy / git history.** Session 19's purge did not rewrite history — personal
+   data is still recoverable from the public repo. Fix = `git filter-repo` + force-push.
+2. Unseen-merchant accuracy (~45%) is data-limited, not model-limited; real gains
+   need more *distinct* merchants, not tuning.
+3. Utilities rule-only is currently a labeling convention; could be enforced in code.
