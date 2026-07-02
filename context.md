@@ -75,6 +75,11 @@ Run `python src/app.py` and complete the web wizard with your Alipay/WeChat expo
 
 ## Session Log
 
+### Session 23 (2026-07-02) — NYU Shanghai admin fees recategorized
+- `special_category()` in `src/merchant_categories.py`: the 3 NYU Shanghai admin-fee markers (Campus Card Top Up, Tuition and Fees, NYUCard Print Fee) now map to `Utilities & Services` instead of `Other` — they're campus services, not uncategorized spend
+- Renamed `NYU_OTHER_DESCRIPTION_MARKERS` → `NYU_SERVICE_DESCRIPTION_MARKERS` to match
+- No blanket merchant rule involved (NYU Shanghai is description-split, not in `MERCHANT_CATEGORY_RULES`), so no CSV re-sync needed
+
 ### Session 22 (2026-07-02) — Refund netting & internal transfer exclusion
 - Resolved the open question on refunds/transfers in `src/parse.py`:
   - **Refunds** (交易状态/Transaction Status contains 退款/Refund): kept as a negative-amount row instead of dropped, so they net against the original purchase in category/merchant totals
