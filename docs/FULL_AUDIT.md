@@ -122,11 +122,103 @@ fit before splitting all inflate it).
 
 ---
 
-## Phase 1 — Evaluation integrity *(pending user confirmation)*
+## Phase 1 — Evaluation integrity
 
-Planned: GroupKFold by merchant vs stratified CV; per-fold support for tiny
-classes; rule-covered vs model-only accuracy split; hand-audit of 40 random
-labels for label noise.
+**Status: complete, awaiting user confirmation before Phase 2.**
+Run 2026-07-02, random_state=42, on the same restored 863-row dataset.
+
+### Headline finding: the 96.5% is almost entirely merchant memorization
+
+The dataset has **863 labeled rows but only 109 unique merchants**. The top 10
+merchants account for **73%** of all rows; one merchant (上海纽约大学 / NYU
+Shanghai, generic campus QR payments) is **16.5%** of the entire dataset. 63
+merchants appear exactly once. So "863 samples" is mostly the same handful of
+merchants repeated — and **568 of 863 cleaned texts are exact duplicates** of
+another row.
+
+The cleaned text fed to TF-IDF **always begins with the merchant name**
+(`clean_text` concatenates merchant + description), e.g.
+`滴滴出行 滴滴快车打车...`. So the model can trivially memorize merchant→category.
+
+**The decisive test — cross-validation that never lets a merchant appear in
+both train and test:**
+
+| CV scheme | Accuracy | F1-macro | What it measures |
+|---|---|---|---|
+| Stratified 5-fold, vectorizer fit on ALL (what `eval.py`/`retrain.py` report) | **96.5% ± 1.8%** | 0.857 | inflated |
+| Stratified 5-fold, vectorizer fit in-fold | 95.4% ± 2.2% | 0.834 | removes the vectorizer leak (~1pt) |
+| **GroupKFold(5) by merchant, vectorizer in-fold** | **36.5% ± 25.6%** | ~0.34 | **generalization to NEW merchants** |
+| Majority-class baseline (always "Eating Out") | 38.5% | — | the floor |
+
+**Interpretation (plain language):** on a merchant it has already seen, the
+model is ~96% right — because it memorized that merchant's category. On a
+merchant it has **never** seen, it scores **36.5%, which is *below* the 38.5%
+you'd get by blindly guessing "Eating Out" every time.** Roughly **60
+percentage points** of the reported accuracy is merchant memorization, not
+generalization. The huge ±25.6% fold variance confirms it: a fold's score
+depends almost entirely on whether a big known merchant happened to land in the
+test set.
+
+This does not mean the *product* is worthless — for a merchant you've
+transacted with before, memorization is genuinely useful and a rule handles it
+anyway. But the ML model, as an engine for categorizing **new/unseen**
+merchants, currently adds essentially nothing. The 96.5% headline must never be
+presented as the model's real-world accuracy on new data.
+
+### The 1.000 scores are artifacts
+
+`<15`-sample classes are **Other (11)** and **Utilities & Services (5)** (no
+Travel or Health class exists in this dataset at all).
+
+- **Utilities & Services, F1 = 1.000 → fake.** It is 5 rows but only **2
+  unique texts** (mostly 中国移动 / China Mobile phone top-ups; 3 of 5 rows are
+  duplicate text). Under stratified CV it gets exactly 1 test row per fold and
+  its duplicate/same-merchant twins sit in the training fold → guaranteed
+  correct. Under **GroupKFold all 5 rows fall in a single fold `[5,0,0,0,0]`
+  and F1 collapses to 0.000** — the model has never seen the merchant, so it
+  never gets it right. The 1.000 is a near-empty-fold + duplicate artifact.
+- **Other, F1 = 0.240 even under stratified CV** (11 unique-text rows). It is
+  genuinely a hard grab-bag class, not inflated — just tiny and incoherent.
+
+### Rule-covered vs model-only
+
+Applying the 177 merchant rules back onto the labeled rows: **91.2% (787 rows)
+are already matched by a merchant rule** — unsurprising, since the labels were
+*seeded from those rules*. Only **76 rows (8.8%) are "model-only"** (no rule
+matches). Under honest GroupKFold out-of-fold prediction:
+
+- Overall: 36.5%
+- On rule-covered merchants: 39.0% (moot — a rule already labels these)
+- **On model-only merchants: 10.5%** (n=76) ← the real, honest value the ML
+  model adds over the rules on unseen merchants: close to zero.
+
+### Label-noise audit (random 40 rows, seed 42)
+
+No outright category errors of the old "McDonald's → Transportation" kind were
+found in the 40-row sample → **outright label-error rate ≈ 0–3%; labels are
+clean.** But the real label-quality risk is **concentration, not noise**:
+
+- **139 rows (16.5% of the whole dataset) are `上海纽约大学 POS机扫微信二维码消费`
+  (NYU Shanghai generic campus QR payment), all blanket-labeled "Eating Out".**
+  This is one human assumption applied 139 times, not 139 observations. If the
+  campus POS is used for anything besides the canteen (printing, bookstore,
+  vending), those are silently mislabeled. It is defensible but unverifiable
+  from the text alone, and it dominates the Eating Out class.
+- Minor borderline calls (not errors): `淘宝闪购` food delivery labeled Eating
+  Out (vs Shopping); single-beverage purchases (Pocari/Pepsi) at 大黄鹅 labeled
+  Groceries; generic `收钱码收款` payment-code rows.
+
+**Net:** label noise is low, but ~1/6 of the data is a single blanket-labeled
+merchant, which both inflates apparent accuracy and makes the Eating Out class
+fragile.
+
+### Phase 1 bottom line
+
+The prior "improvements" chased a metric (stratified CV on a merchant-memorized,
+duplicate-heavy, 109-merchant dataset) that never measured generalization. The
+honest numbers: **~96% at re-recognizing known merchants, ~36% (below baseline)
+on new ones, ~0 added value over rules on unseen merchants.** Tiny-class 1.000
+scores are duplicate/empty-fold artifacts. This is what Phase 2 must address.
 
 ## Phase 2 — Tiny-class handling *(pending)*
 
