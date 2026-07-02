@@ -70,6 +70,11 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("绝味", "Groceries"),
     ("APIO", "Groceries"),
     ("大黄鹅", "Groceries"),
+    # Grocery keywords (English)
+    ("grocery", "Groceries"),
+    ("supermarket", "Groceries"),
+    ("mart", "Groceries"),
+    ("market", "Groceries"),
     # Vending machines
     ("友宝", "Groceries"),
     ("乐科智控", "Groceries"),
@@ -260,6 +265,91 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("小米", "Shopping"),
     ("华为", "Shopping"),
     ("苹果", "Shopping"),
+    # Clothing brands
+    ("NIKE", "Shopping"),
+    ("nike", "Shopping"),
+    ("Adidas", "Shopping"),
+    ("adidas", "Shopping"),
+    ("ZARA", "Shopping"),
+    ("zara", "Shopping"),
+    ("H&M", "Shopping"),
+    ("h&m", "Shopping"),
+    ("Forever 21", "Shopping"),
+    ("ASOS", "Shopping"),
+    ("Uniqlo", "Shopping"),
+    ("uniqlo", "Shopping"),
+    ("GAP", "Shopping"),
+    ("SHEIN", "Shopping"),
+    ("Gucci", "Shopping"),
+    ("LV", "Shopping"),
+    ("Prada", "Shopping"),
+    ("Burberry", "Shopping"),
+    ("Coach", "Shopping"),
+    ("Alexander McQueen", "Shopping"),
+    ("Balenciaga", "Shopping"),
+    ("Dior", "Shopping"),
+    ("Fendi", "Shopping"),
+    ("Hermes", "Shopping"),
+    ("Versace", "Shopping"),
+    ("Valentino", "Shopping"),
+    ("Armani", "Shopping"),
+    ("Tommy Hilfiger", "Shopping"),
+    ("Calvin Klein", "Shopping"),
+    ("Ralph Lauren", "Shopping"),
+    ("Lacoste", "Shopping"),
+    ("champion", "Shopping"),
+    ("Champion", "Shopping"),
+    ("Reebok", "Shopping"),
+    ("Puma", "Shopping"),
+    ("New Balance", "Shopping"),
+    ("Converse", "Shopping"),
+    ("Vans", "Shopping"),
+    # Electronics & gadgets
+    ("Samsung", "Shopping"),
+    ("samsung", "Shopping"),
+    ("LG", "Shopping"),
+    ("Sony", "Shopping"),
+    ("Panasonic", "Shopping"),
+    ("Intel", "Shopping"),
+    ("Nvidia", "Shopping"),
+    ("AMD", "Shopping"),
+    ("Razer", "Shopping"),
+    ("Logitech", "Shopping"),
+    ("SteelSeries", "Shopping"),
+    ("Corsair", "Shopping"),
+    ("ASUS", "Shopping"),
+    ("Acer", "Shopping"),
+    ("Lenovo", "Shopping"),
+    ("Dell", "Shopping"),
+    ("HP", "Shopping"),
+    ("Microsoft", "Shopping"),
+    ("Canon", "Shopping"),
+    ("Nikon", "Shopping"),
+    ("Sony", "Shopping"),
+    ("GoPro", "Shopping"),
+    ("DJI", "Shopping"),
+    ("iPhone", "Shopping"),
+    ("iPad", "Shopping"),
+    ("MacBook", "Shopping"),
+    ("AirPods", "Shopping"),
+    ("Apple Watch", "Shopping"),
+    ("watch", "Shopping"),  # Watches (broad but often used for shopping)
+    ("camera", "Shopping"),  # Cameras
+    ("drone", "Shopping"),  # Drones
+    ("headphone", "Shopping"),  # Headphones
+    ("earphone", "Shopping"),  # Earphones
+    ("laptop", "Shopping"),  # Laptops
+    ("monitor", "Shopping"),  # Monitors
+    ("keyboard", "Shopping"),  # Keyboards
+    ("mouse", "Shopping"),  # Mice
+    ("charger", "Shopping"),  # Chargers
+    ("cable", "Shopping"),  # Cables
+    ("battery", "Shopping"),  # Batteries
+    ("router", "Shopping"),  # Routers
+    ("speaker", "Shopping"),  # Speakers
+    ("microphone", "Shopping"),  # Microphones
+    # Taobao-like patterns (merchants with ** in name)
+    ("**", "Shopping"),
     # 华润万家 listed above; bare 华润 often appears on supermarket charges
     ("华润", "Groceries"),
     # --- Utilities & Services ---
@@ -299,6 +389,10 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("B站", "Utilities & Services"),
     ("网易", "Utilities & Services"),
     # --- Transfers & Gifts ---
+    ("transfer", "Transfers & Gifts"),
+    ("Transfer", "Transfers & Gifts"),
+    ("p2p", "Transfers & Gifts"),
+    ("P2P", "Transfers & Gifts"),
     ("个人收款", "Transfers & Gifts"),
 ]
 
