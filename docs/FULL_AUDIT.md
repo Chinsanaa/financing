@@ -220,7 +220,82 @@ honest numbers: **~96% at re-recognizing known merchants, ~36% (below baseline)
 on new ones, ~0 added value over rules on unseen merchants.** Tiny-class 1.000
 scores are duplicate/empty-fold artifacts. This is what Phase 2 must address.
 
-## Phase 2 — Tiny-class handling *(pending)*
+## Phase 2 — Tiny-class handling & two-stage design *(proposal — awaiting user decision, nothing implemented)*
+
+Correction from the brief: **Travel and Health & Wellness do not exist in this
+dataset.** The only `<15`-sample classes are:
+
+| Class | Rows | Unique texts | Stratified F1 | GroupKFold F1 | Character |
+|---|---|---|---|---|---|
+| Other | 11 | 11 | 0.240 | 0.056 | genuine grab-bag, incoherent by design |
+| Utilities & Services | 5 | 2 | 1.000 (artifact) | 0.000 | semantically clean (中国移动 phone top-ups) but tiny |
+
+### Options for the tiny classes
+
+**Option A — Merge into a single "Misc/Other" bucket.**
+Fold Utilities & Services into Other so the classifier never faces a 5-sample
+class.
+- *Pro:* removes the fake 1.000; simplifies the label space.
+- *Con:* destroys a **meaningful, clean budget line** — "how much did I spend on
+  phone/utilities" is exactly the kind of thing this dashboard exists to show.
+  Utilities is coherent (它's a real category with a high-precision rule), so
+  merging it into a grab-bag throws away signal to fix a metric artifact. Wrong
+  trade for a personal-finance tool.
+
+**Option B — Keep them rule-only (model never predicts them).**
+Utilities & Services (and any other genuinely rare, rule-coverable category) is
+assigned **only** by explicit high-precision merchant rules (中国移动 → Utilities),
+never by the model. The model's label space drops these classes entirely.
+- *Pro:* honest — the model stops pretending to predict a class it has 2 unique
+  texts for; the fake 1.000 disappears; the category still shows up correctly in
+  the dashboard via the rule; deterministic and interpretable.
+- *Con:* a **new** utility merchant not yet in the rules won't be auto-caught —
+  it falls through to the review queue. But Phase 1 already proved the model
+  can't catch new merchants anyway (10.5% on model-only rows), so this loses
+  nothing real and makes the behavior explicit instead of pretend.
+
+**Option C — Collect more labels before predicting them.**
+Freeze these categories out of the model until each has, say, 20–30 labeled
+rows, then revisit.
+- *Pro:* the "correct" ML answer in the abstract.
+- *Con:* utilities/rare spend may **never** accumulate 30 rows for a single
+  user; blocks indefinitely; and even at 30 rows the merchant-memorization
+  problem from Phase 1 remains. High effort, uncertain payoff.
+
+### Recommendation
+
+**Option B (rule-only for tiny high-precision classes), and treat "Other" as an
+explicit residual/review bucket rather than a predicted class.** Do not merge
+Utilities into Other (Option A throws away a real budget line); do not block on
+Option C (rare categories may never fill up, and it wouldn't fix the deeper
+leakage problem). Option B is the honest one: it stops the model from claiming a
+score on classes it cannot learn, keeps the categories visible via deterministic
+rules, and matches what Phase 1 showed actually works here (rules, not the model).
+
+### Proposed two-stage design *(proposal only — not built)*
+
+Phase 1 reframes the whole system: **the rules are the engine, the model is a
+weak suggester for unseen merchants.** A design that tells the truth:
+
+1. **Stage 1 — high-precision rules (deterministic).** Exact then longest
+   substring merchant match. Already covers ~91% of rows at ~100% precision on
+   known merchants. Known merchant → its category, done. No model involved.
+2. **Stage 2 — model on the residual only.** For merchants with no rule, run the
+   model to produce a *suggestion*, not a trusted label.
+3. **Confidence gate → review queue.** Any Stage-2 prediction below a calibrated
+   threshold (Phase 4 will set it honestly, not the current guessed 0.70) is
+   **flagged for manual review** rather than auto-applied. Given the model's
+   ~36% on unseen merchants, most residual predictions should route to review.
+4. **The system improves by accumulating RULES, not by the model getting
+   smarter.** A reviewed merchant becomes a new rule; next time it's Stage 1.
+   This is the honest growth loop and it's already how bootstrap/label-queue
+   works — the design just makes it explicit and stops overstating the model.
+
+Tiny classes (Option B) live entirely in Stage 1. "Other" is the natural label
+for low-confidence Stage-2 residuals awaiting review.
+
+**Decision needed before Phase 3:** (1) which tiny-class option, (2) whether to
+adopt this two-stage framing in the docs/pipeline. Nothing changes until you pick.
 
 ## Phase 3 — Tests & reproducibility *(pending)*
 
