@@ -52,19 +52,20 @@ async def delete_account(request: Request):
     user_id = request.state.user_id
 
     try:
-        # Step 1: Delete all files from Storage under user_id/* prefix
+        # Step 1: Delete all files from Storage under user_id/* prefix, in
+        # every bucket the app actually writes to.
         # This prevents orphaned Storage objects if Auth delete fails
-        try:
-            from supabase import create_client
-            storage_client = supabase_client.storage.from_('user-data')
-            # List all files under user_id/
-            response = storage_client.list(f"{user_id}/")
-            # Delete each file
-            for file_obj in response:
-                storage_client.remove([f"{user_id}/{file_obj['name']}"])
-        except Exception as storage_err:
-            print(f"Storage cleanup warning for user {user_id}: {storage_err}")
-            # Don't fail on storage errors, proceed to Auth deletion
+        for bucket_name in ('model_artifacts', 'uploads'):
+            try:
+                storage_client = supabase_client.storage.from_(bucket_name)
+                # List all files under user_id/
+                response = storage_client.list(f"{user_id}/")
+                # Delete each file
+                for file_obj in response:
+                    storage_client.remove([f"{user_id}/{file_obj['name']}"])
+            except Exception as storage_err:
+                print(f"Storage cleanup warning ({bucket_name}) for user {user_id}: {storage_err}")
+                # Don't fail on storage errors, proceed to Auth deletion
 
         # Step 2: Delete auth user (cascades through RLS to profiles, transactions, categories, etc)
         try:

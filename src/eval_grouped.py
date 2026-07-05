@@ -230,9 +230,16 @@ def threshold_sweep_table(agree_df: pd.DataFrame,
 
 def run_report(df_labeled: pd.DataFrame = None, encoder=None,
                target_precision: float = DEFAULT_TARGET_PRECISION,
-               min_support: int = DEFAULT_MIN_SUPPORT) -> dict:
+               min_support: int = DEFAULT_MIN_SUPPORT,
+               paths: dict = None) -> dict:
     """Full honest evaluation. Fits + saves both calibrators; derives + saves
-    the ensemble threshold config. Returns a summary dict."""
+    the ensemble threshold config. Returns a summary dict.
+
+    paths: when given, calibrators/config/report are written to
+    paths['tfidf_calibrator']/paths['semantic_calibrator']/
+    paths['ensemble_config']/paths['report'] (per-training-run isolation);
+    otherwise the global data/reports/ + data/processed/ files (CLI mode).
+    """
     if df_labeled is None:
         df_labeled = load_labeled()
 
@@ -293,11 +300,16 @@ def run_report(df_labeled: pd.DataFrame = None, encoder=None,
                       f"predictions continue to route to review (honest outcome)."]
 
     # 4) persist artifacts
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    EVAL_REPORT.write_text("\n".join(lines) + "\n", encoding='utf-8')
+    report_path = paths['report'] if paths else EVAL_REPORT
+    tfidf_cal_path = paths['tfidf_calibrator'] if paths else TFIDF_CALIBRATOR
+    semantic_cal_path = paths['semantic_calibrator'] if paths else SEMANTIC_CALIBRATOR
+    ensemble_config_path = paths['ensemble_config'] if paths else ENSEMBLE_CONFIG
 
-    joblib.dump(cal_t, TFIDF_CALIBRATOR)
-    joblib.dump(cal_s, SEMANTIC_CALIBRATOR)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("\n".join(lines) + "\n", encoding='utf-8')
+
+    joblib.dump(cal_t, tfidf_cal_path)
+    joblib.dump(cal_s, semantic_cal_path)
 
     config = {
         'threshold': chosen['threshold'] if chosen else None,
@@ -311,10 +323,10 @@ def run_report(df_labeled: pd.DataFrame = None, encoder=None,
         'n_labeled': int(len(df_labeled)),
         'created': datetime.now().isoformat(timespec='seconds'),
     }
-    ENSEMBLE_CONFIG.write_text(json.dumps(config, indent=2), encoding='utf-8')
+    ensemble_config_path.write_text(json.dumps(config, indent=2), encoding='utf-8')
 
     print("\n".join(lines))
-    print(f"\nReport: {EVAL_REPORT}\nConfig: {ENSEMBLE_CONFIG}")
+    print(f"\nReport: {report_path}\nConfig: {ensemble_config_path}")
     return {'tfidf': sum_t, 'semantic': sum_s, 'threshold': chosen,
             'agreement_rate': agree_rate}
 

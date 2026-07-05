@@ -81,7 +81,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         upload_id = create_upload_record(user_id, file.filename, file_type, row_count=len(df_normalized), error=None)
 
         # Insert transactions
-        insert_transactions(user_id, df_normalized, upload_id)
+        insert_transactions(user_id, df_normalized, upload_id, file_type)
 
         # Clean up temp file
         Path(tmp_path).unlink(missing_ok=True)
@@ -147,10 +147,13 @@ def detect_csv_source(file_path: str) -> Optional[str]:
         has_alipay_markers = any(c in columns for c in ['交易时间', '交易对方', 'Transaction Time', 'Transaction Counterparty'])
         has_wechat_markers = any(c in columns for c in ['交易类型', '当前状态', '金额(元)'])
 
-        if has_alipay_markers and '交易对方' in columns:
-            return 'alipay'
-        elif has_wechat_markers or has_alipay_markers:
+        # WeChat markers are unique to WeChat exports, so check them first;
+        # Alipay markers alone (e.g. English-only Alipay headers with no
+        # WeChat-specific columns) are otherwise sufficient for 'alipay'.
+        if has_wechat_markers:
             return 'wechat'
+        elif has_alipay_markers:
+            return 'alipay'
         return None
     except Exception:
         return None
@@ -174,10 +177,10 @@ def parse_csv_with_src(file_path: str, file_type: str) -> Optional[pd.DataFrame]
 
 
 def normalize_schema(df: pd.DataFrame, file_type: str = None) -> pd.DataFrame:
-    """Normalize parsed df to common schema.
-
-    Input (from src/parse.py) has columns: timestamp, merchant, description, amount, source.
-    Output adds: time (extracted hour), date, category (default='Other'), labeled=False.
+    """Normalize parsed df to the transactions table's common schema:
+    timestamp, merchant, description, amount (source/category_id/etc. are
+    added separately in insert_transactions, since they depend on upload
+    metadata, not the parsed file content).
     """
     df = df.copy()
 
@@ -186,15 +189,13 @@ def normalize_schema(df: pd.DataFrame, file_type: str = None) -> pd.DataFrame:
         raise ValueError("Missing 'timestamp' column after parsing")
 
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df['date'] = df['timestamp'].dt.date
-    df['time'] = df['timestamp'].dt.time
 
     # Ensure required columns
     for col in ['merchant', 'description', 'amount']:
         if col not in df.columns:
             df[col] = ''
 
-    return df[['timestamp', 'date', 'time', 'merchant', 'description', 'amount']]
+    return df[['timestamp', 'merchant', 'description', 'amount']]
 
 
 def create_upload_record(user_id: str, file_name: str, file_type: str, row_count: int = 0, error: str = None) -> str:
@@ -226,16 +227,22 @@ def update_upload_error(upload_id: str, error_msg: str) -> None:
         print(f"Error updating upload record: {e}")
 
 
-def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str):
-    """Insert normalized transactions into transactions table."""
+def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str, file_type: str):
+    """Insert normalized transactions into transactions table.
+
+    file_type ('alipay'/'wechat') maps directly to the transaction_source
+    enum. category_id is left null (no classifier wired into upload yet),
+    and needs_review=True so newly uploaded rows surface in the review queue.
+    """
     try:
-        # Add user_id and upload_id to each row
+        df = df.copy()
+        df['timestamp'] = df['timestamp'].apply(lambda ts: ts.isoformat())
         df['user_id'] = user_id
         df['upload_id'] = upload_id
-        df['labeled'] = False
-        df['category'] = 'Other'  # Default
+        df['source'] = file_type
         df['label_source'] = 'none'
-        df['confidence'] = 0.0
+        df['needs_review'] = True
+        df['is_manually_labeled'] = False
 
         rows = df.to_dict('records')
         supabase_client.table("transactions").insert(rows).execute()
