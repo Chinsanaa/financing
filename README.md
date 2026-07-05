@@ -114,8 +114,10 @@ python -m uvicorn main:app --reload
 ### Local Testing
 ```bash
 # Full stack test (auth, upload, train, classify)
-python START_LOCAL.py         # Comprehensive guide
-python TEST_LOCAL.py          # Verify setup works
+python scripts/run_all.py              # Full pipeline
+bash scripts/test_local.sh             # Verify setup works
+# See docs/guides/START_LOCAL.md for comprehensive guide
+# See docs/guides/TEST_LOCAL.md for testing details
 ```
 
 ---
@@ -124,12 +126,14 @@ python TEST_LOCAL.py          # Verify setup works
 
 | Document | Purpose |
 |---|---|
-| `PROJECT_SUMMARY.md` | Overview, architecture, all phases, deployment checklist |
-| `SECURITY_AUDIT.md` | Detailed audit + test specifications (RLS, JWT, rate limits, upload validation) |
-| `MIGRATION_GUIDE.md` | How to migrate personal data from old pipeline |
-| `DEPLOYMENT.md` | Production setup (Railway + Vercel + Supabase) |
+| `docs/PROJECT_SUMMARY.md` | Overview, architecture, all phases, deployment checklist |
+| `docs/SECURITY_AUDIT.md` | Detailed audit + test specifications (RLS, JWT, rate limits, upload validation) |
+| `docs/guides/MIGRATION_GUIDE.md` | How to migrate personal data from old pipeline |
+| `docs/guides/DEPLOYMENT.md` | Production setup (Railway + Vercel + Supabase) |
+| `docs/guides/START_LOCAL.md` | Local development setup |
+| `docs/guides/TEST_LOCAL.md` | Local testing guide |
 | `CLAUDE.md` | Project guidelines (user collaboration preferences) |
-| `context.md` | Full project memory (6 session logs, all decisions) |
+| `docs/context.md` | Full project memory (6 session logs, all decisions) |
 
 ---
 
