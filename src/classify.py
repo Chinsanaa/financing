@@ -29,13 +29,22 @@ from paths import (
 from feature_engineering import create_hybrid_feature_matrix
 
 
-def normalize_categories(df: pd.DataFrame) -> pd.DataFrame:
-    """Map legacy/extra rule categories to ML categories."""
+def normalize_categories(df: pd.DataFrame, valid_categories: list = None, catch_all: str = 'Other') -> pd.DataFrame:
+    """Map legacy/extra rule categories to valid categories.
+
+    Args:
+        df: transactions dataframe
+        valid_categories: list of allowed category names (defaults to ML_CATEGORIES for backward compat)
+        catch_all: category name for unmapped transactions (usually 'Other')
+    """
+    if valid_categories is None:
+        valid_categories = ML_CATEGORIES
+
     df = df.copy()
     df['category'] = df['category'].replace(CATEGORY_NORMALIZE)
-    unknown = ~df['category'].isin(ML_CATEGORIES)
+    unknown = ~df['category'].isin(valid_categories)
     if unknown.any():
-        df.loc[unknown, 'category'] = 'Other'
+        df.loc[unknown, 'category'] = catch_all
     return df
 
 
@@ -189,6 +198,8 @@ def classify_all(
     confidence_threshold=0.7,
     rules=None,
     bundle: Optional[ModelBundle] = None,
+    valid_categories: list = None,
+    catch_all: str = 'Other',
 ):
     """Classify transactions: rules first, then graduated-trust model ensemble.
 
@@ -312,7 +323,7 @@ def classify_all(
         df.loc[matched, 'label_source'] = 'rule'
 
     df = apply_description_overrides(df)
-    df = normalize_categories(df)
+    df = normalize_categories(df, valid_categories=valid_categories, catch_all=catch_all)
 
     # Routing: rules/overrides trusted; model predictions auto-apply only via
     # the calibrated-agreement gate above; everything else goes to review.
