@@ -2,14 +2,46 @@
 
 Multi-tenant financial dashboard for transaction classification and spending analysis.
 
-## Tech Stack
+## 🏗️ Architecture
 
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
+- **Framework**: Next.js 14 (App Router, TypeScript)
 - **Styling**: Tailwind CSS
-- **Auth**: Supabase Auth (@supabase/ssr)
-- **API**: Axios (calls FastAPI backend)
-- **Charts**: Recharts (optional, for trends visualization)
+- **Auth**: Supabase Auth (@supabase/ssr, HTTP-only cookies)
+- **API**: Axios (calls FastAPI backend at /api routes)
+- **State**: Component-level (useState, useEffect)
+- **Deployment**: Vercel
+
+**Technology**:
+- Next.js 14 with App Router (edge-ready)
+- TypeScript for type safety
+- Tailwind CSS for responsive design
+- Supabase SSR for secure session handling
+- Axios with bearer token auth
+
+---
+
+## 📊 Dashboard (6 Tabs)
+
+All tabs fetch data from FastAPI backend (`/dashboard/*` endpoints):
+
+| Tab | Purpose | Key Data |
+|---|---|---|
+| **📊 Overview** | KPI cards + category breakdown | Total txns, labeled%, spend, category % |
+| **💳 Budget** | Monthly income + per-category limits | Budget vs actual, overage alerts |
+| **💰 Savings** | Savings goals + anomaly detection | Savings rate, monthly goal progress |
+| **🎯 Action** | Over-budget alerts + insights | Actionable items, spending tips |
+| **📋 Reports** | Transaction table + export | Recent 100 txns, metadata, export buttons |
+| **✅ Review** | Pending categorizations | Transactions needing labels, model confidence |
+
+---
+
+## 🔐 Security
+
+- **HTTP-only cookies**: @supabase/ssr default
+- **JWT in headers**: Bearer token for FastAPI calls
+- **No localStorage**: Session persists via HTTP-only cookie
+- **CORS**: Frontend on Vercel, backend on Railway
+- **Input validation**: Pydantic schemas on backend
 
 ## Setup
 
