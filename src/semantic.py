@@ -136,16 +136,24 @@ def embed_texts(texts: list[str], encoder) -> np.ndarray:
 # Training / prediction / explanation
 # --------------------------------------------------------------------------
 
-def train_semantic_model(df_labeled: pd.DataFrame, encoder) -> dict:
+def train_semantic_model(df_labeled: pd.DataFrame, encoder, valid_categories: list = None) -> dict:
     """Fit LogisticRegression on embeddings of the labeled data.
 
     Mirrors retrain.py's filtering: labeled==True, category normalization,
     drop classes with < 2 samples. Returns {'clf', 'index', 'encoder_kind'}
     where index holds the embeddings/labels/merchants for nearest_examples().
+
+    Args:
+        df_labeled: dataframe with 'labeled' column and 'category' column
+        encoder: StaticModel or LsaEncoder instance
+        valid_categories: list of allowed category names (defaults to ML_CATEGORIES for backward compat)
     """
+    if valid_categories is None:
+        valid_categories = ML_CATEGORIES
+
     df = df_labeled[df_labeled['labeled'] == True].copy()
     df['category'] = df['category'].replace(CATEGORY_NORMALIZE)
-    df = df[df['category'].isin(ML_CATEGORIES)]
+    df = df[df['category'].isin(valid_categories)]
 
     counts = df['category'].value_counts()
     df = df[df['category'].isin(counts[counts >= 2].index)]
