@@ -1,32 +1,10 @@
-'use client';
+import HomeClient from './HomeClient';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase';
+// Auth-gated redirect: depends on per-request session state, so it must
+// never be statically prerendered (createClient() would run at build time
+// inside a Client Component, which is what HomeClient.tsx is).
+export const dynamic = 'force-dynamic';
 
 export default function HomePage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session) {
-        router.push('/dashboard');
-      } else {
-        router.push('/auth');
-      }
-    };
-
-    checkAuth();
-  }, [supabase, router]);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-600">Loading...</p>
-    </div>
-  );
+  return <HomeClient />;
 }
