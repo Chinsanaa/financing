@@ -4,37 +4,38 @@ import { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 
 interface Transaction {
-  transaction_id: string;
+  id: string;
+  date: string;
   merchant: string;
   description: string;
   amount: number;
-  category: string;
   confidence: number;
-  label_source: string;
-  needs_review: boolean;
+  suggested_category: string | null;
+}
+
+interface Category {
+  id: string;
+  name: string;
 }
 
 export default function LabelTab({ token }: { token: string }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [classifying, setClassifying] = useState(false);
+  const [acting, setActing] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-
-        // Fetch categories
-        const categoriesRes = await api.categories.list(token);
-        const categoryNames = categoriesRes.data.categories.map((c: any) => c.name);
-        setCategories(categoryNames);
-
-        // Fetch transactions to label
-        const txRes = await api.classify.predict(token, 50);
-        setTransactions(txRes.data.transactions);
+        const [queueRes, catRes] = await Promise.all([
+          api.get('/dashboard/review-queue', { headers: { Authorization: `Bearer ${token}` } }),
+          api.get('/categories/', { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        setTransactions(queueRes.data.transactions || []);
+        setCategories(catRes.data.categories || []);
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load transactions');
       } finally {
@@ -45,34 +46,50 @@ export default function LabelTab({ token }: { token: string }) {
     loadData();
   }, [token]);
 
-  const handleAccept = async () => {
-    if (currentIndex >= transactions.length) return;
-
-    const tx = transactions[currentIndex];
-    try {
-      await api.classify.accept(token, tx.transaction_id);
-      setTransactions(transactions.filter((_, i) => i !== currentIndex));
-      if (currentIndex >= transactions.length - 1) {
-        setCurrentIndex(Math.max(0, transactions.length - 2));
-      }
-    } catch (err: any) {
-      setError('Failed to accept classification');
+  const removeCurrent = (txs: Transaction[]) => {
+    const next = txs.filter((_, i) => i !== currentIndex);
+    setTransactions(next);
+    if (currentIndex >= next.length) {
+      setCurrentIndex(Math.max(0, next.length - 1));
     }
   };
 
-  const handleOverride = async (category: string) => {
+  const handleAccept = async () => {
     if (currentIndex >= transactions.length) return;
-
     const tx = transactions[currentIndex];
+
     try {
-      await api.classify.override(token, tx.transaction_id, category);
-      setTransactions(transactions.filter((_, i) => i !== currentIndex));
-      if (currentIndex >= transactions.length - 1) {
-        setCurrentIndex(Math.max(0, transactions.length - 2));
-      }
+      setActing(true);
+      await api.post(`/classify/${tx.id}/accept`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      removeCurrent(transactions);
     } catch (err: any) {
-      setError('Failed to override classification');
+      setError(err.response?.data?.detail || 'Failed to accept classification');
+    } finally {
+      setActing(false);
     }
+  };
+
+  const handleOverride = async (categoryId: string) => {
+    if (currentIndex >= transactions.length) return;
+    const tx = transactions[currentIndex];
+
+    try {
+      setActing(true);
+      await api.post(`/classify/${tx.id}/label`, { category_id: categoryId }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      removeCurrent(transactions);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to label transaction');
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleSkip = () => {
+    setCurrentIndex((i) => (i + 1) % transactions.length);
   };
 
   if (loading) {
@@ -137,46 +154,50 @@ export default function LabelTab({ token }: { token: string }) {
           <p className="text-gray-700">{tx.description}</p>
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="text-sm text-gray-600 mb-1">
-            <strong>Model Suggestion:</strong> {tx.category} ({Math.round(tx.confidence * 100)}% confidence)
-          </p>
-          {tx.needs_review && (
-            <p className="text-xs text-gray-500">This transaction needs manual review</p>
-          )}
-        </div>
+        {tx.suggested_category && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-sm text-gray-600">
+              <strong>Model Suggestion:</strong> {tx.suggested_category}
+              {tx.confidence > 0 && ` (${Math.round(tx.confidence * 100)}% confidence)`}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Actions */}
       <div className="space-y-2">
-        <button
-          onClick={handleAccept}
-          disabled={classifying}
-          className="w-full bg-green-600 text-white font-medium py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
-        >
-          ✓ Accept Suggestion
-        </button>
+        {tx.suggested_category && (
+          <button
+            onClick={handleAccept}
+            disabled={acting}
+            className="w-full bg-green-600 text-white font-medium py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+          >
+            ✓ Accept Suggestion
+          </button>
+        )}
 
         <div className="grid grid-cols-3 gap-2">
           {categories.map((cat) => (
             <button
-              key={cat}
-              onClick={() => handleOverride(cat)}
-              disabled={classifying}
+              key={cat.id}
+              onClick={() => handleOverride(cat.id)}
+              disabled={acting}
               className="bg-gray-200 text-gray-900 font-medium py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 transition text-sm"
             >
-              {cat}
+              {cat.name}
             </button>
           ))}
         </div>
       </div>
 
-      <button
-        onClick={() => setCurrentIndex(Math.min(currentIndex + 1, transactions.length - 1))}
-        className="w-full bg-gray-100 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-200 transition text-sm"
-      >
-        Skip
-      </button>
+      {transactions.length > 1 && (
+        <button
+          onClick={handleSkip}
+          className="w-full bg-gray-100 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-200 transition text-sm"
+        >
+          Skip
+        </button>
+      )}
     </div>
   );
 }
