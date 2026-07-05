@@ -86,6 +86,23 @@ scrub is the main one needing a user decision).
 
 ## Session Log
 
+### Session 35 (2026-07-06) — Code review fixes: phase-1-supabase-foundation vs main
+
+**Completed**: Ran an 8-angle automated code review of `phase-1-supabase-foundation` against `main`, then fixed 7 of 8 confirmed correctness bugs.
+
+**Bugs fixed**:
+1. `backend/main.py` — `AuthMiddleware` blocked `/auth/signup` and `/auth/login` themselves (not in the public-path exemption list), so no one could ever sign up or log in. Added `/auth/signup`, `/auth/login`, `/auth/refresh` to the exemption list.
+2. `backend/routes/uploads.py` — `insert_transactions`/`normalize_schema` wrote `date`, `time`, `labeled`, `category` columns that don't exist on the `transactions` table, and never set the NOT NULL `source` column, so every upload failed. Rewrote to match the actual schema: `source` set from `file_type`, `category_id` left null (no classifier wired into upload yet — see Open Questions), `needs_review=True` so uploaded rows surface for labeling.
+3. `backend/routes/training.py` — queried `.eq("labeled", True)`, a nonexistent column. Fixed to `.eq("is_manually_labeled", True)` with a `categories(name)` join so `retrain_model()` gets a `category` name column (transactions only store `category_id`).
+4. `src/retrain.py` — dead unconditional `pd.read_csv('data/labeled/labeled_transactions.csv')` that crashed every retrain in the deployed backend (no such file there) even though `df_labeled` was already passed in. Removed; the labeled-row filter now checks for either a `labeled` (CLI/CSV) or `is_manually_labeled` (Supabase) column.
+5. `src/semantic.py` + `src/eval_grouped.py` — `save_semantic_artifacts()`/`run_report()` ignored the per-training-run `paths` dict and always wrote to shared global files, so semantic model/calibrators/ensemble config were never uploaded to Supabase Storage and concurrent users' retrains could race on the same files. Both now accept `paths` and write there when given, falling back to the global CLI paths otherwise. `src/retrain.py` now passes `paths` through to both calls.
+6. `backend/routes/uploads.py` — `detect_csv_source()` misrouted Alipay exports lacking the `交易对方` header (e.g. English-only Alipay exports) to the WeChat parser. Reordered to check WeChat-unique markers first, then Alipay.
+7. `backend/routes/settings.py` — `delete_account()` read from Storage bucket `'user-data'`, which is never created (migration only creates `model_artifacts` and `uploads`), so cleanup silently no-opped. Now loops over both real buckets.
+
+**Not fixed — flagged as a separate decision**: `backend/routes/classify.py` imports `classify_all`/`load_model_bundle` but never calls them; no endpoint runs model inference on new transactions, so `category_id` is never set and the review queue's population depends entirely on `needs_review=True` at upload time (fixed above) rather than actual classification. Wiring per-user model loading (from Supabase Storage) into the upload or a dedicated classify path is a bigger design decision (which model version to load, cold-start behavior for users with no trained model yet, category_id vs category-name mapping) — needs a decision on approach before implementing, not a silent fix.
+
+**Next suggested step**: decide how/when classification should run (at upload time vs. on-demand vs. background job) and wire `classify_all` into that path.
+
 ### Session 32 (2026-07-03) — Phase 1: Multi-tenant Supabase foundation
 
 **Completed**: Full Phase 1 from the multi-tenant rewrite plan (`serene-sprouting-muffin.md`).

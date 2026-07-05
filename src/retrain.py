@@ -69,12 +69,11 @@ def retrain_model(
     print(f"AUTOMATED RETRAINING WORKFLOW — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*70)
 
-    # Load labeled data
-    labeled_path = 'data/labeled/labeled_transactions.csv'
-    df = pd.read_csv(labeled_path)
-
-    # Filter to only explicitly labeled rows (labeled==True) to match train.py
-    df_labeled = df_labeled[df_labeled['labeled'] == True].copy()
+    # Filter to only explicitly labeled rows to match train.py. CLI mode's CSV
+    # uses a 'labeled' boolean column; the Supabase-backed caller instead marks
+    # rows via 'is_manually_labeled'.
+    labeled_col = 'labeled' if 'labeled' in df_labeled.columns else 'is_manually_labeled'
+    df_labeled = df_labeled[df_labeled[labeled_col] == True].copy()
     df_labeled['category'] = df_labeled['category'].replace(CATEGORY_NORMALIZE)
     df_labeled = df_labeled[df_labeled['category'].isin(valid_categories)]
 
@@ -207,14 +206,14 @@ def retrain_model(
             print(f"   Using Model2Vec encoder (pretrained multilingual)")
 
         sem_model = sem.train_semantic_model(df_labeled, encoder, valid_categories=valid_categories)
-        sem.save_semantic_artifacts(sem_model)
+        sem.save_semantic_artifacts(sem_model, paths=paths)
         print(f"   [OK] semantic_classifier.pkl + semantic_index.pkl "
               f"({len(sem_model['index']['labels'])} indexed examples)")
 
         # Honest grouped evaluation: fits + saves both calibrators, derives
         # + saves the auto-apply threshold (or records that none qualifies).
         import eval_grouped
-        eval_results = eval_grouped.run_report(df_labeled=df_labeled, encoder=encoder)
+        eval_results = eval_grouped.run_report(df_labeled=df_labeled, encoder=encoder, paths=paths)
         thr = eval_results.get('threshold')
         if thr:
             print(f"   [OK] Graduated trust ENABLED: threshold {thr['threshold']} "

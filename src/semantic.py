@@ -209,12 +209,17 @@ def nearest_examples(text: str, encoder, index: dict, k: int = 3) -> list[dict]:
 # Artifact persistence
 # --------------------------------------------------------------------------
 
-def save_semantic_artifacts(model: dict) -> None:
-    SEMANTIC_MODEL.parent.mkdir(parents=True, exist_ok=True)
+def save_semantic_artifacts(model: dict, paths: Optional[dict] = None) -> None:
+    """Save to paths['semantic_model']/paths['semantic_index'] when given
+    (per-training-run isolation); otherwise the global data/processed/ files
+    (CLI mode)."""
+    model_path = paths['semantic_model'] if paths else SEMANTIC_MODEL
+    index_path = paths['semantic_index'] if paths else SEMANTIC_INDEX
+    model_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({'clf': model['clf'],
                  'encoder_kind': model['encoder_kind'],
-                 'lsa_encoder': model.get('lsa_encoder')}, SEMANTIC_MODEL)
-    joblib.dump(model['index'], SEMANTIC_INDEX)
+                 'lsa_encoder': model.get('lsa_encoder')}, model_path)
+    joblib.dump(model['index'], index_path)
 
 
 def load_semantic_artifacts() -> Optional[dict]:

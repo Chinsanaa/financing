@@ -41,12 +41,23 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
     user_id = request.state.user_id
 
     try:
-        # Fetch user's labeled transactions
-        response = supabase_client.table("transactions").select("*").eq("user_id", user_id).eq("labeled", True).execute()
+        # Fetch user's labeled transactions, joining categories for the
+        # category *name* (retrain_model works on category names, but
+        # transactions only store category_id)
+        response = (
+            supabase_client.table("transactions")
+            .select("*, categories(name)")
+            .eq("user_id", user_id)
+            .eq("is_manually_labeled", True)
+            .execute()
+        )
         if not response.data:
             raise HTTPException(status_code=400, detail="No labeled transactions to train on")
 
         df_labeled = pd.DataFrame(response.data)
+        df_labeled['category'] = df_labeled['categories'].apply(
+            lambda c: c['name'] if c else None
+        )
 
         # Fetch user's categories
         categories_response = supabase_client.table("categories").select("name").eq("user_id", user_id).execute()

@@ -93,11 +93,14 @@ ENVIRONMENT=production
 
 1. Go to https://vercel.com/dashboard
 2. Click **Add New** → **Project**
-3. Import repo: select `financing` → `frontend` directory
-4. Framework preset: **Next.js** (auto-detected)
-5. Click **Deploy**
+3. Import repo: select `Chinsanaa/financing`
+4. **IMPORTANT**: When prompted for "Root Directory", set it to `frontend/` (this is where `package.json` is located)
+5. Framework preset: **Next.js** (auto-detected)
+6. Click **Deploy**
 
-Vercel will automatically build and deploy.
+Vercel will automatically detect Next.js in the `frontend/` directory and build/deploy.
+
+**If you skip Step 4**: After importing, go to project **Settings** → **General** → **Root Directory** and set to `frontend/`, then redeploy.
 
 ### Step 3.2: Set Environment Variables
 

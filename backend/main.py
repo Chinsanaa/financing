@@ -65,8 +65,13 @@ class AuthMiddleware:
         self.app = app
 
     async def __call__(self, request: Request, call_next):
-        # Skip auth for health check and public routes
-        if request.url.path in ["/health", "/docs", "/openapi.json"]:
+        # Skip auth for health check, docs, and public auth routes
+        # (signup/login/refresh happen before a user has a token to send)
+        public_paths = [
+            "/health", "/docs", "/openapi.json",
+            "/auth/signup", "/auth/login", "/auth/refresh",
+        ]
+        if request.url.path in public_paths:
             return await call_next(request)
 
         # Extract token from Authorization header
