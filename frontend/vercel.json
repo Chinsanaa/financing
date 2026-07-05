@@ -2,10 +2,5 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "framework": "nextjs",
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@financing_supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@financing_supabase_anon_key",
-    "NEXT_PUBLIC_API_URL": "@financing_api_url"
-  }
+  "framework": "nextjs"
 }
