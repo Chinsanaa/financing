@@ -1,9 +1,12 @@
 """Authentication routes: signup, login, logout."""
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, EmailStr
 from config import supabase_client
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 class SignupRequest(BaseModel):
@@ -17,7 +20,8 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/signup")
-async def signup(req: SignupRequest):
+@limiter.limit("5/hour")
+async def signup(request: Request, req: SignupRequest):
     """Create a new user account.
 
     Supabase auth.users entry triggers on_auth_user_created() which:
@@ -40,7 +44,8 @@ async def signup(req: SignupRequest):
 
 
 @router.post("/login")
-async def login(req: LoginRequest):
+@limiter.limit("10/15 minutes")
+async def login(request: Request, req: LoginRequest):
     """Authenticate user and return access token."""
     try:
         response = supabase_client.auth.sign_in_with_password(

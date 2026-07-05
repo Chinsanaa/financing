@@ -5,11 +5,14 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import jwt
 from typing import Optional
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from config import settings
 
 # Initialize routers (will be imported below)
-from routes import auth, categories, uploads, training, classify, dashboard
+from routes import auth, categories, uploads, training, classify, dashboard, settings as settings_router
 
 # --- Startup / Shutdown ---
 @asynccontextmanager
@@ -36,6 +39,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Rate Limiting ---
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Please try again later."}
+    )
 
 
 # --- Auth Middleware ---
@@ -104,6 +118,7 @@ app.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 app.include_router(training.router, prefix="/training", tags=["training"])
 app.include_router(classify.router, prefix="/classify", tags=["classify"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(settings_router.router, prefix="/settings", tags=["settings"])
 
 
 # --- Root ---

@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase';
 import { api } from '@/utils/api';
-import UploadTab from '@/components/tabs/UploadTab';
-import LabelTab from '@/components/tabs/LabelTab';
 import StatsTab from '@/components/tabs/StatsTab';
-import CategoriesTab from '@/components/tabs/CategoriesTab';
-import TrainingTab from '@/components/tabs/TrainingTab';
+import BudgetTab from '@/components/tabs/BudgetTab';
+import SavingsTab from '@/components/tabs/SavingsTab';
+import ActionTab from '@/components/tabs/ActionTab';
+import ReportsTab from '@/components/tabs/ReportsTab';
 import ReviewTab from '@/components/tabs/ReviewTab';
 
-type TabType = 'upload' | 'label' | 'stats' | 'categories' | 'training' | 'review';
+type TabType = 'overview' | 'budget' | 'savings' | 'action' | 'reports' | 'review';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -19,7 +19,7 @@ export default function DashboardPage() {
 
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<TabType>('stats');
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,12 +55,12 @@ export default function DashboardPage() {
   }
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
-    { id: 'stats', label: 'Dashboard', icon: '📊' },
-    { id: 'upload', label: 'Upload', icon: '📁' },
-    { id: 'label', label: 'Label', icon: '🏷️' },
-    { id: 'review', label: 'Review', icon: '✅' },
-    { id: 'categories', label: 'Categories', icon: '📂' },
-    { id: 'training', label: 'Training', icon: '🔄' },
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'budget', label: 'Budget', icon: '💰' },
+    { id: 'savings', label: 'Savings', icon: '🏦' },
+    { id: 'action', label: 'Action Plan', icon: '📋' },
+    { id: 'reports', label: 'Reports', icon: '📄' },
+    { id: 'review', label: 'Review Queue', icon: '✅' },
   ];
 
   return (
@@ -71,6 +71,12 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-gray-900">Financing</h1>
           <div className="flex items-center gap-4">
             <p className="text-sm text-gray-600">{user?.email}</p>
+            <a
+              href="/settings"
+              className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition text-sm font-medium"
+            >
+              ⚙️ Settings
+            </a>
             <button
               onClick={handleLogout}
               className="px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition text-sm font-medium"
@@ -105,12 +111,12 @@ export default function DashboardPage() {
 
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'stats' && <StatsTab token={token} />}
-        {activeTab === 'upload' && <UploadTab token={token} />}
-        {activeTab === 'label' && <LabelTab token={token} />}
+        {activeTab === 'overview' && <StatsTab token={token} />}
+        {activeTab === 'budget' && <BudgetTab token={token} />}
+        {activeTab === 'savings' && <SavingsTab token={token} />}
+        {activeTab === 'action' && <ActionTab token={token} />}
+        {activeTab === 'reports' && <ReportsTab token={token} />}
         {activeTab === 'review' && <ReviewTab token={token} />}
-        {activeTab === 'categories' && <CategoriesTab token={token} />}
-        {activeTab === 'training' && <TrainingTab token={token} />}
       </div>
     </div>
   );

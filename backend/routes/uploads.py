@@ -26,47 +26,61 @@ class UploadResponse(BaseModel):
 
 @router.post("/")
 async def upload_file(request: Request, file: UploadFile = File(...)):
-    """Upload a CSV/Excel file (Alipay or WeChat format).
+    """Upload a CSV/Excel file (Alipay or WeChat format) with strict validation.
 
-    1. Save to temporary location
-    2. Detect format (Alipay or WeChat)
-    3. Parse using src/parse.py
-    4. Normalize to common schema
-    5. Insert into transactions table
-    6. Return upload_id
+    Validations:
+    1. Extension check (CSV or XLSX only)
+    2. Size limit (10MB max)
+    3. Content sniffing (attempt parse to detect format)
+    4. Row limit (50k max post-parse)
+    5. Normalize to common schema
+    6. Insert into transactions table
 
-    Returns upload_id for polling parse progress.
+    Returns upload_id. Failed uploads logged with error_message.
     """
     user_id = request.state.user_id
+    upload_id = None
 
+    # Validation 1: Extension check
     if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
         raise HTTPException(status_code=400, detail="Only CSV and Excel files are supported")
 
     try:
+        # Read content into memory
+        content = await file.read()
+
+        # Validation 2: Size limit (10MB)
+        MAX_SIZE = 10 * 1024 * 1024  # 10MB
+        if len(content) > MAX_SIZE:
+            raise ValueError(f"File exceeds 10MB limit ({len(content) / 1024 / 1024:.1f}MB)")
+
         # Save to temporary location
         import tempfile
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
-            content = await file.read()
             tmp.write(content)
             tmp_path = tmp.name
 
-        # Determine source (Alipay or WeChat) by reading header
+        # Validation 3: Content sniffing - detect format
         file_type = detect_csv_source(tmp_path)
         if not file_type:
-            raise HTTPException(status_code=400, detail="Could not detect file source. Expected Alipay or WeChat format.")
+            raise ValueError("Could not detect file source. Expected Alipay or WeChat format.")
 
-        # Parse using src/parse.py
+        # Validation 4: Parse and check row count
         df = parse_csv_with_src(tmp_path, file_type)
         if df is None or len(df) == 0:
-            raise HTTPException(status_code=400, detail=f"Could not parse {file_type} file. Check format.")
+            raise ValueError(f"Could not parse {file_type} file. Check format and encoding.")
+
+        MAX_ROWS = 50000
+        if len(df) > MAX_ROWS:
+            raise ValueError(f"File exceeds {MAX_ROWS} rows limit ({len(df)} rows)")
 
         # Normalize to common schema
         df_normalized = normalize_schema(df, file_type)
 
-        # Create upload record
-        upload_id = create_upload_record(user_id, file.filename, file_type)
+        # Create upload record (before inserting transactions)
+        upload_id = create_upload_record(user_id, file.filename, file_type, row_count=len(df_normalized), error=None)
 
-        # Insert transactions (labeled=False, category='Other')
+        # Insert transactions
         insert_transactions(user_id, df_normalized, upload_id)
 
         # Clean up temp file
@@ -79,10 +93,21 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
             "status": "parsed",
             "message": f"Uploaded {len(df_normalized)} transactions. Ready to label.",
         }
+
+    except ValueError as e:
+        # Validation failed - log with error message
+        error_msg = str(e)
+        if upload_id:
+            update_upload_error(upload_id, error_msg)
+        raise HTTPException(status_code=400, detail=error_msg)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Upload failed: {str(e)}")
+        # Unexpected error - log with error message
+        error_msg = f"Upload failed: {str(e)}"
+        if upload_id:
+            update_upload_error(upload_id, error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/{upload_id}")
@@ -172,20 +197,33 @@ def normalize_schema(df: pd.DataFrame, file_type: str = None) -> pd.DataFrame:
     return df[['timestamp', 'date', 'time', 'merchant', 'description', 'amount']]
 
 
-def create_upload_record(user_id: str, file_name: str, file_type: str) -> str:
+def create_upload_record(user_id: str, file_name: str, file_type: str, row_count: int = 0, error: str = None) -> str:
     """Create an uploads table entry."""
     try:
         response = supabase_client.table("uploads").insert({
             "user_id": user_id,
-            "file_name": file_name,
+            "original_filename": file_name,
             "file_type": file_type,
-            "status": "parsed",
+            "status": "failed" if error else "parsed",
+            "row_count": row_count,
+            "error_message": error,
             "created_at": datetime.utcnow().isoformat(),
         }).execute()
         return response.data[0]['id'] if response.data else None
     except Exception as e:
         print(f"Error creating upload record: {e}")
         return None
+
+
+def update_upload_error(upload_id: str, error_msg: str) -> None:
+    """Update upload record with error status."""
+    try:
+        supabase_client.table("uploads").update({
+            "status": "failed",
+            "error_message": error_msg,
+        }).eq("id", upload_id).execute()
+    except Exception as e:
+        print(f"Error updating upload record: {e}")
 
 
 def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str):
