@@ -4,6 +4,7 @@ import joblib
 from pathlib import Path
 import sys
 from datetime import datetime
+from typing import Optional, Dict
 sys.path.insert(0, str(Path.cwd()))
 
 from segment import clean_text, vectorize, build_vectorizer, LR_HYPERPARAMS
@@ -21,8 +22,49 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report, con
 USE_HYBRID_FEATURES = True
 
 
-def retrain_model():
-    """Retrain classifier with latest labeled data."""
+def retrain_model(
+    df_labeled: Optional[pd.DataFrame] = None,
+    valid_categories: Optional[list] = None,
+    paths: Optional[Dict[str, Path]] = None,
+    use_hybrid: bool = USE_HYBRID_FEATURES,
+):
+    """Retrain classifier with labeled data.
+
+    Args:
+        df_labeled: dataframe with 'labeled', 'category', 'merchant', 'description' columns.
+                   If None, loads from 'data/labeled/labeled_transactions.csv' (CLI mode).
+        valid_categories: list of allowed category names. If None, uses ML_CATEGORIES (CLI mode).
+        paths: dict with keys like 'classifier', 'vectorizer', 'semantic_model', etc.
+               If None, uses data/processed/ paths (CLI mode).
+        use_hybrid: whether to use hybrid feature engineering.
+
+    Returns:
+        dict with 'accuracy', 'f1_macro', 'n_samples', 'n_features' for model_runs tracking.
+    """
+    # Backward compatibility: fill in defaults for CLI usage
+    if df_labeled is None:
+        labeled_path = 'data/labeled/labeled_transactions.csv'
+        df_labeled = pd.read_csv(labeled_path)
+
+    if valid_categories is None:
+        valid_categories = ML_CATEGORIES
+
+    if paths is None:
+        # Default to local data/processed/ paths
+        proc_dir = Path('data/processed')
+        report_dir = Path('data/reports')
+        paths = {
+            'classifier': proc_dir / 'classifier.pkl',
+            'vectorizer': proc_dir / 'tfidf_vectorizer.pkl',
+            'vectorizer_hybrid': proc_dir / 'tfidf_vectorizer_hybrid.pkl',
+            'vectorizer_config': proc_dir / 'vectorizer_config.pkl',
+            'semantic_model': proc_dir / 'semantic_classifier.pkl',
+            'semantic_index': proc_dir / 'semantic_index.pkl',
+            'semantic_calibrator': proc_dir / 'semantic_calibrator.pkl',
+            'tfidf_calibrator': proc_dir / 'tfidf_calibrator.pkl',
+            'ensemble_config': proc_dir / 'ensemble_config.json',
+            'report': report_dir / 'TRAINING_REPORT.txt',
+        }
     print("="*70)
     print(f"AUTOMATED RETRAINING WORKFLOW — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*70)
@@ -32,9 +74,9 @@ def retrain_model():
     df = pd.read_csv(labeled_path)
 
     # Filter to only explicitly labeled rows (labeled==True) to match train.py
-    df_labeled = df[df['labeled'] == True].copy()
+    df_labeled = df_labeled[df_labeled['labeled'] == True].copy()
     df_labeled['category'] = df_labeled['category'].replace(CATEGORY_NORMALIZE)
-    df_labeled = df_labeled[df_labeled['category'].isin(ML_CATEGORIES)]
+    df_labeled = df_labeled[df_labeled['category'].isin(valid_categories)]
 
     # Labeled CSV stores the datetime as 'timestamp'; feature engineering
     # expects 'time'. Normalize once here.
@@ -133,28 +175,27 @@ def retrain_model():
 
     # Save artifacts
     print(f"\n5. Saving updated model artifacts...")
-    if USE_HYBRID_FEATURES:
+    paths['classifier'].parent.mkdir(parents=True, exist_ok=True)
+    if use_hybrid:
         # Save hybrid vectorizers with metadata
-        joblib.dump(vectorizer, 'data/processed/tfidf_vectorizer_hybrid.pkl')
-        joblib.dump({'use_hybrid': True}, 'data/processed/vectorizer_config.pkl')
-        print(f"   [OK] tfidf_vectorizer_hybrid.pkl (desc + merch vectorizers)")
+        joblib.dump(vectorizer, paths['vectorizer_hybrid'])
+        joblib.dump({'use_hybrid': True}, paths['vectorizer_config'])
+        print(f"   [OK] {paths['vectorizer_hybrid'].name} (desc + merch vectorizers)")
     else:
         # Save legacy vectorizer
-        joblib.dump(vectorizer, 'data/processed/tfidf_vectorizer.pkl')
-        joblib.dump({'use_hybrid': False}, 'data/processed/vectorizer_config.pkl')
-        print(f"   [OK] tfidf_vectorizer.pkl")
+        joblib.dump(vectorizer, paths['vectorizer'])
+        joblib.dump({'use_hybrid': False}, paths['vectorizer_config'])
+        print(f"   [OK] {paths['vectorizer'].name}")
 
-    joblib.dump(clf, 'data/processed/classifier.pkl')
-    print(f"   [OK] classifier.pkl")
-    print(f"   [OK] vectorizer_config.pkl")
+    joblib.dump(clf, paths['classifier'])
+    print(f"   [OK] {paths['classifier'].name}")
+    print(f"   [OK] {paths['vectorizer_config'].name}")
 
     # 5b. Semantic layer: embedding model + calibrators + agreement threshold.
     # All rebuilt from THIS label snapshot in the same pass, so the two models
     # never drift apart. On any failure, delete semantic artifacts so classify
     # degrades cleanly to review-everything (never pair stale artifacts).
     print(f"\n5b. Training semantic (embedding) layer...")
-    from paths import (SEMANTIC_MODEL, SEMANTIC_INDEX, SEMANTIC_CALIBRATOR,
-                       TFIDF_CALIBRATOR, ENSEMBLE_CONFIG)
     try:
         import semantic as sem
         encoder = sem.get_encoder()  # retrain is the one moment downloads may happen
@@ -165,7 +206,7 @@ def retrain_model():
         else:
             print(f"   Using Model2Vec encoder (pretrained multilingual)")
 
-        sem_model = sem.train_semantic_model(df_labeled, encoder)
+        sem_model = sem.train_semantic_model(df_labeled, encoder, valid_categories=valid_categories)
         sem.save_semantic_artifacts(sem_model)
         print(f"   [OK] semantic_classifier.pkl + semantic_index.pkl "
               f"({len(sem_model['index']['labels'])} indexed examples)")
@@ -184,9 +225,10 @@ def retrain_model():
     except Exception as e:
         print(f"   [WARN] Semantic layer failed ({type(e).__name__}: {e}) — "
               f"removing semantic artifacts; classifier falls back to review-everything")
-        for p in (SEMANTIC_MODEL, SEMANTIC_INDEX, SEMANTIC_CALIBRATOR,
-                  TFIDF_CALIBRATOR, ENSEMBLE_CONFIG):
-            p.unlink(missing_ok=True)
+        for key in ('semantic_model', 'semantic_index', 'semantic_calibrator',
+                    'tfidf_calibrator', 'ensemble_config'):
+            if key in paths:
+                paths[key].unlink(missing_ok=True)
 
     # Per-category evaluation on all labeled data
     print(f"\n6. PER-CATEGORY PERFORMANCE (on all {len(df_labeled)} labeled examples):")
@@ -199,7 +241,7 @@ def retrain_model():
             print(f"   {category:30s}: F1 {metrics['f1-score']:.3f}, Recall {metrics['recall']:.1%}, Precision {metrics['precision']:.1%}")
 
     # Save detailed report
-    report_path = Path('data/reports/TRAINING_REPORT.txt')
+    report_path = paths['report']
     report_path.parent.mkdir(parents=True, exist_ok=True)
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(f"RETRAINING REPORT — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
