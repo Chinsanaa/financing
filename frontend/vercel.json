@@ -3,18 +3,9 @@
   "outputDirectory": ".next",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "env": [
-    {
-      "key": "NEXT_PUBLIC_SUPABASE_URL",
-      "value": "@financing_supabase_url"
-    },
-    {
-      "key": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-      "value": "@financing_supabase_anon_key"
-    },
-    {
-      "key": "NEXT_PUBLIC_API_URL",
-      "value": "@financing_api_url"
-    }
-  ]
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@financing_supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@financing_supabase_anon_key",
+    "NEXT_PUBLIC_API_URL": "@financing_api_url"
+  }
 }
