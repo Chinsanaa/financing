@@ -1,5 +1,5 @@
 """Categories CRUD: list, create, update, delete user categories."""
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from config import supabase_client
@@ -64,14 +64,31 @@ async def update_category(request: Request, category_id: str, cat: CategoryUpdat
 
 
 @router.delete("/{category_id}")
-async def delete_category(request: Request, category_id: str):
+async def delete_category(request: Request, category_id: str, bg_tasks: BackgroundTasks):
     """Delete a category (user can only delete their own).
 
     Note: Database trigger reassigns any transactions in this category to 'Other'.
+    Enqueues background retrain since label distribution changed.
     """
     user_id = request.state.user_id
     try:
         response = supabase_client.table("categories").delete().eq("id", category_id).eq("user_id", user_id).execute()
+
+        # Enqueue retrain since label distribution changed
+        bg_tasks.add_task(queue_user_retrain, user_id)
+
         return {"message": "Category deleted"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+async def queue_user_retrain(user_id: str):
+    """Queue a background retrain for this user."""
+    try:
+        supabase_client.table("model_runs").insert({
+            "user_id": user_id,
+            "status": "queued",
+            "trigger": "category_edit",
+        }).execute()
+    except Exception as e:
+        print(f"Failed to queue retrain for user {user_id}: {e}")

@@ -22,8 +22,21 @@ export function getApiClient(token?: string): AxiosInstance {
   return apiClient;
 }
 
-// API endpoints
+// Generic HTTP methods
 export const api = {
+  get: (url: string, config?: any) => {
+    return getApiClient().get(url, config);
+  },
+  post: (url: string, data?: any, config?: any) => {
+    return getApiClient().post(url, data, config);
+  },
+  put: (url: string, data?: any, config?: any) => {
+    return getApiClient().put(url, data, config);
+  },
+  delete: (url: string, config?: any) => {
+    return getApiClient().delete(url, config);
+  },
+
   // Auth
   auth: {
     signup: async (email: string, password: string) => {

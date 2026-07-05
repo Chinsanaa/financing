@@ -16,9 +16,15 @@ interface Category {
   transaction_count: number;
 }
 
+interface Trend {
+  date: string;
+  total_spend: number;
+}
+
 export default function StatsTab({ token }: { token: string }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [byCategory, setByCategory] = useState<Category[]>([]);
+  const [trends, setTrends] = useState<Trend[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -27,13 +33,15 @@ export default function StatsTab({ token }: { token: string }) {
       try {
         setLoading(true);
 
-        const [summaryRes, categoryRes] = await Promise.all([
-          api.dashboard.summary(token),
-          api.dashboard.byCategory(token),
+        const [summaryRes, categoryRes, trendsRes] = await Promise.all([
+          api.get('/dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }),
+          api.get('/dashboard/by-category', { headers: { Authorization: `Bearer ${token}` } }),
+          api.get('/dashboard/trends?days=30', { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         setSummary(summaryRes.data);
         setByCategory(categoryRes.data.categories || []);
+        setTrends(trendsRes.data.trends || []);
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load stats');
       } finally {
@@ -50,7 +58,7 @@ export default function StatsTab({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900">Dashboard</h2>
+      <h2 className="text-xl font-bold text-gray-900">Overview</h2>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
@@ -121,6 +129,33 @@ export default function StatsTab({ token }: { token: string }) {
           </div>
         )}
       </div>
+
+      {/* Spending Trend */}
+      {trends.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="font-bold text-gray-900 mb-4">Recent Spending (30 days)</h3>
+          <div className="space-y-2">
+            {trends.slice(-7).map((trend) => {
+              const max = Math.max(...trends.map(t => t.total_spend));
+              const percentage = max > 0 ? (trend.total_spend / max) * 100 : 0;
+              return (
+                <div key={trend.date}>
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="text-sm text-gray-600">{trend.date}</p>
+                    <p className="text-sm font-medium text-gray-900">¥{trend.total_spend.toFixed(0)}</p>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded h-1.5">
+                    <div
+                      className="bg-green-500 h-1.5 rounded"
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
