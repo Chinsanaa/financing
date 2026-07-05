@@ -114,8 +114,16 @@ scrub is the main one needing a user decision).
 - `.env.local` (all API keys, gitignored)
 - `supabase/generate_seed_migration.py` (helper script to generate seed SQL from merchant_categories.py)
 
+**Phase 2 Work (this session, continued)**:
+- **Step 1a: Category parameterization rework** (COMPLETE, PR #13)
+  - `classify.py::normalize_categories()` → takes `valid_categories` + `catch_all` params
+  - `semantic.py::train_semantic_model()` → takes `valid_categories` param
+  - `retrain.py::retrain_model()` → complete refactor: now takes `df_labeled`, `valid_categories`, `paths` instead of reading hardcoded files
+  - All functions backward-compatible: CLI still works with defaults
+  - Foundation ready for FastAPI backend to pass per-user categories through
+
 **Open / Next**:
-- Phase 2 (Upload + Parse + Onboarding) — FastAPI backend on Railway, Next.js frontend on Vercel, wire up signup→verify→upload→label→train→dashboard
+- Phase 2 Step 1b+ (Upload + Parse + Onboarding) — FastAPI backend on Railway, Next.js frontend on Vercel, wire up signup→verify→upload→label→train→dashboard
 
 ### Session 31 (2026-07-02) — Semantic embeddings + calibrated confidence + graduated trust
 
