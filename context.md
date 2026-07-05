@@ -125,6 +125,89 @@ scrub is the main one needing a user decision).
 **Open / Next**:
 - Phase 2 Step 1b+ (Upload + Parse + Onboarding) — FastAPI backend on Railway, Next.js frontend on Vercel, wire up signup→verify→upload→label→train→dashboard
 
+### Session 33 (2026-07-05) — Phase 2 Step 1b: FastAPI Backend + CSV Parsing + Training + Supabase Storage
+
+**Completed**: Full backend skeleton + wired CSV parsing + training pipeline + model artifact storage.
+
+**What was built**:
+- **FastAPI backend skeleton** (`backend/` directory):
+  - `main.py` — FastAPI app with auth middleware (JWT validation from Supabase)
+  - `config.py` — environment configuration + Supabase client init
+  - `routes/auth.py` — signup, login, logout, refresh
+  - `routes/categories.py` — CRUD operations on user categories
+  - `routes/uploads.py` — CSV/Excel upload, format detection, parsing
+  - `routes/training.py` — trigger retrain_model(), background training, artifact upload
+  - `routes/classify.py` — classify unlabeled transactions, accept/override
+  - `routes/dashboard.py` — stats, trends, review queue, onboarding status
+  - `requirements.txt` — FastAPI, Uvicorn, Supabase, pandas, scikit-learn, joblib
+  - `.env.example` — template for Supabase credentials
+  - `README.md` — setup + API docs
+
+- **CSV Parsing Integration**:
+  - Integrated existing `src/parse.py` parsers (Alipay, WeChat, generic bank CSVs)
+  - `routes/uploads.py` auto-detects source, parses to common schema (timestamp, merchant, description, amount)
+  - Handles both `.csv` and `.xlsx` files
+  - Normalizes schema: extracts date/time, ensures required columns
+
+- **Training Pipeline Wired**:
+  - `routes/training.py::trigger_retrain()` queues background task
+  - `routes/training.py::run_training()` implements background work:
+    1. Creates temp directory for model artifacts
+    2. Calls `retrain_model()` with user's labeled data + categories
+    3. Uploads all artifacts to Supabase Storage (`models/{user_id}/{model_run_id}/`)
+    4. Updates `model_runs` table with metrics + storage path
+    5. Cleans up temp directory
+  - Handles errors gracefully: failures marked in DB, not silent
+
+- **Supabase Storage Setup**:
+  - Created `20260704000000_create_storage_buckets.sql` migration
+  - `model_artifacts` bucket: user-scoped paths (`models/{user_id}/...`)
+  - `uploads` bucket: for original CSV/Excel files
+  - RLS policies: users can only read/write/delete their own artifacts
+  - Extraction of user_id from path prefix ensures isolation
+
+- **Architecture**:
+  ```
+  Client (Next.js)
+    ↓ [JWT in Authorization header]
+  FastAPI (Railway)
+    ├─ Auth middleware: validate JWT → user_id
+    ├─ Routes: upload CSV → parse → store in DB
+    ├─ Routes: train → call retrain_model() → upload artifacts → update DB
+    ├─ Routes: classify → load latest model → score transactions
+    └─ Supabase client (service role key, backend only)
+       ↓ RLS policies enforce per-user isolation
+  Supabase PostgreSQL + Storage (multi-tenant)
+  ```
+
+**What works end-to-end**:
+- ✅ JWT validation in auth middleware
+- ✅ CSV upload → parse → normalize → insert into transactions
+- ✅ Training task queue + execution + artifact storage
+- ✅ Supabase Storage RLS isolation
+- ✅ All syntax validated (Python 3.10+)
+
+**What's stubbed / next**:
+- [ ] Load models from Supabase Storage in `classify.py` (currently loads local models; cloud fallback optional)
+- [ ] Next.js frontend signup→verify→upload→label→dashboard flows
+- [ ] Deploy to Railway (backend) + Vercel (frontend)
+
+**Files created**:
+- `backend/main.py`, `backend/config.py`
+- `backend/requirements.txt`, `.env.example`, `README.md`
+- `backend/routes/{auth,categories,uploads,training,classify,dashboard,__init__}.py`
+- `supabase/migrations/20260704000000_create_storage_buckets.sql`
+
+**Decisions confirmed**:
+- ✅ Supabase Storage for model artifacts (user-scoped paths)
+- ✅ Background tasks for training (FastAPI BackgroundTasks)
+- ✅ Service role key for backend, anon key + RLS for frontend
+- ✅ All CSV/Excel parsing via existing `src/parse.py` (reuses proven code)
+
+**Open / Next**:
+- Phase 2 Step 2: Build Next.js frontend (signup, verify, upload UI, label batch, 6-tab dashboard)
+- Phase 2 Step 3: Deploy both services (Railway + Vercel)
+
 ### Session 31 (2026-07-02) — Semantic embeddings + calibrated confidence + graduated trust
 
 **Motivation**: the ML fallback scored only 36.5% on genuinely unseen merchants
