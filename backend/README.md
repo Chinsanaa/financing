@@ -1,36 +1,44 @@
-# Financing Backend — FastAPI Multi-Tenant API
+# FastAPI Backend — Financing SaaS
 
-Multi-tenant SaaS backend for transaction classification. Handles auth, uploads, training, and classification.
+**Framework**: FastAPI with Supabase integration  
+**Deployment**: Railway  
+**Port**: 8000
 
-## Architecture
+Multi-tenant SaaS backend for transaction classification with 7 route groups.
 
-- **Framework**: FastAPI + Uvicorn
-- **Database**: Supabase PostgreSQL (RLS for multi-tenant isolation)
-- **Auth**: Supabase Auth (JWT tokens)
-- **ML**: Parameterized pipeline from `src/` (classify.py, semantic.py, retrain.py)
+---
 
-## Setup
+## 🏗️ Architecture
 
-### 1. Install Dependencies
+7 route groups handling the complete SaaS workflow:
+
+| Route | Purpose | Key Endpoints |
+|-------|---------|---|
+| **Auth** | User authentication | POST `/auth/signup`, `/auth/login`, `/auth/logout` |
+| **Categories** | Spending categories | GET/POST/PATCH/DELETE `/categories/` |
+| **Uploads** | File uploads | POST `/uploads/` with CSV/Excel |
+| **Training** | Model training | POST `/training/retrain`, GET `/training/{id}` |
+| **Classify** | Categorize transactions | POST `/classify/{id}/label`, `/classify/{id}/accept` |
+| **Dashboard** | Analytics & stats | GET `/dashboard/{endpoint}` (8 endpoints) |
+| **Settings** | User management | GET/PATCH `/settings/profile`, DELETE `/settings/account` |
+
+---
+
+## 📋 Setup
+
+### Local Development
+
 ```bash
 pip install -r requirements.txt
-```
 
-### 2. Configure Environment
-Copy `.env.example` to `.env` and fill in:
-```bash
-cp .env.example .env
-```
+# Create .env.local
+SUPABASE_URL=https://[project-id].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=[secret-key]
+SUPABASE_JWT_SECRET=[jwt-secret]
+ENVIRONMENT=development
 
-Get your Supabase credentials from the Supabase dashboard:
-- `SUPABASE_URL`: Project URL
-- `SUPABASE_ANON_KEY`: Anon key (for client requests)
-- `SUPABASE_SERVICE_ROLE_KEY`: Service role key (backend only, secret!)
-- `SUPABASE_JWT_SECRET`: JWT secret (for token verification)
-
-### 3. Run Locally
-```bash
-python main.py
+# Run
+python -m uvicorn main:app --reload
 ```
 
 Server runs on `http://localhost:8000`. API docs at `/docs`.
