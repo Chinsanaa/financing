@@ -86,6 +86,20 @@ scrub is the main one needing a user decision).
 
 ## Session Log
 
+### Session 38 (2026-07-06) — Fix Railway backend outage: `$PORT` not shell-expanded
+
+**Completed**: Diagnosed and fixed a full backend outage. User reported upload failing; investigation found the entire Railway-hosted FastAPI backend was crash-looping — `/health` returned 502 on every request, not just uploads.
+
+**Root cause**: `backend/railway.json`'s `deploy.startCommand` was `uvicorn main:app --host 0.0.0.0 --port $PORT` (also mirrored in `backend/Procfile`). Railway invokes `startCommand` without a shell, so `$PORT` was passed to uvicorn literally as the 5-character string `"$PORT"` instead of being substituted with the actual assigned port. uvicorn logs confirmed: `Error: Invalid value for '--port': '$PORT' is not a valid integer.` — crashing on every container start, restart-looping per `restartPolicyType: ON_FAILURE`.
+
+Confirmed via Railway CLI (`railway deployment list --json`) that this project uses **config-as-code**: `configFile: "/backend/railway.json"` in the deployment metadata means Railway reads `startCommand` fresh from that committed file on every deploy — a dashboard-level override (tried first) would have been silently discarded on the next deploy, so the fix had to land in the repo file itself, not just Railway's settings.
+
+**Fix**: wrapped the command in an explicit `sh -c "..."` in both `railway.json` and `Procfile` so the inner shell performs the substitution regardless of how Railway invokes the outer command. Also fixed `backend/Dockerfile`'s `CMD` (was exec-form JSON array, hardcoded to port 8000, would have ignored `$PORT` entirely if ever used as the effective start command) to shell form with a `${PORT:-8000}` fallback, and fixed the `HEALTHCHECK` to read the actual bound port instead of hardcoding 8000 — both as defense-in-depth in case the `railway.json` override is ever removed.
+
+**Tooling note**: got Railway CLI access this session via `railway login` (interactive OAuth) + `railway setup agent` (installed the `use-railway` skill + MCP server, effective next session restart). Diagnosed via `railway deployment list --json` (found the crash-looping deployment + its config source) and `railway logs --latest --json` (found the exact uvicorn error).
+
+**Still open**: multi-file upload support was requested (currently `UploadTab` only accepts one file at a time) — not yet started, blocked behind getting the backend healthy first. A full codebase review for "missing or illogical" items was also requested and not yet done this session.
+
 ### Session 37 (2026-07-06) — Wire the onboarding tabs (Upload, Categories, Label, Training) into the dashboard
 
 **Completed**: Found that `UploadTab.tsx`, `CategoriesTab.tsx`, `LabelTab.tsx`, and `TrainingTab.tsx` all existed as built components but were never imported anywhere — `DashboardClient.tsx` only rendered Overview/Budget/Savings/Action/Reports/Review. The database schema's `onboarding_phase` enum (`upload → categories → labeling → complete`) had no UI actually driving a user through it; it was only ever displayed as read-only text in Settings.
