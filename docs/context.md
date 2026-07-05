@@ -86,6 +86,22 @@ scrub is the main one needing a user decision).
 
 ## Session Log
 
+### Session 36 (2026-07-06) — Fix signup failure (500 "Database error saving new user")
+
+**Completed**: Diagnosed and fixed a bug that broke every signup on the deployed (remote Supabase) project.
+
+**What was wrong**: `initialize_default_categories()` (trigger on `profiles` INSERT, fires as a side effect of `auth.users` INSERT during signup) referenced `categories` and `budget_config` without schema-qualifying them. It runs under a `search_path` that doesn't include `public` (the internal auth role's restricted default), so the unqualified names failed to resolve — Postgres logs showed `relation "categories" does not exist`. This aborted the whole signup transaction; GoTrue surfaced it as a generic `500 Database error saving new user`.
+
+While testing the fix (deleting a test user, which cascades to deleting their categories), found a second, independent bug: `reassign_deleted_category_transactions()` (trigger on `categories` DELETE — fires on **any** category deletion, not just account cleanup) referenced `transactions.updated_at`, a column that doesn't exist on the `transactions` table. This would break category deletion for any real user, not just this diagnostic.
+
+**Fix**: Applied two migrations directly to the remote project via the Supabase MCP tools (`apply_migration`), then created matching local migration files so `supabase/migrations/` stays in sync with what's actually live:
+- `20260705194314_fix_search_path_in_trigger_functions.sql` — schema-qualifies every table reference in `handle_new_user()`, `initialize_default_categories()`, `reassign_deleted_category_transactions()`, and pins `SET search_path = public, pg_temp` on all three (defense in depth).
+- `20260705194600_fix_reassign_category_trigger_missing_column.sql` — drops the nonexistent `updated_at` column from the UPDATE in `reassign_deleted_category_transactions()`.
+
+**Verified end-to-end** against the live project (`pxxqqffwummhkohnrvtz`): signup now returns 200 and correctly cascades to 1 profile + 7 categories + 1 budget_config row; deleting that test user cascades cleanly through category deletion with no errors.
+
+**Why this stayed hidden so long**: local CLI (`supabase status`) never reproduces this — it's specific to how the auth role's `search_path` is configured on the hosted project, not something a local schema read or `py_compile`/`npm run build` check would catch. Signal for next time: when a Postgres-trigger-driven flow "does nothing" or returns a generic error remotely but looks fine in the SQL, check `get_logs(service="postgres")` for the real error before guessing at the application layer.
+
 ### Session 35 (2026-07-06) — Code review fixes: phase-1-supabase-foundation vs main
 
 **Completed**: Ran an 8-angle automated code review of `phase-1-supabase-foundation` against `main`, then fixed 7 of 8 confirmed correctness bugs.
