@@ -86,6 +86,21 @@ scrub is the main one needing a user decision).
 
 ## Session Log
 
+### Session 37 (2026-07-06) — Wire the onboarding tabs (Upload, Categories, Label, Training) into the dashboard
+
+**Completed**: Found that `UploadTab.tsx`, `CategoriesTab.tsx`, `LabelTab.tsx`, and `TrainingTab.tsx` all existed as built components but were never imported anywhere — `DashboardClient.tsx` only rendered Overview/Budget/Savings/Action/Reports/Review. The database schema's `onboarding_phase` enum (`upload → categories → labeling → complete`) had no UI actually driving a user through it; it was only ever displayed as read-only text in Settings.
+
+**What was wrong with LabelTab specifically**: it called `api.classify.predict()` and `api.classify.override()`, which point to endpoints that don't exist on the real backend (`POST /classify/` isn't a route; the real routes are `/classify/{id}/label` expecting `category_id`, and `/classify/{id}/accept`). This is the same stale `api.classify` wrapper flagged in the Session 35 code review — `ReviewTab.tsx` already worked around it by calling the raw endpoints directly instead of going through `api.classify`.
+
+**Fix**:
+- Rewrote `LabelTab.tsx` to fetch from `/dashboard/review-queue` (same source `ReviewTab` uses) and act via the real `/classify/{id}/label` and `/classify/{id}/accept` endpoints, keeping its one-at-a-time swipe UX (vs. `ReviewTab`'s table view) — added back a "Skip" control using an index into the queue rather than mutating it.
+- Added Upload, Categories, Label, and Training as tabs in `DashboardClient.tsx`, alongside the existing six.
+- Made "Upload" the default landing tab instead of "Overview" (a brand-new user with no transactions yet would otherwise land on empty charts).
+
+**Verified**: `npx tsc --noEmit` clean, full `npm run build` clean, dev server serves `/dashboard` with no runtime errors. Did not verify interactively in a browser (no visual browser tool available in this environment) — the underlying endpoints (`uploads.py`, `categories.py`, `classify.py` label/accept, `dashboard.py` review-queue, `training.py`) were each already confirmed working via direct testing earlier in this session.
+
+**Still open**: `category_id`/`needs_review` are still never set by actual model inference (see Session 35's open question on classify.py) — so right after upload, every transaction sits in the review queue with no `suggested_category`, meaning Label/Review always show manual-only choices until a model has been trained at least once via the Training tab.
+
 ### Session 36 (2026-07-06) — Fix signup failure (500 "Database error saving new user")
 
 **Completed**: Diagnosed and fixed a bug that broke every signup on the deployed (remote Supabase) project.

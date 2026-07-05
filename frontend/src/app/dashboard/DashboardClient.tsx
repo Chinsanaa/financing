@@ -9,8 +9,22 @@ import SavingsTab from '@/components/tabs/SavingsTab';
 import ActionTab from '@/components/tabs/ActionTab';
 import ReportsTab from '@/components/tabs/ReportsTab';
 import ReviewTab from '@/components/tabs/ReviewTab';
+import UploadTab from '@/components/tabs/UploadTab';
+import CategoriesTab from '@/components/tabs/CategoriesTab';
+import LabelTab from '@/components/tabs/LabelTab';
+import TrainingTab from '@/components/tabs/TrainingTab';
 
-type TabType = 'overview' | 'budget' | 'savings' | 'action' | 'reports' | 'review';
+type TabType =
+  | 'overview'
+  | 'budget'
+  | 'savings'
+  | 'action'
+  | 'reports'
+  | 'review'
+  | 'upload'
+  | 'categories'
+  | 'label'
+  | 'training';
 
 export default function DashboardClient() {
   const router = useRouter();
@@ -18,7 +32,7 @@ export default function DashboardClient() {
 
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>('upload');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,6 +68,10 @@ export default function DashboardClient() {
   }
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
+    { id: 'upload', label: 'Upload', icon: '📤' },
+    { id: 'categories', label: 'Categories', icon: '🏷️' },
+    { id: 'label', label: 'Label', icon: '🖊️' },
+    { id: 'training', label: 'Training', icon: '🤖' },
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'budget', label: 'Budget', icon: '💰' },
     { id: 'savings', label: 'Savings', icon: '🏦' },
@@ -110,6 +128,10 @@ export default function DashboardClient() {
 
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {activeTab === 'upload' && <UploadTab token={token} />}
+        {activeTab === 'categories' && <CategoriesTab token={token} />}
+        {activeTab === 'label' && <LabelTab token={token} />}
+        {activeTab === 'training' && <TrainingTab token={token} />}
         {activeTab === 'overview' && <StatsTab token={token} />}
         {activeTab === 'budget' && <BudgetTab token={token} />}
         {activeTab === 'savings' && <SavingsTab token={token} />}
