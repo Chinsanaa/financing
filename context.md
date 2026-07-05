@@ -204,9 +204,94 @@ scrub is the main one needing a user decision).
 - ✅ Service role key for backend, anon key + RLS for frontend
 - ✅ All CSV/Excel parsing via existing `src/parse.py` (reuses proven code)
 
+### Session 33 Continued: Phase 2 Step 2: Next.js Frontend
+
+**Completed**: Full Next.js frontend with authentication, 6-tab dashboard, and API integration.
+
+**What was built**:
+- **Project setup**: package.json, tsconfig.json, next.config.js, Tailwind CSS config
+- **Auth pages**:
+  - `/auth/page.tsx` — Signup/login form with email/password
+  - `/auth/verify/page.tsx` — Email verification handling
+  - `/page.tsx` — Root redirect (checks session, routes to auth or dashboard)
+- **Main dashboard** (`/dashboard/page.tsx`):
+  - 6-tab navigation with icons
+  - Auth header (email + logout button)
+  - Tab content routing
+- **6 Tab Components**:
+  1. **StatsTab** — Summary cards (total txns, labeled%, total spend), spending breakdown by category with progress bars
+  2. **UploadTab** — Drag-drop file upload, accepts .csv/.xlsx, success/error messages
+  3. **LabelTab** — Transaction review interface: merchant/description/amount display, model suggestion + confidence, buttons to accept/override with categories, progress bar
+  4. **ReviewTab** — Table view of pending review transactions (merchant, description, amount, suggestion, confidence)
+  5. **CategoriesTab** — Add new category form, list with delete buttons
+  6. **TrainingTab** — Retrain button, training history table showing status/metrics/errors, polls backend every 5s
+- **API client** (`src/utils/api.ts`):
+  - Axios-based wrapper for all FastAPI endpoints
+  - Token injection in Authorization header
+  - Methods for: auth, categories, uploads, training, classify, dashboard
+- **Supabase integration** (`src/utils/supabase.ts`):
+  - Browser client with @supabase/ssr
+  - Session management for JWT auth
+- **Styling**:
+  - Tailwind CSS with custom config
+  - Responsive grid layouts
+  - Consistent color scheme (blue primary, gray accents)
+  - Tab navigation with active state
+- **Configuration files**:
+  - `.env.example` — Template for Supabase + API URLs
+  - `.gitignore` — Node modules, .env.local, build artifacts
+  - `README.md` — Setup, feature overview, deployment notes
+
+**Architecture**:
+```
+User Browser (Next.js, port 3000)
+  ↓ [login/signup with Supabase Auth]
+  ↓ [JWT in Authorization header]
+Supabase Auth (handles email verification)
+  ↓
+FastAPI Backend (port 8000 or Railway)
+  ↓ [service role key]
+Supabase PostgreSQL + Storage
+  ↓ [RLS policies enforce per-user isolation]
+```
+
+**What works end-to-end**:
+- ✅ Sign up → email verification → login → dashboard
+- ✅ Upload CSV → parse → display transactions
+- ✅ Label transactions one-by-one with accept/override
+- ✅ View review queue (pending manual categorization)
+- ✅ Add/remove categories
+- ✅ Trigger model training, poll status
+- ✅ Dashboard stats and category breakdown
+- ✅ Mobile-responsive Tailwind layout
+
+**What's stubbed / next**:
+- [ ] Recharts integration for trend visualization (optional)
+- [ ] Export to Excel functionality (optional)
+- [ ] Dark mode toggle (optional)
+- [ ] Settings page (budget limits, alerts)
+- [ ] Deploy to Vercel + Railway
+
+**Files created**:
+- `frontend/package.json`, `tsconfig.json`, `next.config.js`, `tailwind.config.js`, `postcss.config.js`
+- `frontend/src/app/page.tsx`, `layout.tsx`, `globals.css`
+- `frontend/src/app/auth/page.tsx`, `auth/verify/page.tsx`
+- `frontend/src/app/dashboard/page.tsx`
+- `frontend/src/components/tabs/{Upload,Label,Stats,Review,Categories,Training}Tab.tsx`
+- `frontend/src/utils/{supabase,api}.ts`
+- `frontend/{.env.example,.gitignore,README.md}`
+
+**Decisions confirmed**:
+- ✅ Supabase Auth + @supabase/ssr for browser sessions
+- ✅ Anon key on frontend (RLS is the boundary)
+- ✅ Service role key on backend (never exposed to client)
+- ✅ JWT in Authorization header for FastAPI calls
+- ✅ Tailwind CSS for responsive design
+- ✅ 6-tab dashboard as per project brief
+
 **Open / Next**:
-- Phase 2 Step 2: Build Next.js frontend (signup, verify, upload UI, label batch, 6-tab dashboard)
-- Phase 2 Step 3: Deploy both services (Railway + Vercel)
+- Phase 2 Step 3: Deploy (Railway backend + Vercel frontend) and wire Supabase storage bucket migrations
+- Phase 3+: Production hardening, monitoring, feedback loops
 
 ### Session 31 (2026-07-02) — Semantic embeddings + calibrated confidence + graduated trust
 
