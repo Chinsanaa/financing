@@ -33,6 +33,9 @@ export const api = {
   put: (url: string, data?: any, config?: any) => {
     return getApiClient().put(url, data, config);
   },
+  patch: (url: string, data?: any, config?: any) => {
+    return getApiClient().patch(url, data, config);
+  },
   delete: (url: string, config?: any) => {
     return getApiClient().delete(url, config);
   },
