@@ -222,14 +222,20 @@ def save_semantic_artifacts(model: dict, paths: Optional[dict] = None) -> None:
     joblib.dump(model['index'], index_path)
 
 
-def load_semantic_artifacts() -> Optional[dict]:
+def load_semantic_artifacts(paths: Optional[dict] = None) -> Optional[dict]:
     """Load model + index + a usable encoder. None if anything is missing —
-    callers then degrade to non-semantic behavior."""
-    if not (SEMANTIC_MODEL.exists() and SEMANTIC_INDEX.exists()):
+    callers then degrade to non-semantic behavior.
+
+    `paths` (keys 'semantic_model'/'semantic_index', same dict shape as
+    save_semantic_artifacts) loads a specific training run's artifacts;
+    None keeps the global CLI behavior."""
+    model_path = Path(paths['semantic_model']) if paths else SEMANTIC_MODEL
+    index_path = Path(paths['semantic_index']) if paths else SEMANTIC_INDEX
+    if not (model_path.exists() and index_path.exists()):
         return None
     try:
-        blob = joblib.load(SEMANTIC_MODEL)
-        index = joblib.load(SEMANTIC_INDEX)
+        blob = joblib.load(model_path)
+        index = joblib.load(index_path)
     except Exception:
         return None
 

@@ -78,18 +78,20 @@ file rather than leaving a stale record.
   Bayes on TF-IDF vectors). Only escalate to something heavier if accuracy
   genuinely requires it, and explain why before doing so.
 
-## File Structure (proposed, adjust as needed)
+## File Structure
 
 ```
-/data/raw/              # original CSV exports, untouched
-/data/processed/        # normalized + classified data, models
-/data/labeled/          # training labels + merchant rules
-/data/intermediate/     # pipeline stage artifacts
-/data/exports/          # Excel review exports
-/data/reports/          # training reports
-/output/                # generated charts and debug samples
-/src/                   # active pipeline scripts
-/_archive/              # old experiments and one-off scripts
+/frontend/              # Next.js app (Vercel) — the product UI
+/backend/               # FastAPI app (Railway) — API + per-user ML glue
+/src/                   # ML pipeline modules (imported by backend + tests)
+/supabase/              # migrations (schema, RLS, storage, fixes)
+/tests/                 # pytest suite for src/
+/docs/                  # context.md (project memory), audits, guides
+/data/                  # gitignored user data + example templates
 ```
+
+See `REPO_STRUCTURE.md` for the full annotated tree. The old Streamlit and
+Flask/PWA UIs and `_archive/` were removed 2026-07-06 (recoverable from git
+history).
 ## Automation
 - Always update context.md and readme.md after every file change. Include the most essential parts and try to be concise.

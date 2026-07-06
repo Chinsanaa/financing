@@ -51,7 +51,11 @@ sql_lines.extend([
     "",
     "  RETURN NEW;",
     "END;",
-    "$$ LANGUAGE plpgsql;",
+    # SECURITY DEFINER + pinned search_path are REQUIRED: this trigger fires
+    # during signup under the auth role, whose search_path does not include
+    # public — without these, every signup fails with 'Database error saving
+    # new user' (see migration 20260705194314, which fixed exactly this).
+    "$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;",
     "",
     "-- Attach the trigger to profiles",
     "CREATE TRIGGER after_profile_created",

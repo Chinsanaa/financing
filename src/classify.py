@@ -92,20 +92,26 @@ def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_models() -> Tuple[Optional[object], Optional[object], Optional[dict]]:
+def load_models(paths: Optional[dict] = None) -> Tuple[Optional[object], Optional[object], Optional[dict]]:
     """
     Load classifier artifacts if they exist; return (vectorizer, classifier, config).
     Config indicates whether to use hybrid or legacy features.
     Returns (None, None, None) for rules-only mode.
-    """
-    if VECTORIZER.exists() and CLASSIFIER.exists():
-        vectorizer = joblib.load(VECTORIZER)
-        classifier = joblib.load(CLASSIFIER)
 
-        # Load config to determine feature type (hybrid or legacy)
-        config_path = VECTORIZER.parent / 'vectorizer_config.pkl'
+    `paths` (same keys as retrain_model's paths dict) loads a specific
+    training run's artifacts (e.g. per-user artifacts downloaded from
+    Storage); None keeps the global data/processed/ CLI behavior.
+    """
+    vectorizer_path = paths['vectorizer'] if paths else VECTORIZER
+    classifier_path = paths['classifier'] if paths else CLASSIFIER
+    config_path = paths['vectorizer_config'] if paths else VECTORIZER.parent / 'vectorizer_config.pkl'
+
+    if Path(vectorizer_path).exists() and Path(classifier_path).exists():
+        vectorizer = joblib.load(vectorizer_path)
+        classifier = joblib.load(classifier_path)
+
         config = {'use_hybrid': False}  # Default to legacy
-        if config_path.exists():
+        if Path(config_path).exists():
             config = joblib.load(config_path)
 
         return vectorizer, classifier, config
@@ -136,28 +142,36 @@ class ModelBundle:
                 and self.ensemble.get('threshold') is not None)
 
 
-def load_model_bundle() -> ModelBundle:
+def load_model_bundle(paths: Optional[dict] = None) -> ModelBundle:
     """Load all model artifacts. Never raises; missing pieces are None.
 
     Note: hybrid vectorizers are saved as tfidf_vectorizer_hybrid.pkl; the
     legacy path is VECTORIZER. We prefer whichever the config points to.
+
+    `paths` (same keys as retrain_model's paths dict) loads a specific
+    training run's artifacts; None keeps the global CLI behavior.
     """
     bundle = ModelBundle()
 
-    vectorizer, classifier, config = load_models()
+    classifier_path = Path(paths['classifier']) if paths else CLASSIFIER
+    hybrid_path = Path(paths['vectorizer_hybrid']) if paths else PROCESSED / 'tfidf_vectorizer_hybrid.pkl'
+    tfidf_cal_path = Path(paths['tfidf_calibrator']) if paths else TFIDF_CALIBRATOR
+    semantic_cal_path = Path(paths['semantic_calibrator']) if paths else SEMANTIC_CALIBRATOR
+    ensemble_path = Path(paths['ensemble_config']) if paths else ENSEMBLE_CONFIG
+
+    vectorizer, classifier, config = load_models(paths)
     # Hybrid artifacts live in a separate file; if config says hybrid but
-    # VECTORIZER held a legacy object, prefer the hybrid file when present.
-    hybrid_path = PROCESSED / 'tfidf_vectorizer_hybrid.pkl'
+    # the legacy vectorizer file held a legacy object, prefer the hybrid file.
     if config and config.get('use_hybrid') and hybrid_path.exists():
         try:
             vectorizer = joblib.load(hybrid_path)
         except Exception:
             pass
-    if classifier is None and CLASSIFIER.exists() and hybrid_path.exists():
-        # hybrid-only training run: no legacy VECTORIZER file
+    if classifier is None and classifier_path.exists() and hybrid_path.exists():
+        # hybrid-only training run: no legacy vectorizer file
         try:
             vectorizer = joblib.load(hybrid_path)
-            classifier = joblib.load(CLASSIFIER)
+            classifier = joblib.load(classifier_path)
             config = {'use_hybrid': True}
         except Exception:
             vectorizer, classifier = None, None
@@ -169,21 +183,21 @@ def load_model_bundle() -> ModelBundle:
     # Semantic layer (encoder loading never downloads at classification time)
     try:
         from semantic import load_semantic_artifacts
-        bundle.semantic = load_semantic_artifacts()
+        bundle.semantic = load_semantic_artifacts(paths)
     except Exception:
         bundle.semantic = None
 
-    for attr, path in [('cal_tfidf', TFIDF_CALIBRATOR),
-                       ('cal_semantic', SEMANTIC_CALIBRATOR)]:
+    for attr, path in [('cal_tfidf', tfidf_cal_path),
+                       ('cal_semantic', semantic_cal_path)]:
         if path.exists():
             try:
                 setattr(bundle, attr, joblib.load(path))
             except Exception:
                 pass
 
-    if ENSEMBLE_CONFIG.exists():
+    if ensemble_path.exists():
         try:
-            bundle.ensemble = json.loads(ENSEMBLE_CONFIG.read_text(encoding='utf-8'))
+            bundle.ensemble = json.loads(ensemble_path.read_text(encoding='utf-8'))
         except Exception:
             bundle.ensemble = None
 

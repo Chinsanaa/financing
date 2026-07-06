@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { api } from '@/utils/api';
+import { invalidate } from '@/utils/useApi';
+import { Alert } from '@/components/ui';
 
-export default function UploadTab({ token }: { token: string }) {
+export default function UploadTab() {
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -44,9 +46,12 @@ export default function UploadTab({ token }: { token: string }) {
     setMessage('');
 
     try {
-      const response = await api.uploads.upload(token, file);
+      const response = await api.uploads.upload(file);
       setMessage(`Uploaded ${file.name}: ${response.data.message}`);
       setFile(null);
+      // New transactions exist — every dashboard view is now stale.
+      invalidate('/dashboard');
+      invalidate('/uploads');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Upload failed');
     } finally {
@@ -85,15 +90,13 @@ export default function UploadTab({ token }: { token: string }) {
             className="hidden"
             id="file-input"
           />
-          <label htmlFor="file-input" className="cursor-pointer">
-            <button
-              type="button"
-              onClick={() => document.getElementById('file-input')?.click()}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-            >
-              Choose File
-            </button>
-          </label>
+          <button
+            type="button"
+            onClick={() => document.getElementById('file-input')?.click()}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+          >
+            Choose File
+          </button>
         </div>
       </div>
 
@@ -119,17 +122,8 @@ export default function UploadTab({ token }: { token: string }) {
         </div>
       )}
 
-      {message && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-          {message}
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {message && <Alert kind="success">{message}</Alert>}
+      {error && <Alert kind="error">{error}</Alert>}
     </div>
   );
 }

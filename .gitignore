@@ -216,7 +216,6 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
-.streamlit/secrets.toml
 
 # User-specific financial data (see data/templates/)
 data/raw/*
@@ -235,15 +234,6 @@ data/intermediate/*
 data/reports/*
 !data/reports/.gitkeep
 data/sessions/
-
-# Archived experiments may contain old personal exports
-_archive/*.txt
-_archive/*.png
-_archive/*.csv
-_archive/*.backup
-_archive/*_output.txt
-_archive/verification_results.txt
-
 
 search_*.csv
 *_candidates*.csv

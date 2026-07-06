@@ -2,6 +2,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import jwt
 from typing import Optional
@@ -31,15 +32,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# --- CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://financing.vercel.app"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # --- Rate Limiting ---
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -53,44 +45,46 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 
 # --- Auth Middleware ---
-class AuthMiddleware:
+# Must subclass BaseHTTPMiddleware: app.add_middleware() invokes the class as
+# raw ASGI (scope, receive, send); a plain (request, call_next) __call__
+# raises TypeError on every request, turning the whole API into 500s.
+class AuthMiddleware(BaseHTTPMiddleware):
     """Extract and validate JWT from Authorization header.
 
-    Populates request.state.user_id if valid, otherwise raises 401.
-    Uses Supabase JWT_SECRET to decode (backend validates token structure,
-    RLS policies in Postgres enforce data access).
+    Populates request.state.user_id if valid, otherwise returns 401.
+    Uses Supabase JWT_SECRET to decode; every route handler additionally
+    scopes queries by user_id (the service-role client bypasses RLS).
     """
 
-    def __init__(self, app):
-        self.app = app
+    PUBLIC_PATHS = frozenset({
+        "/", "/health", "/docs", "/redoc", "/openapi.json",
+        "/auth/signup", "/auth/login", "/auth/refresh",
+    })
 
-    async def __call__(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next):
         # Skip auth for health check, docs, and public auth routes
-        # (signup/login/refresh happen before a user has a token to send)
-        public_paths = [
-            "/health", "/docs", "/openapi.json",
-            "/auth/signup", "/auth/login", "/auth/refresh",
-        ]
-        if request.url.path in public_paths:
+        # (signup/login/refresh happen before a user has a token to send).
+        # CORS preflights carry no Authorization header either.
+        if request.url.path in self.PUBLIC_PATHS or request.method == "OPTIONS":
             return await call_next(request)
 
-        # Extract token from Authorization header
         auth_header = request.headers.get("Authorization")
         user_id = None
 
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]
             try:
-                # Decode JWT using Supabase secret
                 payload = jwt.decode(
                     token,
                     settings.supabase_jwt_secret,
-                    algorithms=["HS256"]
+                    algorithms=["HS256"],
+                    audience="authenticated",
+                    options={"require": ["sub", "exp"]},
                 )
                 user_id = payload.get("sub")
-            except jwt.InvalidTokenError as e:
+            except jwt.InvalidTokenError:
                 return JSONResponse(
-                    {"detail": f"Invalid token: {e}"},
+                    {"detail": "Invalid or expired token"},
                     status_code=401
                 )
 
@@ -105,8 +99,18 @@ class AuthMiddleware:
         return await call_next(request)
 
 
-# Add auth middleware (before route handlers)
+# Middleware registration is LIFO (last added = outermost). CORS must be
+# added AFTER auth so it wraps auth responses — otherwise 401s from the auth
+# layer would be missing CORS headers and surface as opaque CORS errors in
+# the browser instead of readable 401s.
 app.add_middleware(AuthMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "https://financing.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # --- Health Check ---

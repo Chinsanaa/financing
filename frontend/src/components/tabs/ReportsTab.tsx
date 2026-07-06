@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/utils/api';
+import { useState } from 'react';
+import { useApi } from '@/utils/useApi';
+import { Alert, Loading } from '@/components/ui';
 
 interface Transaction {
   date: string;
@@ -19,29 +20,43 @@ interface ReportsData {
   per_page: number;
 }
 
-export default function ReportsTab({ token }: { token: string }) {
-  const [reports, setReports] = useState<ReportsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+const PER_PAGE = 100;
 
-  useEffect(() => {
-    const loadReports = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get('/dashboard/reports', { headers: { Authorization: `Bearer ${token}` } });
-        setReports(res.data);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load reports');
-      } finally {
-        setLoading(false);
-      }
-    };
+function toCsv(transactions: Transaction[]): string {
+  const esc = (v: unknown) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ['Date', 'Merchant', 'Description', 'Category', 'Amount', 'Source'];
+  const rows = transactions.map((t) =>
+    [t.date, t.merchant, t.description, t.category, t.amount, t.label_source].map(esc).join(',')
+  );
+  return [header.join(','), ...rows].join('\n');
+}
 
-    loadReports();
-  }, [token]);
+export default function ReportsTab() {
+  const [page, setPage] = useState(1);
+  const { data: reports, loading, error } = useApi<ReportsData>(
+    `/dashboard/reports?page=${page}&per_page=${PER_PAGE}`
+  );
+
+  const totalPages = reports ? Math.max(1, Math.ceil(reports.total_count / PER_PAGE)) : 1;
+
+  const handleExportCsv = () => {
+    if (!reports || reports.transactions.length === 0) return;
+    const blob = new Blob(['﻿' + toCsv(reports.transactions)], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transactions_page${reports.page}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
-    return <div className="text-gray-600">Loading reports...</div>;
+    return <Loading label="Loading reports..." />;
   }
 
   const getLabelSourceLabel = (source: string) => {
@@ -59,24 +74,27 @@ export default function ReportsTab({ token }: { token: string }) {
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-gray-900">Reports</h2>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert kind="error">{error}</Alert>}
 
-      {/* Summary */}
+      {/* Summary + Export */}
       {reports && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-4 flex justify-between items-center">
           <p className="text-gray-600 text-sm">
             Showing {reports.transactions.length} of {reports.total_count} transactions
           </p>
+          <button
+            onClick={handleExportCsv}
+            disabled={reports.transactions.length === 0}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm"
+          >
+            📥 Export CSV
+          </button>
         </div>
       )}
 
       {/* Transactions Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        {reports?.transactions.length === 0 ? (
+        {!reports || reports.transactions.length === 0 ? (
           <div className="p-6 text-gray-600">
             No transactions to display. Upload and categorize some data first.
           </div>
@@ -94,7 +112,7 @@ export default function ReportsTab({ token }: { token: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {reports?.transactions.map((txn, idx) => (
+                {reports.transactions.map((txn, idx) => (
                   <tr key={idx} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-900">
                       {new Date(txn.date).toLocaleDateString()}
@@ -120,15 +138,28 @@ export default function ReportsTab({ token }: { token: string }) {
         )}
       </div>
 
-      {/* Export Button */}
-      <div className="flex gap-3">
-        <button className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium">
-          📥 Export to CSV
-        </button>
-        <button className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium">
-          📊 Export to Excel
-        </button>
-      </div>
+      {/* Pagination */}
+      {reports && totalPages > 1 && (
+        <div className="flex justify-between items-center">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-50"
+          >
+            ← Previous
+          </button>
+          <p className="text-sm text-gray-600">
+            Page {page} of {totalPages}
+          </p>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-50"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,7 +18,6 @@ export default function SettingsClient() {
   const supabase = createClient();
 
   const [user, setUser] = useState<any>(null);
-  const [token, setToken] = useState<string>('');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [income, setIncome] = useState<string>('0');
   const [loading, setLoading] = useState(true);
@@ -40,13 +39,10 @@ export default function SettingsClient() {
       }
 
       setUser(session.user);
-      setToken(session.access_token);
 
-      // Load profile
+      // Load profile (the api client attaches the auth token itself)
       try {
-        const res = await api.get('/settings/profile', {
-          headers: { Authorization: `Bearer ${session.access_token}` }
-        });
+        const res = await api.get('/settings/profile');
         setProfile(res.data.profile);
         setIncome(res.data.profile.monthly_income?.toString() || '0');
       } catch (err: any) {
@@ -66,9 +62,7 @@ export default function SettingsClient() {
     setSuccess('');
 
     try {
-      await api.patch('/settings/profile', { monthly_income: parseFloat(income) }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.patch('/settings/profile', { monthly_income: parseFloat(income) });
       setSuccess('Income updated successfully');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to update income');
@@ -87,9 +81,7 @@ export default function SettingsClient() {
     setError('');
 
     try {
-      await api.delete('/settings/account', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete('/settings/account');
 
       // Sign out and redirect
       await supabase.auth.signOut();

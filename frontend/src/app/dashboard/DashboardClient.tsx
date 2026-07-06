@@ -28,14 +28,15 @@ type TabType =
 
 export default function DashboardClient() {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
 
   const [user, setUser] = useState<any>(null);
-  const [token, setToken] = useState<string>('');
   const [activeTab, setActiveTab] = useState<TabType>('upload');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // middleware.ts already gates unauthenticated visits server-side; this
+    // is a backstop plus the user-email display.
     const checkAuth = async () => {
       const {
         data: { session },
@@ -47,11 +48,21 @@ export default function DashboardClient() {
       }
 
       setUser(session.user);
-      setToken(session.access_token);
       setLoading(false);
     };
 
     checkAuth();
+
+    // If the session ends (signed out in another tab, refresh token revoked),
+    // leave the dashboard instead of letting every request 401.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        router.push('/auth');
+      }
+    });
+    return () => subscription.unsubscribe();
   }, [supabase, router]);
 
   const handleLogout = async () => {
@@ -128,16 +139,18 @@ export default function DashboardClient() {
 
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'upload' && <UploadTab token={token} />}
-        {activeTab === 'categories' && <CategoriesTab token={token} />}
-        {activeTab === 'label' && <LabelTab token={token} />}
-        {activeTab === 'training' && <TrainingTab token={token} />}
-        {activeTab === 'overview' && <StatsTab token={token} />}
-        {activeTab === 'budget' && <BudgetTab token={token} />}
-        {activeTab === 'savings' && <SavingsTab token={token} />}
-        {activeTab === 'action' && <ActionTab token={token} />}
-        {activeTab === 'reports' && <ReportsTab token={token} />}
-        {activeTab === 'review' && <ReviewTab token={token} />}
+        {activeTab === 'upload' && <UploadTab />}
+        {activeTab === 'categories' && <CategoriesTab />}
+        {activeTab === 'label' && <LabelTab />}
+        {activeTab === 'training' && <TrainingTab />}
+        {activeTab === 'overview' && <StatsTab />}
+        {activeTab === 'budget' && <BudgetTab />}
+        {activeTab === 'savings' && <SavingsTab />}
+        {activeTab === 'action' && (
+          <ActionTab onNavigate={(tab) => setActiveTab(tab as TabType)} />
+        )}
+        {activeTab === 'reports' && <ReportsTab />}
+        {activeTab === 'review' && <ReviewTab />}
       </div>
     </div>
   );

@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/utils/api';
+import { useApi, invalidate } from '@/utils/useApi';
+import { Alert, Loading } from '@/components/ui';
 
 interface Transaction {
   id: string;
@@ -18,47 +20,38 @@ interface ReviewQueueData {
   count: number;
 }
 
-export default function ReviewTab({ token }: { token: string }) {
-  const [data, setData] = useState<ReviewQueueData | null>(null);
+export default function ReviewTab() {
+  const { data, setData, loading, error: loadError } = useApi<ReviewQueueData>('/dashboard/review-queue');
+  const categoriesQ = useApi<{ categories: Array<{ id: string; name: string }> }>('/categories/');
   const [selectedTxn, setSelectedTxn] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [labeling, setLabeling] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [queueRes, catRes] = await Promise.all([
-          api.get('/dashboard/review-queue', { headers: { Authorization: `Bearer ${token}` } }),
-          api.get('/categories/', { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-        setData(queueRes.data);
-        setCategories(catRes.data.categories || []);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load data');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const categories = categoriesQ.data?.categories || [];
 
-    loadData();
-  }, [token]);
+  // Optimistically remove the acted-on row instead of refetching the whole
+  // queue after every single action.
+  const removeRow = (txnId: string) => {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            transactions: prev.transactions.filter((t) => t.id !== txnId),
+            count: Math.max(0, prev.count - 1),
+          }
+        : prev
+    );
+    invalidate('/dashboard'); // stats/action counts changed
+  };
 
   const handleLabel = async (txnId: string, categoryId: string) => {
     try {
       setLabeling(txnId);
-      await api.post(`/classify/${txnId}/label`, { category_id: categoryId }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Reload queue after labeling
-      const res = await api.get('/dashboard/review-queue', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setData(res.data);
+      setActionError('');
+      await api.classifyTx.label(txnId, categoryId);
+      removeRow(txnId);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to label transaction');
+      setActionError(err.response?.data?.detail || 'Failed to label transaction');
     } finally {
       setLabeling(null);
     }
@@ -67,24 +60,21 @@ export default function ReviewTab({ token }: { token: string }) {
   const handleAccept = async (txnId: string) => {
     try {
       setLabeling(txnId);
-      await api.post(`/classify/${txnId}/accept`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Reload queue after accepting
-      const res = await api.get('/dashboard/review-queue', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setData(res.data);
+      setActionError('');
+      await api.classifyTx.accept(txnId);
+      removeRow(txnId);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to accept classification');
+      setActionError(err.response?.data?.detail || 'Failed to accept classification');
     } finally {
       setLabeling(null);
     }
   };
 
   if (loading) {
-    return <div className="text-gray-600">Loading review queue...</div>;
+    return <Loading label="Loading review queue..." />;
   }
+
+  const error = actionError || loadError;
 
   return (
     <div className="space-y-6">
@@ -94,16 +84,10 @@ export default function ReviewTab({ token }: { token: string }) {
         {data && <p className="text-sm text-gray-500 mt-1">{data.count} items</p>}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert kind="error">{error}</Alert>}
 
       {!data || data.transactions.length === 0 ? (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-center">
-          ✓ No pending reviews! All transactions are categorized.
-        </div>
+        <Alert kind="success">✓ No pending reviews! All transactions are categorized.</Alert>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -159,6 +143,7 @@ export default function ReviewTab({ token }: { token: string }) {
                           </button>
                         )}
                         <select
+                          value=""
                           onChange={(e) => {
                             if (e.target.value) {
                               handleLabel(tx.id, e.target.value);
@@ -166,7 +151,6 @@ export default function ReviewTab({ token }: { token: string }) {
                           }}
                           disabled={labeling === tx.id}
                           className="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                          defaultValue=""
                         >
                           <option value="">Change category...</option>
                           {categories.map((cat) => (

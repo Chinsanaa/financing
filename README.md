@@ -1,321 +1,133 @@
-# Financing SaaS — Multi-Tenant Transaction Classifier
+# Financing — Multi-Tenant Transaction Classifier
 
-**Status**: ✅ **Production Ready** — All 6 phases complete. Ready for beta testing and production deployment.
+A full-stack app that categorizes personal spending from Alipay/WeChat exports:
+upload a CSV/Excel export → transactions are auto-categorized (trusted merchant
+rules first, ML suggestions for the rest) → review the leftovers → dashboards
+show where the money went.
 
-> A secure, multi-tenant SaaS for automated transaction categorization. Upload Alipay/WeChat CSV exports → auto-categorize via rules + ML → dashboard with 6 analytics tabs.
-
----
-
-## 🎯 What This Is
-
-A full-stack SaaS application that helps users categorize and analyze personal spending:
-
-- **📤 Upload**: Alipay/WeChat CSV exports
-- **🏷️ Categorize**: Auto-label via merchant rules (high precision) + ML suggestions (for unseen merchants)
-- **📊 Dashboard**: 6 tabs — Overview, Budget, Savings, Action Plan, Reports, Review Queue
-- **⚙️ Settings**: Manage income, budget limits, account
-- **🔐 Security**: Multi-tenant (RLS + JWT), zero cross-user data leakage
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-User Browser (Next.js, Vercel)
-    ↓ [JWT in Authorization header, HTTP-only cookies]
+User Browser (Next.js on Vercel)
+    ↓ Supabase Auth (email/password) → JWT in Authorization header
 FastAPI Backend (Railway)
-    ↓ [Service role key, explicit user_id scoping]
-Supabase PostgreSQL + Auth + Storage (Singapore)
-    ↓ [RLS policies enforce per-user isolation]
+    ↓ service-role key + explicit user_id scoping on every query
+Supabase PostgreSQL + Auth + Storage
+    ↓ RLS policies as defense-in-depth per-user isolation
 ```
 
-### Tech Stack
-- **Frontend**: Next.js (TypeScript) + Tailwind CSS + Supabase SSR
-- **Backend**: FastAPI (Python) + Supabase SDK  
-- **Database**: PostgreSQL 15 (8 tables, RLS enabled)
-- **Auth**: Supabase Auth (email/password + JWT)
-- **ML**: scikit-learn (Logistic Regression + TF-IDF + semantic embeddings)
-- **Hosting**: Vercel (frontend), Railway (backend), Supabase (database + storage)
+- **Frontend**: Next.js 14 (TypeScript, App Router) + Tailwind CSS — `frontend/`
+- **Backend**: FastAPI + supabase-py — `backend/`
+- **ML pipeline**: scikit-learn (TF-IDF + Logistic Regression, optional
+  semantic-embedding second model with calibrated agreement) — `src/`
+- **Database**: PostgreSQL, 9 tables, RLS enabled on all — `supabase/migrations/`
 
----
+## How classification works
 
-## ✅ All Phases Complete
+1. **Merchant rules** (554 global seeds + per-user rules in `merchant_rules`)
+   are trusted: matching transactions get their category immediately
+   (`label_source='rule'`, no review needed).
+2. **The user's trained model** suggests categories for everything else
+   (`label_source='model'`) — suggestions land in the Review Queue with a
+   calibrated confidence.
+3. **Graduated trust**: a model prediction auto-applies without review
+   (`label_source='model_agreed'`) only when the TF-IDF and semantic models
+   agree, their calibrated confidence clears a data-derived threshold, and the
+   prediction isn't the catch-all. See `docs/FULL_AUDIT.md` for why raw model
+   confidence can't be trusted on unseen merchants.
 
-| Phase | Status | What Was Built |
-|-------|--------|---|
-| **1** | ✅ | Supabase schema (8 tables, RLS policies, 554 global rules seeded) |
-| **2.1a** | ✅ | Category parameterization (functions take `valid_categories` param) |
-| **2.1b** | ✅ | FastAPI backend (7 route groups: auth, categories, uploads, training, classify, dashboard, settings) |
-| **2.2** | ✅ | Next.js frontend (auth, onboarding, 6-tab dashboard) |
-| **3** | ✅ | 6 Dashboard tabs (Overview, Budget, Savings, Action, Reports, Review Queue) |
-| **4** | ✅ | Settings page, account deletion (full cascade Storage→Auth), transaction recategorization with retrain |
-| **5** | ✅ | Security hardening (rate limiting, upload validation, RLS tests, XSS/SQL audit) |
-| **6** | ✅ | Personal data migration script (extract 63 merchant rules from codebase) |
+Classification runs automatically after every upload (rules-only until a model
+is trained) and re-runs after every training run (`backend/ml.py`).
 
----
+### How accuracy is measured (honest numbers)
 
-## 📦 What Works End-to-End
+Two very different questions:
+- **Stratified CV** (known merchants): ~95% accuracy — but mostly memorization.
+- **GroupKFold by merchant** (unseen merchants): far lower — this is the number
+  that matters for new data, and why model output defaults to review instead of
+  auto-applying. Details: `docs/FULL_AUDIT.md`.
 
-✅ Sign up → verify email → login → dashboard  
-✅ Upload Alipay/WeChat CSV → auto-categorize via rules  
-✅ Label transactions → model retrains → accuracy improves  
-✅ View 6 dashboard tabs with real-time stats  
-✅ Settings: update income, budget limits, delete account  
-✅ Review Queue: categorize pending transactions → automatic retrain  
-✅ Security: RLS + JWT + rate limits + upload validation  
+## Dashboard tabs (10)
 
----
+Onboarding: **Upload** (default landing), **Categories**, **Label**, **Training**.
+Analytics: **Overview**, **Budget**, **Savings**, **Action Plan**, **Reports**, **Review Queue**.
+Plus a separate **Settings** page (income, account deletion).
 
-## 🔐 Security Checklist
-
-- ✅ HTTP-only cookies (Supabase SSR)
-- ✅ JWT validation + email verification gate
-- ✅ RLS on all 8 tables
-- ✅ Explicit `user_id` scoping in FastAPI
-- ✅ Zero XSS vulnerabilities (verified via grep)
-- ✅ Zero SQL injection (parameterized queries only)
-- ✅ Rate limiting (signup 5/hr, login 10/15min)
-- ✅ Upload validation (10MB size, 50k rows, content sniffing)
-- ✅ CORS whitelist configured
-- ✅ Service role key backend-only
-
-**See**: `SECURITY_AUDIT.md` for detailed audit + test specifications.
-
----
-
-## 🚀 Quick Start (Local Development)
-
-### Prerequisites
-- Node.js 18+, Python 3.10+, pip
-- Supabase account (free tier works)
-
-### Setup
+## Quick start (local)
 
 ```bash
-# 1. Clone & install
-git clone https://github.com/Chinsanaa/financing.git
-cd financing
-
-# 2. Frontend
-cd frontend
-npm install
-# .env.local: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_API_URL
-npm run dev
-
-# 3. Backend (new terminal)
+# 1. Backend
 cd backend
 pip install -r requirements.txt
-# .env.local: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET
-python -m uvicorn main:app --reload
+cp .env.example .env   # fill in your Supabase project's URL/keys/JWT secret
+python -m uvicorn main:app --reload   # http://localhost:8000
 
-# 4. Open http://localhost:3000
+# 2. Frontend (new terminal)
+cd frontend
+npm install
+cp .env.example .env.local   # NEXT_PUBLIC_SUPABASE_URL/_ANON_KEY, NEXT_PUBLIC_API_URL
+npm run dev                  # http://localhost:3000
 ```
 
-### Local Testing
+Guides: `docs/guides/START_LOCAL.md` (setup), `docs/guides/TEST_LOCAL.md`
+(manual test flows), `docs/guides/DEPLOYMENT.md` (Railway + Vercel + Supabase).
+
+## Tests
+
 ```bash
-# Full stack test (auth, upload, train, classify)
-python scripts/run_all.py              # Full pipeline
-bash scripts/test_local.sh             # Verify setup works
-# See docs/guides/START_LOCAL.md for comprehensive guide
-# See docs/guides/TEST_LOCAL.md for testing details
+pip install -r requirements-dev.txt
+pytest tests/            # ML pipeline: parsing, routing, calibration, leakage guard
 ```
 
----
+There is no automated backend/frontend test suite yet (open item); frontend is
+verified with `npx tsc --noEmit && npm run build`.
 
-## 📋 Documentation
-
-| Document | Purpose |
-|---|---|
-| `docs/PROJECT_SUMMARY.md` | Overview, architecture, all phases, deployment checklist |
-| `docs/SECURITY_AUDIT.md` | Detailed audit + test specifications (RLS, JWT, rate limits, upload validation) |
-| `docs/guides/MIGRATION_GUIDE.md` | How to migrate personal data from old pipeline |
-| `docs/guides/DEPLOYMENT.md` | Production setup (Railway + Vercel + Supabase) |
-| `docs/guides/START_LOCAL.md` | Local development setup |
-| `docs/guides/TEST_LOCAL.md` | Local testing guide |
-| `CLAUDE.md` | Project guidelines (user collaboration preferences) |
-| `docs/context.md` | Full project memory (6 session logs, all decisions) |
-
----
-
-## 🏗️ Project Structure
+## Repo layout
 
 ```
 financing/
-├── README.md                      # This file
-├── PROJECT_SUMMARY.md             # Overview & architecture
-├── SECURITY_AUDIT.md              # Security audit + tests
-├── MIGRATION_GUIDE.md             # Personal data migration
-├── DEPLOYMENT.md                  # Production setup
-├── CLAUDE.md                      # Project guidelines
-├── context.md                     # Session memory
-│
-├── frontend/                      # Next.js app (Vercel)
-│   ├── src/app/                  # Pages: auth, dashboard, settings
-│   ├── src/components/tabs/      # 6 dashboard tabs
-│   ├── src/utils/                # Supabase + API client
-│   └── README.md
-│
-├── backend/                       # FastAPI app (Railway)
-│   ├── routes/                   # 7 route groups
-│   ├── main.py                   # App, CORS, auth middleware, rate limiting
-│   ├── config.py                 # Supabase client
-│   ├── migrate_personal_data.py  # One-time migration script
-│   └── README.md
-│
-├── supabase/                      # Migrations + RLS
-│   ├── migrations/               # Schema (9 tables, RLS, triggers)
-│   └── config.toml
-│
-├── src/                           # ML pipeline (from Phase 0)
-│   ├── parse.py                  # CSV parsing (Alipay/WeChat)
-│   ├── segment.py                # Tokenization + TF-IDF
-│   ├── classify.py               # Prediction
-│   ├── semantic.py               # Embeddings
-│   ├── retrain.py                # Training pipeline
-│   └── merchant_categories.py    # Rules + special logic
-│
-└── data/                          # Data directories (gitignored)
-    ├── raw/                      # Original exports
-    ├── processed/                # Pipeline outputs
-    └── templates/                # Starter rules + configs
+├── frontend/            # Next.js app (see frontend/README.md)
+├── backend/             # FastAPI app (see backend/README.md)
+│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings
+│   └── ml.py            # per-user model loading + bulk classification
+├── src/                 # ML pipeline shared by backend + tests
+│   ├── parse.py         # Alipay/WeChat parsers → common schema
+│   ├── segment.py       # jieba tokenization + TF-IDF
+│   ├── classify.py      # rules-first + graduated-trust routing
+│   ├── retrain.py       # training entry point (both models + calibration)
+│   ├── semantic.py      # embedding classifier (Model2Vec / LSA fallback)
+│   ├── calibration.py   # top-label Platt scaling
+│   ├── eval_grouped.py  # GroupKFold evaluation + threshold derivation
+│   └── merchant_categories.py  # global rule patterns
+├── supabase/            # migrations (schema, RLS, storage buckets, fixes)
+├── tests/               # pytest suite for src/
+├── scripts/test_local.sh
+├── docs/                # context.md (project memory), audits, guides
+└── data/                # gitignored user data + example templates
 ```
 
----
+Full tree with explanations: `REPO_STRUCTURE.md`.
 
-## 📊 Dashboard Tabs
+## Documentation
 
-| Tab | Purpose | Key Metrics |
-|---|---|---|
-| **📊 Overview** | Where did money go? | Total spend, category breakdown, trends |
-| **💳 Budget** | Am I on track? | Monthly income, per-category limits, overage alerts |
-| **💰 Savings** | What's unusual? | Savings goals, projected rate, anomaly detection |
-| **🎯 Action** | What should I cut? | Over-budget alerts, actionable insights |
-| **📋 Reports** | Detailed view | Transaction table, export buttons |
-| **✅ Review** | Need categorization? | Pending transactions, model confidence, accept/recategorize |
+| Document | Purpose |
+|---|---|
+| `docs/context.md` | Project memory: every session, decision, and open item |
+| `docs/PROJECT_SUMMARY.md` | Architecture overview and phase history |
+| `docs/SECURITY_AUDIT.md` | Security checklist + test specifications |
+| `docs/FULL_AUDIT.md` | ML integrity audit (merchant leakage, honest evaluation) |
+| `docs/guides/` | START_LOCAL, TEST_LOCAL, DEPLOYMENT, MIGRATION_GUIDE |
+| `CLAUDE.md` | Collaboration guidelines for AI-assisted sessions |
 
----
+## Known open items
 
-## 🔄 Workflows
+- Old personal data is still recoverable from **git history** (pre-Session-19
+  commits); purging requires a `git filter-repo` rewrite + force-push.
+- Training runs in the backend threadpool — fine at small scale, should move
+  to a real worker queue if user count grows.
+- No backend integration test suite (RLS violation / JWT tampering tests are
+  specified in `docs/SECURITY_AUDIT.md` but not implemented).
 
-### New User Onboarding (First Time)
-1. **Sign up** → email verification → login
-2. **Upload** Alipay/WeChat CSV
-3. **Label** ~50 merchants (each becomes a trusted rule)
-4. **Train** model on labeled data
-5. **Review** pending transactions (review queue)
-6. **Dashboard** — view spending insights
+## License
 
-### Monthly Review (Ongoing)
-1. **Export** new transactions from Alipay/WeChat
-2. **Upload** via dashboard
-3. **Review queue** shows pending categorizations
-4. **Label** as needed → model retrains automatically
-5. **Dashboard** updates in real-time
-
-### Settings & Management
-- **Income**: Update monthly budget base
-- **Categories**: Add/edit/delete spending categories (auto-retrain on delete)
-- **Account**: Delete all data with one-click cascade (Storage → Auth)
-
----
-
-## ⚡ Performance & Scaling
-
-- **Training**: ~2-3 seconds on 1,000 labeled transactions
-- **Inference**: <100ms per transaction batch
-- **Rate limiting**: Slowapi in-memory (single Railway instance); Redis-backed if scaled
-- **Database**: Supabase auto-scales; monitor CPU/RAM if >10k users
-- **Storage**: Supabase Storage backed by S3; unlimited capacity
-
----
-
-## 🧪 Testing
-
-### Manual (Recommended Before Production)
-
-```bash
-# Full flow test
-python START_LOCAL.py          # Interactive guide
-python TEST_LOCAL.py           # Automated checks
-```
-
-**Checklist**:
-- [ ] Sign up → verify → login → dashboard
-- [ ] Upload CSV → transactions appear
-- [ ] Label batch → model trains
-- [ ] Review queue: categorize → retrain  
-- [ ] Delete category → reassigns → retrain
-- [ ] Update income → settings saved
-- [ ] Delete account → data fully removed
-
-### Automated (From SECURITY_AUDIT.md)
-
-```bash
-# RLS violation test: attempt cross-user reads → must fail
-# JWT tampering test: modify token → must fail 401
-# Rate limit test: exceed limits → must return 429
-# Upload validation: oversized file → must return 400
-```
-
----
-
-## 🚀 Deployment
-
-### Production (Railway + Vercel)
-
-**See**: `DEPLOYMENT.md` for step-by-step instructions.
-
-1. Deploy backend to Railway (Python)
-2. Deploy frontend to Vercel (Next.js)
-3. Point frontend env vars to backend URL
-4. Update CORS whitelist with Vercel domain
-5. Run health checks
-
-**Time to production**: ~15 minutes (existing accounts)
-
----
-
-## 📖 For New Users
-
-**Getting started?**
-1. Read `PROJECT_SUMMARY.md` (10 min overview)
-2. Follow `DEPLOYMENT.md` for local setup
-3. Test with `TEST_LOCAL.py`
-4. Deploy to production
-
-**Migrating old data?**
-- See `MIGRATION_GUIDE.md` to import merchant rules + transactions
-
-**Security questions?**
-- See `SECURITY_AUDIT.md` for complete audit + test specs
-
----
-
-## 🔗 Key Links
-
-- **GitHub**: https://github.com/Chinsanaa/financing
-- **Supabase**: https://supabase.io/docs
-- **Railway**: https://docs.railway.app
-- **Vercel**: https://vercel.com/docs
-- **FastAPI**: https://fastapi.tiangolo.com
-- **Next.js**: https://nextjs.org/docs
-
----
-
-## 📝 Session Memory & Decisions
-
-**Full project history**: see `context.md`
-
-**Latest decisions**: All 6 phases complete (2026-07-06)
-- Phase 5: Security hardening (rate limiting, upload validation)
-- Phase 6: Personal data migration script
-
----
-
-## 📄 License
-
-MIT License — open source
-
----
-
-**Last Updated**: 2026-07-06 — Phase 6 complete, ready for production deployment.
+MIT

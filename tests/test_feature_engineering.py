@@ -36,7 +36,7 @@ def sample_transactions():
             '/'
         ] * 5,
         'amount': np.random.uniform(20, 100, 20),
-        'time': dates,  # 20 unique dates
+        'timestamp': dates,  # 20 unique dates
         'category': ['Eating Out'] * 20
     })
 
@@ -76,7 +76,7 @@ class TestNumericFeatureExtraction:
     def test_extract_numeric_features_skips_missing(self, sample_transactions):
         """Test that rows with missing time/amount are skipped."""
         df = sample_transactions.copy()
-        df.loc[0, 'time'] = pd.NaT
+        df.loc[0, 'timestamp'] = pd.NaT
         df.loc[1, 'amount'] = np.nan
 
         numeric_features, indices = extract_numeric_features(df)
@@ -263,7 +263,7 @@ class TestEdgeCases:
             'merchant': ['Holy Bagel'] * 5,
             'description': ['Order'] * 5,
             'amount': [25.0] * 5,
-            'time': [datetime(2026, 5, i) for i in range(1, 6)],
+            'timestamp': [datetime(2026, 5, i) for i in range(1, 6)],
             'category': ['Eating Out'] * 5
         })
 
@@ -276,7 +276,7 @@ class TestEdgeCases:
             'merchant': ['Holy Bagel'],
             'description': ['Order'],
             'amount': [25.0],
-            'time': [datetime(2026, 5, 1)],
+            'timestamp': [datetime(2026, 5, 1)],
             'category': ['Eating Out']
         })
 

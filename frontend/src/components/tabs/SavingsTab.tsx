@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/utils/api';
+import { useApi } from '@/utils/useApi';
+import { Alert, Loading, ProgressBar } from '@/components/ui';
 
 interface SavingsInfo {
   savings_goal_monthly: number;
@@ -12,40 +12,18 @@ interface SavingsInfo {
   is_anomaly: boolean;
 }
 
-export default function SavingsTab({ token }: { token: string }) {
-  const [savings, setSavings] = useState<SavingsInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    const loadSavings = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get('/dashboard/savings', { headers: { Authorization: `Bearer ${token}` } });
-        setSavings(res.data);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load savings info');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSavings();
-  }, [token]);
+export default function SavingsTab() {
+  const { data: savings, loading, error } = useApi<SavingsInfo>('/dashboard/savings');
 
   if (loading) {
-    return <div className="text-gray-600">Loading savings info...</div>;
+    return <Loading label="Loading savings info..." />;
   }
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-gray-900">Savings & Anomalies</h2>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert kind="error">{error}</Alert>}
 
       {savings && (
         <>
@@ -82,19 +60,18 @@ export default function SavingsTab({ token }: { token: string }) {
                   <p className="text-sm text-gray-600">Monthly Goal</p>
                   <p className="font-medium text-gray-900">¥{savings.savings_goal_monthly.toFixed(0)}</p>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full ${
-                      savings.projected_savings >= savings.savings_goal_monthly ? 'bg-green-600' : 'bg-yellow-600'
-                    }`}
-                    style={{
-                      width: `${Math.min(
-                        (savings.projected_savings / savings.savings_goal_monthly) * 100,
-                        100
-                      )}%`,
-                    }}
-                  />
-                </div>
+                <ProgressBar
+                  percent={
+                    savings.savings_goal_monthly > 0
+                      ? (savings.projected_savings / savings.savings_goal_monthly) * 100
+                      : 0
+                  }
+                  color={
+                    savings.projected_savings >= savings.savings_goal_monthly
+                      ? 'bg-green-600'
+                      : 'bg-yellow-600'
+                  }
+                />
                 <p className="text-xs text-gray-500 mt-1">
                   {savings.projected_savings >= savings.savings_goal_monthly
                     ? `✓ On track`

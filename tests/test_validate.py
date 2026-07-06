@@ -40,7 +40,7 @@ def test_negative_amount_is_warning_not_error():
 def test_future_and_ancient_dates_flagged():
     df = _base()
     df.loc[0, "timestamp"] = "1970-01-01 00:00:00"
-    df.loc[1, "timestamp"] = "2999-01-01 00:00:00"
+    df.loc[1, "timestamp"] = "2200-01-01 00:00:00"  # within pandas ns-datetime range (NaT past 2262)
     vs = validate.validate_transactions(df)
     checks = {v.check for v in vs}
     assert "date_too_old" in checks and "date_future" in checks

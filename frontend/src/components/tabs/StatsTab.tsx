@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/utils/api';
+import { useApi } from '@/utils/useApi';
+import { Alert, Loading, ProgressBar } from '@/components/ui';
 
 interface Summary {
   total_transactions: number;
@@ -21,50 +21,25 @@ interface Trend {
   total_spend: number;
 }
 
-export default function StatsTab({ token }: { token: string }) {
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [byCategory, setByCategory] = useState<Category[]>([]);
-  const [trends, setTrends] = useState<Trend[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+export default function StatsTab() {
+  const summaryQ = useApi<Summary>('/dashboard/summary');
+  const categoryQ = useApi<{ categories: Category[] }>('/dashboard/by-category');
+  const trendsQ = useApi<{ trends: Trend[] }>('/dashboard/trends?days=30');
 
-  useEffect(() => {
-    const loadStats = async () => {
-      try {
-        setLoading(true);
-
-        const [summaryRes, categoryRes, trendsRes] = await Promise.all([
-          api.get('/dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }),
-          api.get('/dashboard/by-category', { headers: { Authorization: `Bearer ${token}` } }),
-          api.get('/dashboard/trends?days=30', { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-
-        setSummary(summaryRes.data);
-        setByCategory(categoryRes.data.categories || []);
-        setTrends(trendsRes.data.trends || []);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load stats');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadStats();
-  }, [token]);
-
-  if (loading) {
-    return <div className="text-gray-600">Loading dashboard...</div>;
+  if (summaryQ.loading || categoryQ.loading || trendsQ.loading) {
+    return <Loading label="Loading dashboard..." />;
   }
+
+  const summary = summaryQ.data;
+  const byCategory = categoryQ.data?.categories || [];
+  const trends = trendsQ.data?.trends || [];
+  const error = summaryQ.error || categoryQ.error || trendsQ.error;
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-gray-900">Overview</h2>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert kind="error">{error}</Alert>}
 
       {/* Summary Cards */}
       {summary && (
@@ -102,7 +77,7 @@ export default function StatsTab({ token }: { token: string }) {
           <p className="text-gray-600">No categorized transactions yet. Upload and label some data!</p>
         ) : (
           <div className="space-y-3">
-            {byCategory
+            {[...byCategory]
               .sort((a, b) => b.total_amount - a.total_amount)
               .map((cat) => {
                 const total = byCategory.reduce((sum, c) => sum + c.total_amount, 0);
@@ -116,12 +91,7 @@ export default function StatsTab({ token }: { token: string }) {
                         ¥{cat.total_amount.toFixed(2)} ({cat.transaction_count} txns)
                       </p>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
+                    <ProgressBar percent={percentage} />
                     <p className="text-xs text-gray-500 mt-1">{percentage}%</p>
                   </div>
                 );
@@ -136,7 +106,7 @@ export default function StatsTab({ token }: { token: string }) {
           <h3 className="font-bold text-gray-900 mb-4">Recent Spending (30 days)</h3>
           <div className="space-y-2">
             {trends.slice(-7).map((trend) => {
-              const max = Math.max(...trends.map(t => t.total_spend));
+              const max = Math.max(...trends.map((t) => t.total_spend));
               const percentage = max > 0 ? (trend.total_spend / max) * 100 : 0;
               return (
                 <div key={trend.date}>
@@ -144,12 +114,7 @@ export default function StatsTab({ token }: { token: string }) {
                     <p className="text-sm text-gray-600">{trend.date}</p>
                     <p className="text-sm font-medium text-gray-900">¥{trend.total_spend.toFixed(0)}</p>
                   </div>
-                  <div className="w-full bg-gray-200 rounded h-1.5">
-                    <div
-                      className="bg-green-500 h-1.5 rounded"
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
+                  <ProgressBar percent={percentage} color="bg-green-500" height="h-1.5" />
                 </div>
               );
             })}
