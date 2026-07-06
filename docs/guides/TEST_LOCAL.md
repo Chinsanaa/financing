@@ -49,7 +49,7 @@ cat .env.local
 
 You should see:
 ```
-SUPABASE_URL=https://pxxqqffwummhkohnrvtz.supabase.co
+SUPABASE_URL=https://<your-project-ref>.supabase.co
 SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 SUPABASE_JWT_SECRET=...
@@ -109,7 +109,7 @@ cp .env.example .env.local
 Edit `frontend/.env.local`:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://pxxqqffwummhkohnrvtz.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
