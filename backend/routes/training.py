@@ -6,6 +6,7 @@ and user's categories. Model artifacts uploaded to Supabase Storage.
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from config import supabase_client
+from errors import internal_error, logger
 from datetime import datetime
 import pandas as pd
 from pathlib import Path
@@ -70,7 +71,8 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
             "user_id": user_id,
             "status": "running",
             "trigger": "manual",
-            "created_at": datetime.utcnow().isoformat(),
+            "n_labeled_samples": len(df_labeled),
+            "started_at": datetime.utcnow().isoformat(),
         }).execute()
 
         # Queue background task to train
@@ -84,11 +86,13 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
 
         return {
             "model_run_id": model_run_id,
-            "status": "queued",
+            "status": "running",
             "message": "Training started in background"
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "training/trigger_retrain")
 
 
 @router.get("/{model_run_id}")
@@ -100,8 +104,10 @@ async def get_training_status(request: Request, model_run_id: str):
         if not response.data:
             raise HTTPException(status_code=404, detail="Training run not found")
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "training/get_training_status")
 
 
 @router.get("/")
@@ -109,26 +115,41 @@ async def list_training_runs(request: Request):
     """List all training runs for the user."""
     user_id = request.state.user_id
     try:
-        response = supabase_client.table("model_runs").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        response = (
+            supabase_client.table("model_runs")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
         return {"training_runs": response.data}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "training/list_training_runs")
 
 
 # --- Background Task ---
 
-async def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user_categories: list):
+def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user_categories: list):
     """Background task: train model, upload to Supabase Storage, update status.
+
+    Deliberately a sync `def`: FastAPI runs sync background tasks in the
+    threadpool. As an `async def` this CPU-bound sklearn work ran directly
+    on the event loop and froze every other request for the whole training run.
 
     1. Create temporary directory for model artifacts
     2. Call retrain_model() with user's categories
-    3. Upload artifacts to Supabase Storage (user/{user_id}/models/{model_run_id}/)
-    4. Update model_runs table with status=complete + metrics
-    5. Clean up temp directory
+    3. Upload artifacts to Supabase Storage ({user_id}/models/{model_run_id}/)
+    4. Update model_runs table with status=succeeded + metrics
+    5. Re-classify the user's unlabeled transactions with the new model
+    6. Clean up temp directory
     """
     temp_dir = None
     try:
-        print(f"[Training {model_run_id}] Starting with {len(df_labeled)} samples and {len(user_categories)} categories")
+        logger.info("[Training %s] Starting with %d samples and %d categories",
+                    model_run_id, len(df_labeled), len(user_categories))
 
         # Create temporary directory for model artifacts
         temp_dir = tempfile.mkdtemp(prefix=f"training_{model_run_id}_")
@@ -153,57 +174,70 @@ async def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame
             use_hybrid=True
         )
 
-        print(f"[Training {model_run_id}] Training complete. Uploading artifacts...")
+        logger.info("[Training %s] Training complete. Uploading artifacts...", model_run_id)
 
-        # Upload artifacts to Supabase Storage
-        storage_path_prefix = f"models/{user_id}/{model_run_id}"
+        # Upload artifacts to Supabase Storage. First path segment MUST be
+        # the user_id: the bucket's RLS policies key on foldername[1] and
+        # account deletion cleans the {user_id}/ prefix.
+        storage_path_prefix = f"{user_id}/models/{model_run_id}"
         uploaded_files = []
 
         for artifact_name, artifact_path in paths.items():
             if artifact_path.exists():
                 with open(artifact_path, 'rb') as f:
                     file_content = f.read()
-                    remote_path = f"{storage_path_prefix}/{artifact_path.name}"
-                    try:
-                        supabase_client.storage.from_("model_artifacts").upload(
-                            remote_path,
-                            file_content,
-                        )
-                        uploaded_files.append(artifact_path.name)
-                        print(f"  [OK] {artifact_path.name}")
-                    except Exception as e:
-                        print(f"  [WARN] Failed to upload {artifact_path.name}: {e}")
+                remote_path = f"{storage_path_prefix}/{artifact_path.name}"
+                try:
+                    supabase_client.storage.from_("model_artifacts").upload(
+                        remote_path,
+                        file_content,
+                    )
+                    uploaded_files.append(artifact_path.name)
+                except Exception as e:
+                    logger.warning("[Training %s] Failed to upload %s: %s",
+                                   model_run_id, artifact_path.name, e)
 
-        print(f"[Training {model_run_id}] Uploaded {len(uploaded_files)} artifacts")
+        logger.info("[Training %s] Uploaded %d artifacts", model_run_id, len(uploaded_files))
 
-        # Update model_runs table with status=complete
+        # Mark the run succeeded, using the columns model_runs actually has.
+        # (The old code wrote status='complete' — not a model_run_status enum
+        # value — plus nonexistent metrics/storage_path/completed_at columns,
+        # so the update always failed and every run stayed 'running' forever.)
         supabase_client.table("model_runs").update({
-            "status": "complete",
-            "metrics": {
-                "accuracy": round(results['accuracy'], 4),
-                "f1_macro": round(results['f1_macro'], 4),
-                "n_samples": results['n_samples'],
-                "n_features": results['n_features'],
-            },
-            "storage_path": storage_path_prefix,
-            "completed_at": datetime.utcnow().isoformat(),
+            "status": "succeeded",
+            "cv_accuracy": round(results['accuracy'], 4),
+            "f1_macro": round(results['f1_macro'], 4),
+            "n_labeled_samples": results['n_samples'],
+            "artifact_version": storage_path_prefix,
+            "finished_at": datetime.utcnow().isoformat(),
         }).eq("id", model_run_id).execute()
 
-        print(f"[Training {model_run_id}] Complete (accuracy: {results['accuracy']:.1%})")
+        logger.info("[Training %s] Succeeded (accuracy: %.1f%%)",
+                    model_run_id, results['accuracy'] * 100)
+
+        # A fresh model exists: re-classify this user's still-unlabeled rows
+        # so suggestions show up without another upload.
+        try:
+            from ml import invalidate_user_bundle, classify_user_transactions
+            invalidate_user_bundle(user_id)
+            classify_user_transactions(user_id)
+        except Exception as e:
+            logger.warning("[Training %s] Post-training classification failed: %s",
+                           model_run_id, e)
 
     except Exception as e:
-        print(f"[Training {model_run_id}] Failed: {e}")
+        logger.error("[Training %s] Failed: %s", model_run_id, e)
         traceback.print_exc()
         try:
             supabase_client.table("model_runs").update({
                 "status": "failed",
-                "error": str(e),
+                "error_message": str(e),
+                "finished_at": datetime.utcnow().isoformat(),
             }).eq("id", model_run_id).execute()
         except Exception as db_err:
-            print(f"[Training {model_run_id}] Also failed to update database: {db_err}")
+            logger.error("[Training %s] Also failed to update database: %s", model_run_id, db_err)
 
     finally:
         # Clean up temp directory
         if temp_dir and Path(temp_dir).exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
-            print(f"[Training {model_run_id}] Cleaned up temp directory")
