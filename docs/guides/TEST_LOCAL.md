@@ -164,7 +164,7 @@ WHERE email = 'test@example.com';
 3. Enter password: `testpass123`
 4. Click **Sign In**
 5. Should redirect to `/dashboard`
-6. Should see: email address in top-right, 6 tabs (Dashboard, Upload, Label, Review, Categories, Training)
+6. Should see: email address in top-right, 10 tabs (Upload, Categories, Label, Training, Overview, Budget, Savings, Action Plan, Reports, Review Queue)
 
 **Check browser DevTools**:
 - Application → Cookies → `sb-*` (Supabase session)
@@ -220,7 +220,7 @@ Save as `test.csv` and upload.
 
 **Check Supabase**:
 ```sql
-SELECT COUNT(*) FROM transactions WHERE labeled = TRUE;
+SELECT COUNT(*) FROM transactions WHERE is_manually_labeled = TRUE;
 ```
 Should increase with each label.
 
@@ -374,7 +374,7 @@ Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Proc
 
 Once local testing passes:
 
-1. **Push to GitHub**: `git push origin phase-1-supabase-foundation`
+1. **Push to GitHub**: `git push origin main`
 2. **Create/merge PR #13**
 3. **Deploy to Railway**: Link repo, set env vars, deploy
 4. **Deploy to Vercel**: Link frontend, set env vars, deploy

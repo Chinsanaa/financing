@@ -2,6 +2,13 @@
 
 One-time migration of personal merchant rules and data from the shared codebase to your private account.
 
+> **Note (2026-07-06)**: the script this guide describes,
+> `backend/migrate_personal_data.py`, has been REMOVED from the repo because
+> it embedded personal names in a public codebase. If you still need to run
+> the migration, recover it from git history
+> (`git show c611ef4^:backend/migrate_personal_data.py > migrate_personal_data.py`)
+> and run it locally without committing it.
+
 ## Why This Matters
 
 Your original analysis included personal data:
@@ -32,7 +39,7 @@ Before production launch, this data moves from the shared codebase to your priva
 If you want to import your historical transaction data, export it from the old pipeline:
 
 ### Transactions Export
-From the old `src/dashboard.py` or your data directory, copy:
+From your old local data directory, copy:
 ```
 data/processed/transactions_classified.csv
 ```

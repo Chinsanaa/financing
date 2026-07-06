@@ -96,6 +96,10 @@ Production checklist for financing SaaS before launch.
 - [x] Temporary files cleaned up after parse (`.unlink(missing_ok=True)`)
 - [x] Storage RLS scopes files by user_id prefix
 - [x] Account deletion deletes Storage objects before Auth (no orphans)
+- [x] Model artifacts stored under `{user_id}/models/{run_id}/` so the bucket
+  RLS (first path segment = user_id) and account-deletion cleanup both apply
+  (fixed 2026-07-06 — they were previously written under `models/{user_id}/…`,
+  which orphaned them on deletion)
 
 ## 10. Error Messages
 

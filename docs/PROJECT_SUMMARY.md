@@ -11,7 +11,7 @@ A multi-tenant SaaS that helps users categorize and analyze spending from Alipay
 **Core features**:
 - 📤 Upload CSV/Excel transaction exports → auto-categorize via ML
 - 🏷️ Label/recategorize transactions → model improves with feedback
-- 📊 Dashboard with 6 tabs: Overview, Budget, Savings, Action Plan, Reports, Review Queue
+- 📊 Dashboard with 10 tabs: Upload, Categories, Label, Training, Overview, Budget, Savings, Action Plan, Reports, Review Queue
 - ⚙️ Settings: manage income, budget limits, delete account
 - 🔐 Multi-tenant: RLS + JWT auth, zero cross-user data leakage
 
@@ -31,7 +31,7 @@ Supabase PostgreSQL + Auth + Storage (Singapore)
 **Stack**:
 - **Frontend**: Next.js (TypeScript) + Tailwind CSS + Supabase SSR
 - **Backend**: FastAPI (Python) + Supabase SDK
-- **Database**: PostgreSQL (8 tables, RLS enabled)
+- **Database**: PostgreSQL (9 tables, RLS enabled)
 - **Auth**: Supabase Auth (email/password + JWT)
 - **ML**: scikit-learn (Logistic Regression + TF-IDF + semantic embeddings)
 - **Hosting**: Vercel (frontend), Railway (backend), Supabase (database + storage)
@@ -41,7 +41,7 @@ Supabase PostgreSQL + Auth + Storage (Singapore)
 ## Phases Completed
 
 ### Phase 1: ✅ Supabase Foundation
-- 8 tables with RLS policies (profiles, categories, transactions, merchant_rules, special_rules, uploads, model_runs, budget_config)
+- 9 tables with RLS policies (profiles, categories, transactions, merchant_rules, special_rules, uploads, model_runs, budget_config, budget_category_config)
 - Auth triggers (auto-create profile + default categories on signup)
 - Storage buckets (model artifacts, uploads) with RLS
 - 554 global merchant rules seeded
@@ -60,7 +60,7 @@ Supabase PostgreSQL + Auth + Storage (Singapore)
 ### Phase 2.2: ✅ Next.js Frontend
 - Auth pages (signup, email verification, login)
 - Onboarding: upload → label → train
-- 6 dashboard tabs with data visualization
+- 10 dashboard tabs (4 onboarding + 6 analytics)
 - Settings page with account deletion
 
 ### Phase 3: ✅ Dashboard Tabs
@@ -113,7 +113,7 @@ Supabase PostgreSQL + Auth + Storage (Singapore)
 
 - [x] HTTP-only cookies (Supabase SSR default)
 - [x] JWT validation + email verification gate
-- [x] RLS policies on all 8 tables
+- [x] RLS policies on all 9 tables
 - [x] Explicit user_id scoping in FastAPI
 - [x] Zero raw SQL string interpolation
 - [x] Zero XSS vulnerabilities
@@ -197,14 +197,10 @@ cd backend && pip install -r requirements.txt && python -m uvicorn main:app --re
 
 If migrating from the old local pipeline:
 
-```bash
-# Extract user UUID from Supabase dashboard → Authentication
-python backend/migrate_personal_data.py <user_uuid> \
-  --import-transactions data/processed/transactions_classified.csv \
-  --import-budget data/templates/budget_config.json
-```
-
-**See**: `MIGRATION_GUIDE.md` for full instructions.
+The one-time migration script (`backend/migrate_personal_data.py`) was
+removed from the repo on 2026-07-06 because it embedded personal merchant
+names; recover it from git history if needed. Full instructions:
+`docs/guides/MIGRATION_GUIDE.md`.
 
 ---
 
@@ -214,15 +210,15 @@ python backend/migrate_personal_data.py <user_uuid> \
 .
 ├── frontend/                    # Next.js app (Vercel)
 │   ├── src/app/                # Pages: auth, dashboard, settings
-│   ├── src/components/tabs/    # 6 dashboard tabs
+│   ├── src/components/tabs/    # 10 dashboard tabs
 │   └── src/utils/              # Supabase + API client
 ├── backend/                     # FastAPI app (Railway)
 │   ├── routes/                 # auth, categories, uploads, training, classify, dashboard, settings
 │   ├── main.py                 # App, CORS, auth middleware, rate limiting
 │   ├── config.py               # Supabase client
-│   └── migrate_personal_data.py # One-time migration script
+│   └── ml.py                   # per-user model loading + classification
 ├── supabase/                    # Migrations + RLS
-│   └── migrations/              # 2 migrations (schema + seed)
+│   └── migrations/              # 6 migrations (schema, seed, storage, fixes)
 ├── src/                         # ML pipeline (from Phase 1)
 │   ├── parse.py                # CSV parsing (Alipay/WeChat)
 │   ├── segment.py              # Text tokenization

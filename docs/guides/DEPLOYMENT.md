@@ -27,6 +27,17 @@ Schema, migrations, and RLS policies are in place:
 - `supabase/migrations/20260703000000_initial_schema.sql` ✓
 - `supabase/migrations/20260703000001_seed_rules_and_categories.sql` ✓
 - `supabase/migrations/20260704000000_create_storage_buckets.sql` ✓
+- `supabase/migrations/20260705194314_fix_search_path_in_trigger_functions.sql` ✓
+- `supabase/migrations/20260705194600_fix_reassign_category_trigger_missing_column.sql` ✓
+- `supabase/migrations/20260706080000_fix_uploads_schema_mismatch.sql` ✓
+
+Apply any not-yet-applied migrations with `supabase db push` (or the Supabase
+MCP `apply_migration` tool) before deploying backend changes that rely on them.
+
+**Railway note**: `backend/railway.json` wraps the start command in
+`sh -c "uvicorn main:app --host 0.0.0.0 --port $PORT"` — Railway invokes
+`startCommand` without a shell, so a bare `$PORT` is passed literally and
+crash-loops the service. Keep the `sh -c` wrapper.
 
 Verify buckets exist:
 ```bash
@@ -36,7 +47,7 @@ supabase storage ls
 
 Get credentials from Supabase dashboard:
 - Project URL: `https://[PROJECT_ID].supabase.co`
-- Anon Key: Settings → API → Service role key (public, safe for frontend)
+- Anon Key: Settings → API → anon/public key (public, safe for frontend)
 - Service Role Key: Settings → API → Service role key (secret, backend only)
 - JWT Secret: Settings → API → JWT secret (for token verification)
 
@@ -47,7 +58,7 @@ Get credentials from Supabase dashboard:
 ### Step 2.1: Push Code to GitHub
 
 ```bash
-git push origin phase-1-supabase-foundation
+git push origin main
 ```
 
 ### Step 2.2: Connect Railway to GitHub Repo
@@ -55,7 +66,7 @@ git push origin phase-1-supabase-foundation
 1. Go to https://railway.app/dashboard
 2. Click **New Project** → **Deploy from GitHub**
 3. Select your repo (`Chinsanaa/financing`)
-4. Select branch: `phase-1-supabase-foundation`
+4. Select branch: `main`
 5. Click **Deploy**
 
 Railway will automatically detect the `Dockerfile` and build.
@@ -235,12 +246,12 @@ For 10k+ monthly users:
 ## Git Workflow
 
 Main branch: `main` (stable releases)
-Dev branch: `phase-1-supabase-foundation` (active development)
+Dev branches: feature branches merged into `main` via PRs
 
 To deploy a new version:
 ```bash
 git checkout main
-git merge phase-1-supabase-foundation
+git merge <feature-branch>
 git push origin main
 ```
 

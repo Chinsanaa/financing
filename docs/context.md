@@ -63,28 +63,136 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-**All core phases complete!** Next work is optional:
-- Full security test suite execution (RLS tests, JWT tampering, rate limit stress)
-- Production deployment (Railway + Vercel)
-- Monitoring setup (auth failures, rate limit spikes, 500 errors)
-- Email-based rate limits (resend-verify, reset-password)
+After the Session 39 overhaul:
+- **Redeploy** Railway (backend) + Vercel (frontend) from this work and apply
+  migration `20260706080000_fix_uploads_schema_mismatch.sql` to the remote
+  Supabase project — the backend as previously committed returned 500 on
+  every request (see Session 39), so a redeploy is required, not optional.
+- Drive one real end-to-end flow on production (signup → upload → label →
+  train → dashboard) against live Supabase.
+- Then the longer-standing optional items: backend security test suite
+  (RLS/JWT/rate limits), monitoring, email-based rate limits, and the
+  git-history privacy scrub (still open, needs a user decision).
 
-## Current State (Session 31, 2026-07-02)
+## Current State (Session 39, 2026-07-06)
 
 | Item | Status |
 |---|---|
-| Personal transaction data in repo | **Removed** — gitignored; templates only |
-| Raw exports | User adds locally (`data/raw/`) |
-| Merchant rules | `data/templates/merchant_rules_starter.csv` + in-code rules in `src/merchant_categories.py` (~600 patterns: merchant/brand names + description disambiguation keywords) |
-| Labeled training data | Created per-user by bootstrap + manual labeling |
-| TF-IDF classifier | Trained per-user via `retrain.py` / bootstrap |
-| Semantic (embedding) classifier | Trained alongside TF-IDF in `retrain.py`; Model2Vec `potion-multilingual-128M` when downloadable, else an offline `LsaEncoder` fallback (see Session 31) |
-| Graduated trust | Model predictions on unseen merchants auto-apply only when both models agree at a calibrated confidence ≥ a data-derived threshold; otherwise routed to review as before |
-| Budget config | `data/templates/budget_config.example.json` → user `budget_config.json` |
-| Web UI | Flask app (`src/app.py`) with interactive wizard; per-session workspaces (`data/sessions/`, gitignored) |
-| English-only display | `src/translate.py` provides consistent translations in both web + Streamlit UIs |
+| Product | Next.js (`frontend/`, Vercel) + FastAPI (`backend/`, Railway) + Supabase; the ONLY UI — Streamlit/Flask stacks deleted this session |
+| Personal transaction data in repo | Removed from working tree (Session 19); **still in git history** — open item |
+| Merchant rules | 554 global seeds in `merchant_rules` (user_id NULL) + per-user rows; source patterns in `src/merchant_categories.py` |
+| Classification | Runs automatically after upload (rules-only until a model exists) and after training — `backend/ml.py` (new, Session 39) |
+| TF-IDF classifier | Trained per-user via `POST /training/retrain` → `src/retrain.py`; artifacts in Storage at `{user_id}/models/{run_id}/` |
+| Semantic (embedding) classifier | Trained alongside TF-IDF; Model2Vec `potion-multilingual-128M` when downloadable, else offline `LsaEncoder` fallback |
+| Graduated trust | Unchanged (Session 31 design): auto-apply only on calibrated two-model agreement above a data-derived threshold |
+| Frontend data layer | `useApi` cached hook + axios auth interceptor (Session 39); no token props, no manual auth headers |
+| Tests | 71 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet |
 
 ## Session Log
+
+### Session 39 (2026-07-06) — Full-stack audit: fix the broken backend, wire classification, delete two legacy UI stacks
+
+**Scope**: user asked for a whole-site optimization pass — find pain points, bugs,
+vulnerabilities, duplicates, dead code, and stale docs, and fix them. Three parallel
+exploration agents scanned backend+src, frontend, and docs/tests/migrations; every
+critical claim was then verified by running the real code against its pinned deps.
+
+**The headline finding — the deployed backend could not serve a single request:**
+1. `AuthMiddleware` was a plain class registered via `app.add_middleware()`; Starlette
+   invokes middleware as raw ASGI `(scope, receive, send)` against its 2-arg
+   `(request, call_next)` signature → `TypeError` → **500 on every request, including
+   `/health`** (reproduced with fastapi 0.104.1/starlette 0.27, the exact pins). Fixed
+   as a `BaseHTTPMiddleware` subclass; also enforces `aud`/`sub`/`exp` claims, exempts
+   CORS preflights, and CORS was re-ordered outermost so 401s carry CORS headers.
+2. Even past that, every dashboard endpoint would 500: `.not_("category_id","is",None)`
+   — `not_` is a *property* in postgrest-py, not callable (reproduced on 0.16.11).
+   Fixed to `.not_.is_(...)` everywhere.
+3. `/auth/signup` and `/auth/login` passed keyword args to gotrue's `sign_up`/
+   `sign_in_with_password`, which take a single credentials dict → `TypeError`. (The
+   frontend signs in via supabase-js directly, which is why auth "worked" in testing.)
+4. Schema mismatches everywhere the backend wrote to Supabase:
+   - every `uploads` row insert failed silently (missing NOT NULL `storage_path`/
+     `size_bytes`; `file_type` enum expected `alipay_csv`/`wechat_xlsx`, code wrote
+     `alipay`/`wechat`) → new migration `20260706080000_fix_uploads_schema_mismatch.sql`
+     (file_type → text, storage columns nullable) + backend now actually stores the
+     original file in the `uploads` bucket under `{user_id}/…`;
+   - every successful training run was marked **failed→stuck 'running' forever**: the
+     success update wrote `status='complete'` (not a valid enum; real value
+     `succeeded`) plus nonexistent `metrics`/`storage_path`/`completed_at` columns, and
+     the failure handler wrote nonexistent `error` — all now use the real
+     `model_runs` columns (`cv_accuracy`, `f1_macro`, `n_labeled_samples`,
+     `artifact_version`, `error_message`, `finished_at`);
+   - `categories` create sent `icon`/`color` columns that don't exist;
+   - `profiles` queried by `user_id` in dashboard.py but the PK is `id` — unified.
+5. Model artifacts were uploaded to `models/{user_id}/…` but storage RLS keys on
+   folder[1]==user_id and account deletion cleans `{user_id}/…` → artifacts now go to
+   `{user_id}/models/{run_id}/`; deletion cleanup is now recursive.
+6. `.xlsx` uploads could never succeed (`pd.read_csv` on Excel during detection).
+7. `run_training` was `async def` running CPU-bound sklearn on the event loop —
+   froze the entire server during training. Now a sync `def` (threadpool).
+8. Error handling: intended 404s were re-wrapped as 500s; every handler leaked
+   `str(e)` internals to clients. New `backend/errors.py` logs server-side and
+   returns generic messages; `HTTPException`s pass through.
+
+**The missing core feature — classification — wired in** (user decision: at upload +
+after training): new `backend/ml.py` downloads the latest succeeded run's artifacts
+from Storage into a per-user in-process cache and classifies pending rows through the
+existing `classify_all` rules-first/graduated-trust flow. Rules apply as trusted;
+model predictions become review-queue suggestions (stored on `category_id` +
+`confidence` with `needs_review=true`); agreement gate auto-applies. Rules-only until
+a model exists. Upload schedules it in a background thread; training re-runs it and
+invalidates the cache. `src/classify.py::load_model_bundle`/`load_models` and
+`src/semantic.py::load_semantic_artifacts` now accept a per-run `paths` dict
+(backward compatible). The old `queue_user_retrain` no-op (inserted `model_runs` rows
+nothing consumed) was deleted; retraining stays explicit via the Training tab.
+
+**Frontend rebuild** (user decision: custom hook, no new deps):
+- `utils/api.ts`: axios interceptor pulls the current Supabase token per request
+  (getSession() auto-refreshes) — removed the token-bleeding singleton, ~15 manual
+  Authorization headers, and the dead `api.classify` helpers that targeted routes
+  that don't exist; 401 responses redirect to /auth; missing `NEXT_PUBLIC_API_URL`
+  fails loudly in production instead of silently hitting localhost.
+- New `utils/useApi.ts` (stale-while-revalidate cache; tab switches render
+  instantly) + `components/ui.tsx` shared Alert/Loading/ProgressBar.
+- New `middleware.ts`: server-side auth gating (no more loading-flash redirects).
+- TrainingTab: poll interval leak fixed (useRef + unmount cleanup); fields now match
+  real `model_runs` columns so runs stop showing as stuck.
+- ReviewTab/LabelTab optimistic row removal; ReportsTab real CSV export + pagination
+  (both buttons were dead); ActionTab "Review Transactions" now switches tabs;
+  auth/verify handles the redirect shapes Supabase actually sends (?code= PKCE,
+  token_hash, legacy token, hash fragment, error params) — it previously only
+  handled `?token=&type=email`, so most confirmation links did nothing.
+- Security headers in next.config.js; removed unused `recharts` (~500KB).
+
+**Cleanup** (user decision: delete legacy UIs): removed `web/` (Flask/PWA),
+`.streamlit/` + the Streamlit cluster in src/ (app, dashboard, dashboard_helpers,
+dashboard_data, web_pipeline, session_context, translate, merchant_display, forecast,
+trends, budget_loader), superseded CLI scripts (bootstrap, train, eval, export_en,
+find_other_candidates, visualize), `_archive/`, broken `scripts/run_all.py`,
+`docs/phase{1,4}_analysis.py`, and `docs/CLEANUP_SUMMARY.md` (its claims were false).
+`backend/migrate_personal_data.py` deleted (PII — real names — in a public repo; the
+procedure lives in MIGRATION_GUIDE.md; user decision: history rewrite deferred).
+`generate_seed_migration.py` now emits the trigger WITH `SECURITY DEFINER SET
+search_path` so re-running it can't reintroduce the Session 36 signup outage. Root
+requirements.txt slimmed to ML deps. Real Supabase project ref scrubbed from
+.env.example, test_local.sh, TEST_LOCAL.md. Fixed two stale tests (fixture used the
+old `time` column; a 2999 date silently overflowed pandas' ns range).
+
+**Docs truth pass**: README, REPO_STRUCTURE, backend/README, frontend/README
+rewritten to match reality (10 tabs, 9 tables, real endpoints, real file tree);
+DEPLOYMENT.md anon-key copy/paste error + branch refs + migration list + Railway
+`sh -c $PORT` note; TEST_LOCAL.md `labeled`→`is_manually_labeled`; PROJECT_SUMMARY
+counts; SECURITY_AUDIT storage-path note; CLAUDE.md structure block; data/raw/README
+no longer points at the deleted bootstrap.py.
+
+**Verified**: 71/71 pytest; backend smoke test (real app, pinned deps): /health 200,
+401s correct, valid token reaches handlers, generic 500s only; stubbed-client
+classification run (rule row applied as trusted, unknown merchant left in review);
+`tsc --noEmit` + `next build` clean.
+
+**Still open**: git-history privacy scrub (user deferred); real worker queue for
+training at scale; backend security test suite; production redeploy + migration
+apply + live end-to-end run (needed before the fixes take effect for real users).
 
 ### Session 38 (2026-07-06) — Fix Railway backend outage: `$PORT` not shell-expanded
 
