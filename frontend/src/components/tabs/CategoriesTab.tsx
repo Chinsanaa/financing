@@ -1,36 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/utils/api';
+import { useApi, invalidate } from '@/utils/useApi';
+import { Alert, Loading } from '@/components/ui';
 
 interface Category {
   id: string;
   name: string;
-  icon?: string;
-  color?: string;
+  is_catch_all?: boolean;
 }
 
-export default function CategoriesTab({ token }: { token: string }) {
-  const [categories, setCategories] = useState<Category[]>([]);
+export default function CategoriesTab() {
+  const { data, setData, loading, error: loadError } = useApi<{ categories: Category[] }>('/categories/');
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const res = await api.categories.list(token);
-        setCategories(res.data.categories || []);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load categories');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadCategories();
-  }, [token]);
+  const categories = data?.categories || [];
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,29 +26,37 @@ export default function CategoriesTab({ token }: { token: string }) {
     try {
       setError('');
       setMessage('');
-      const res = await api.categories.create(token, newCategoryName);
-      setCategories([...categories, res.data.category]);
+      const res = await api.categories.create(newCategoryName.trim());
+      setData((prev) =>
+        prev ? { ...prev, categories: [...prev.categories, res.data.category] } : prev
+      );
       setNewCategoryName('');
       setMessage('Category added!');
+      invalidate('/categories');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to add category');
     }
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Delete this category? Transactions will be reassigned to "Other".')) return;
+    if (!confirm('Delete this category? Its transactions will be reassigned to your catch-all category.')) return;
 
     try {
-      await api.categories.delete(token, id);
-      setCategories(categories.filter((c) => c.id !== id));
+      setError('');
+      await api.categories.delete(id);
+      setData((prev) =>
+        prev ? { ...prev, categories: prev.categories.filter((c) => c.id !== id) } : prev
+      );
       setMessage('Category deleted');
+      invalidate('/categories');
+      invalidate('/dashboard'); // reassignment changes breakdowns
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to delete category');
     }
   };
 
   if (loading) {
-    return <div className="text-gray-600">Loading categories...</div>;
+    return <Loading label="Loading categories..." />;
   }
 
   return (
@@ -71,17 +66,8 @@ export default function CategoriesTab({ token }: { token: string }) {
         <p className="text-gray-600">Manage your spending categories</p>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
-
-      {message && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-          {message}
-        </div>
-      )}
+      {(error || loadError) && <Alert kind="error">{error || loadError}</Alert>}
+      {message && <Alert kind="success">{message}</Alert>}
 
       {/* Add Category Form */}
       <form onSubmit={handleAddCategory} className="bg-white rounded-lg border border-gray-200 p-4">
@@ -109,16 +95,22 @@ export default function CategoriesTab({ token }: { token: string }) {
         ) : (
           categories.map((cat) => (
             <div key={cat.id} className="bg-white rounded-lg border border-gray-200 p-4 flex justify-between items-center">
-              <div>
+              <div className="flex items-center gap-2">
                 <p className="font-medium text-gray-900">{cat.name}</p>
-                {cat.color && <p className="text-xs text-gray-500">{cat.color}</p>}
+                {cat.is_catch_all && (
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                    catch-all
+                  </span>
+                )}
               </div>
-              <button
-                onClick={() => handleDeleteCategory(cat.id)}
-                className="text-red-600 hover:text-red-700 text-sm"
-              >
-                Delete
-              </button>
+              {!cat.is_catch_all && (
+                <button
+                  onClick={() => handleDeleteCategory(cat.id)}
+                  className="text-red-600 hover:text-red-700 text-sm"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           ))
         )}

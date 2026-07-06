@@ -1,136 +1,82 @@
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
+import { createClient } from './supabase';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+/**
+ * Single axios client for the FastAPI backend.
+ *
+ * A request interceptor attaches the CURRENT Supabase access token on every
+ * request (getSession() transparently refreshes expired tokens), so:
+ * - components never pass tokens or Authorization headers around,
+ * - no token is ever written into shared axios defaults (the old singleton
+ *   kept a stale token globally and never cleared it on logout).
+ */
 
-let apiClient: AxiosInstance | null = null;
-
-export function getApiClient(token?: string): AxiosInstance {
-  if (!apiClient) {
-    apiClient = axios.create({
-      baseURL: API_BASE_URL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+function getBaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_API_URL;
+  if (url) return url;
+  if (process.env.NODE_ENV === 'production') {
+    // Silently falling back to localhost in production made every request
+    // fail with an opaque network error. Fail loudly instead.
+    throw new Error('NEXT_PUBLIC_API_URL is not configured');
   }
-
-  // Add token to headers if provided
-  if (token) {
-    apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  }
-
-  return apiClient;
+  return 'http://localhost:8000';
 }
 
-// Generic HTTP methods
+export const apiClient = axios.create();
+
+apiClient.interceptors.request.use(async (config) => {
+  config.baseURL = getBaseUrl();
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`;
+  }
+  return config;
+});
+
+// A 401 means the session is gone (expired refresh token, revoked user) —
+// bounce to the login page instead of leaving every tab in an error state.
+apiClient.interceptors.response.use(undefined, (error) => {
+  if (typeof window !== 'undefined' && error?.response?.status === 401) {
+    window.location.href = '/auth';
+  }
+  return Promise.reject(error);
+});
+
 export const api = {
-  get: (url: string, config?: any) => {
-    return getApiClient().get(url, config);
-  },
-  post: (url: string, data?: any, config?: any) => {
-    return getApiClient().post(url, data, config);
-  },
-  put: (url: string, data?: any, config?: any) => {
-    return getApiClient().put(url, data, config);
-  },
-  patch: (url: string, data?: any, config?: any) => {
-    return getApiClient().patch(url, data, config);
-  },
-  delete: (url: string, config?: any) => {
-    return getApiClient().delete(url, config);
-  },
+  get: (url: string, config?: any) => apiClient.get(url, config),
+  post: (url: string, data?: any, config?: any) => apiClient.post(url, data, config),
+  put: (url: string, data?: any, config?: any) => apiClient.put(url, data, config),
+  patch: (url: string, data?: any, config?: any) => apiClient.patch(url, data, config),
+  delete: (url: string, config?: any) => apiClient.delete(url, config),
 
-  // Auth
-  auth: {
-    signup: async (email: string, password: string) => {
-      return getApiClient().post('/auth/signup', { email, password });
-    },
-    login: async (email: string, password: string) => {
-      return getApiClient().post('/auth/login', { email, password });
-    },
-    logout: async (token: string) => {
-      return getApiClient(token).post('/auth/logout');
-    },
-  },
-
-  // Categories
-  categories: {
-    list: async (token: string) => {
-      return getApiClient(token).get('/categories/');
-    },
-    create: async (token: string, name: string, icon?: string, color?: string) => {
-      return getApiClient(token).post('/categories/', { name, icon, color });
-    },
-    update: async (token: string, id: string, data: any) => {
-      return getApiClient(token).put(`/categories/${id}`, data);
-    },
-    delete: async (token: string, id: string) => {
-      return getApiClient(token).delete(`/categories/${id}`);
-    },
-  },
-
-  // Uploads
+  // Typed helpers for the real backend routes
   uploads: {
-    list: async (token: string) => {
-      return getApiClient(token).get('/uploads/');
-    },
-    upload: async (token: string, file: File) => {
+    upload: (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      return getApiClient(token).post('/uploads/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-    },
-    getStatus: async (token: string, uploadId: string) => {
-      return getApiClient(token).get(`/uploads/${uploadId}`);
+      return apiClient.post('/uploads/', formData);
     },
   },
 
-  // Training
   training: {
-    retrain: async (token: string) => {
-      return getApiClient(token).post('/training/retrain');
-    },
-    getStatus: async (token: string, modelRunId: string) => {
-      return getApiClient(token).get(`/training/${modelRunId}`);
-    },
-    list: async (token: string) => {
-      return getApiClient(token).get('/training/');
-    },
+    retrain: () => apiClient.post('/training/retrain'),
+    getStatus: (modelRunId: string) => apiClient.get(`/training/${modelRunId}`),
+    list: () => apiClient.get('/training/'),
   },
 
-  // Classification
-  classify: {
-    predict: async (token: string, limit?: number) => {
-      return getApiClient(token).post('/classify/', { limit });
-    },
-    accept: async (token: string, transactionId: string) => {
-      return getApiClient(token).put(`/classify/${transactionId}`);
-    },
-    override: async (token: string, transactionId: string, category: string) => {
-      return getApiClient(token).post(`/classify/${transactionId}/override`, { category });
-    },
+  classifyTx: {
+    label: (transactionId: string, categoryId: string) =>
+      apiClient.post(`/classify/${transactionId}/label`, { category_id: categoryId }),
+    accept: (transactionId: string) =>
+      apiClient.post(`/classify/${transactionId}/accept`, {}),
   },
 
-  // Dashboard
-  dashboard: {
-    summary: async (token: string) => {
-      return getApiClient(token).get('/dashboard/summary');
-    },
-    byCategory: async (token: string) => {
-      return getApiClient(token).get('/dashboard/by-category');
-    },
-    trends: async (token: string, days?: number) => {
-      return getApiClient(token).get(`/dashboard/trends?days=${days || 30}`);
-    },
-    reviewQueue: async (token: string) => {
-      return getApiClient(token).get('/dashboard/review-queue');
-    },
-    onboardingStatus: async (token: string) => {
-      return getApiClient(token).get('/dashboard/onboarding-status');
-    },
-    completeOnboarding: async (token: string) => {
-      return getApiClient(token).post('/dashboard/onboarding-complete');
-    },
+  categories: {
+    list: () => apiClient.get('/categories/'),
+    create: (name: string) => apiClient.post('/categories/', { name }),
+    delete: (id: string) => apiClient.delete(`/categories/${id}`),
   },
 };

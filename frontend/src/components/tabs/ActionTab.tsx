@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/utils/api';
+import { useApi } from '@/utils/useApi';
+import { Alert, Loading } from '@/components/ui';
 
 interface Action {
   type: string;
@@ -13,40 +13,19 @@ interface Action {
   message?: string;
 }
 
-export default function ActionTab({ token }: { token: string }) {
-  const [actions, setActions] = useState<Action[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    const loadActions = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get('/dashboard/action', { headers: { Authorization: `Bearer ${token}` } });
-        setActions(res.data.actions || []);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load action items');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadActions();
-  }, [token]);
+export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
+  const { data, loading, error } = useApi<{ actions: Action[] }>('/dashboard/action');
+  const actions = data?.actions || [];
 
   if (loading) {
-    return <div className="text-gray-600">Loading action items...</div>;
+    return <Loading label="Loading action items..." />;
   }
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-gray-900">Action Plan</h2>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert kind="error">{error}</Alert>}
 
       {actions.length === 0 ? (
         <div className="bg-green-50 border border-green-200 rounded-lg p-6">
@@ -86,7 +65,10 @@ export default function ActionTab({ token }: { token: string }) {
                 >
                   <p className="font-bold text-blue-900">📋 Pending Review</p>
                   <p className="text-blue-700 text-sm mt-1">{action.message}</p>
-                  <button className="mt-2 text-blue-600 hover:text-blue-800 text-sm font-medium">
+                  <button
+                    onClick={() => onNavigate?.('review')}
+                    className="mt-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
                     Review Transactions →
                   </button>
                 </div>

@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/utils/api';
+import { useApi, invalidate } from '@/utils/useApi';
+import { Alert, Loading, ProgressBar } from '@/components/ui';
 
 interface Transaction {
   id: string;
@@ -18,93 +20,73 @@ interface Category {
   name: string;
 }
 
-export default function LabelTab({ token }: { token: string }) {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+export default function LabelTab() {
+  const queueQ = useApi<{ transactions: Transaction[] }>('/dashboard/review-queue');
+  const categoriesQ = useApi<{ categories: Category[] }>('/categories/');
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
-  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [queueRes, catRes] = await Promise.all([
-          api.get('/dashboard/review-queue', { headers: { Authorization: `Bearer ${token}` } }),
-          api.get('/categories/', { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-        setTransactions(queueRes.data.transactions || []);
-        setCategories(catRes.data.categories || []);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load transactions');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const transactions = queueQ.data?.transactions || [];
+  const categories = categoriesQ.data?.categories || [];
 
-    loadData();
-  }, [token]);
-
-  const removeCurrent = (txs: Transaction[]) => {
-    const next = txs.filter((_, i) => i !== currentIndex);
-    setTransactions(next);
-    if (currentIndex >= next.length) {
-      setCurrentIndex(Math.max(0, next.length - 1));
-    }
+  const removeCurrent = () => {
+    const tx = transactions[currentIndex];
+    queueQ.setData((prev) =>
+      prev
+        ? { ...prev, transactions: prev.transactions.filter((t) => t.id !== tx.id) }
+        : prev
+    );
+    setCurrentIndex((i) => Math.min(i, Math.max(0, transactions.length - 2)));
+    invalidate('/dashboard'); // stats/action counts changed
   };
 
   const handleAccept = async () => {
-    if (currentIndex >= transactions.length) return;
     const tx = transactions[currentIndex];
+    if (!tx) return;
 
     try {
       setActing(true);
-      await api.post(`/classify/${tx.id}/accept`, {}, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      removeCurrent(transactions);
+      setActionError('');
+      await api.classifyTx.accept(tx.id);
+      removeCurrent();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to accept classification');
+      setActionError(err.response?.data?.detail || 'Failed to accept classification');
     } finally {
       setActing(false);
     }
   };
 
   const handleOverride = async (categoryId: string) => {
-    if (currentIndex >= transactions.length) return;
     const tx = transactions[currentIndex];
+    if (!tx) return;
 
     try {
       setActing(true);
-      await api.post(`/classify/${tx.id}/label`, { category_id: categoryId }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      removeCurrent(transactions);
+      setActionError('');
+      await api.classifyTx.label(tx.id, categoryId);
+      removeCurrent();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to label transaction');
+      setActionError(err.response?.data?.detail || 'Failed to label transaction');
     } finally {
       setActing(false);
     }
   };
 
   const handleSkip = () => {
+    if (transactions.length === 0) return;
     setCurrentIndex((i) => (i + 1) % transactions.length);
   };
 
-  if (loading) {
-    return <div className="text-gray-600">Loading transactions...</div>;
+  if (queueQ.loading || categoriesQ.loading) {
+    return <Loading label="Loading transactions..." />;
   }
 
   if (transactions.length === 0) {
-    return (
-      <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-center">
-        All transactions labeled! Great job.
-      </div>
-    );
+    return <Alert kind="success">All transactions labeled! Great job.</Alert>;
   }
 
-  const tx = transactions[currentIndex];
+  const tx = transactions[Math.min(currentIndex, transactions.length - 1)];
   const progress = Math.round(((currentIndex + 1) / transactions.length) * 100);
 
   return (
@@ -122,18 +104,11 @@ export default function LabelTab({ token }: { token: string }) {
             {currentIndex + 1} of {transactions.length}
           </span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div
-            className="bg-blue-600 h-2 rounded-full transition-all"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+        <ProgressBar percent={progress} />
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
+      {(actionError || queueQ.error) && (
+        <Alert kind="error">{actionError || queueQ.error}</Alert>
       )}
 
       {/* Current Transaction */}
