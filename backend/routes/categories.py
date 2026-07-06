@@ -8,16 +8,16 @@ from errors import internal_error
 router = APIRouter()
 
 
+# The categories table columns are: name, is_catch_all, sort_order.
+# (No icon/color — inserting unknown columns makes postgrest reject the row.)
 class CategoryCreate(BaseModel):
     name: str
-    icon: Optional[str] = None
-    color: Optional[str] = None
+    sort_order: Optional[int] = None
 
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
-    icon: Optional[str] = None
-    color: Optional[str] = None
+    sort_order: Optional[int] = None
 
 
 @router.get("/")
@@ -44,12 +44,10 @@ async def create_category(request: Request, cat: CategoryCreate):
     """Create a new category for the authenticated user."""
     user_id = request.state.user_id
     try:
-        response = supabase_client.table("categories").insert({
-            "user_id": user_id,
-            "name": cat.name,
-            "icon": cat.icon,
-            "color": cat.color,
-        }).execute()
+        row = {"user_id": user_id, "name": cat.name}
+        if cat.sort_order is not None:
+            row["sort_order"] = cat.sort_order
+        response = supabase_client.table("categories").insert(row).execute()
         return {"category": response.data[0] if response.data else None}
     except HTTPException:
         raise
