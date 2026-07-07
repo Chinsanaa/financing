@@ -18,10 +18,8 @@ classify anything. Now:
 Model bundles are cached in-process per (user_id, model_run_id); a new
 training run invalidates the cache via `invalidate_user_bundle`.
 """
-import sys
 import tempfile
 import threading
-from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -29,9 +27,7 @@ import pandas as pd
 from config import supabase_client
 from errors import logger
 
-# Add src to path so we can import the ML pipeline
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from classify import classify_all, load_model_bundle, ModelBundle  # noqa: E402
+from src.classify import classify_all, load_model_bundle, ModelBundle  # noqa: E402
 
 # Artifact file names, keyed the same way training.py's paths dict is.
 ARTIFACT_FILES = {

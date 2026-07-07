@@ -9,8 +9,6 @@ from config import supabase_client
 from errors import internal_error, logger
 from datetime import datetime
 import pandas as pd
-from pathlib import Path
-import sys
 from uuid import uuid4
 import tempfile
 import shutil
@@ -18,9 +16,7 @@ import traceback
 
 router = APIRouter()
 
-# Add src to path so we can import retrain
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-from retrain import retrain_model
+from src.retrain import retrain_model
 
 
 class TrainRequest(BaseModel):

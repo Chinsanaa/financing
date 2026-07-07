@@ -6,15 +6,11 @@ from config import supabase_client
 from errors import internal_error, logger
 import pandas as pd
 from datetime import datetime
-from pathlib import Path
 from uuid import uuid4
 import re
-import sys
 import tempfile
 
-# Add src to path so we can import parsers
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-from parse import parse_alipay, parse_wechat_excel, parse_wechat_csv
+from src.parse import parse_alipay, parse_wechat_excel, parse_wechat_csv
 
 router = APIRouter()
 
