@@ -14,10 +14,17 @@ import { api } from './api';
  */
 
 const cache = new Map<string, unknown>();
+// Mounted useApi(path) instances register a background-revalidate callback here,
+// keyed by their exact path, so invalidate() can reach components that never
+// unmount (e.g. OnboardingChecklist) and not just the caller that mutated data.
+const subscribers = new Map<string, Set<() => void>>();
 
 export function invalidate(prefix = ''): void {
   Array.from(cache.keys()).forEach((key) => {
     if (key.startsWith(prefix)) cache.delete(key);
+  });
+  subscribers.forEach((callbacks, path) => {
+    if (path.startsWith(prefix)) callbacks.forEach((cb) => cb());
   });
 }
 
@@ -55,6 +62,16 @@ export function useApi<T>(path: string | null) {
     } else {
       load();
     }
+  }, [path, load]);
+
+  useEffect(() => {
+    if (!path) return;
+    const refetch = () => load(true);
+    if (!subscribers.has(path)) subscribers.set(path, new Set());
+    subscribers.get(path)!.add(refetch);
+    return () => {
+      subscribers.get(path)?.delete(refetch);
+    };
   }, [path, load]);
 
   return { data, setData, loading, error, reload: load };

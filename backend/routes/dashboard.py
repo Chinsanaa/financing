@@ -544,20 +544,34 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 .execute()
             )
             label_type = "manually_labeled"
+            rows = response.data or []
         else:
-            # Show model suggestions needing review
-            response = (
+            # Show model suggestions needing review. Pull a larger pool than we
+            # need, then dedupe by merchant in Python (PostgREST has no
+            # DISTINCT ON) so a handful of high-volume merchants don't flood
+            # the queue — unique merchants make better labeling coverage.
+            pool = (
                 supabase_client.table("transactions")
                 .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
                 .eq("user_id", user_id)
                 .eq("needs_review", True)
                 .order("confidence")  # Least confident first
-                .limit(50)
+                .limit(500)
                 .execute()
             )
             label_type = "model_suggestion"
 
-        if not response.data:
+            seen_merchants: set = set()
+            rows = []
+            for txn in pool.data or []:
+                if txn["merchant"] in seen_merchants:
+                    continue
+                seen_merchants.add(txn["merchant"])
+                rows.append(txn)
+                if len(rows) >= 50:
+                    break
+
+        if not rows:
             return {"transactions": [], "count": 0, "type": label_type}
 
         # In suggestion mode the row's category_id IS the model's suggestion —
@@ -574,7 +588,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 "category": (txn["categories"]["name"] if txn["categories"] else None) if show_labeled else None,
                 "suggested_category": txn["categories"]["name"] if txn["categories"] else None,
             }
-            for txn in response.data
+            for txn in rows
         ]
 
         return {
