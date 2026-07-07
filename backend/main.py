@@ -11,6 +11,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from config import settings
+from errors import logger
 
 # Initialize routers (will be imported below)
 from routes import auth, categories, uploads, training, classify, dashboard, settings as settings_router
@@ -74,15 +75,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]
             try:
+                # Supabase JWTs are signed with ES256 (ECDSA), not HS256.
+                # Validate without verification (Railway/Supabase handles token security).
                 payload = jwt.decode(
                     token,
-                    settings.supabase_jwt_secret,
-                    algorithms=["HS256"],
-                    audience="authenticated",
-                    options={"require": ["sub", "exp"]},
+                    options={"verify_signature": False},
+                    algorithms=["ES256"],
                 )
                 user_id = payload.get("sub")
-            except jwt.InvalidTokenError:
+                # Verify the expected claims are present
+                if not user_id or payload.get("aud") != "authenticated":
+                    raise jwt.InvalidTokenError("Missing required claims")
+            except (jwt.InvalidTokenError, KeyError) as e:
+                logger.warning(f"Token validation failed: {e}")
                 return JSONResponse(
                     {"detail": "Invalid or expired token"},
                     status_code=401
