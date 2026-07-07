@@ -21,7 +21,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import os, requests; requests.get(f'http://localhost:{os.environ.get(\"PORT\", 8000)}/health')"
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Cache bust: 2026-07-07T05:30:00Z
 # Run the application. Shell form (not exec-form JSON array) so $PORT is
