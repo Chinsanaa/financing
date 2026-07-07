@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import { api } from '@/utils/api';
+import { Alert } from '@/components/ui';
+import Button from '@/components/ui/Button';
+import Card, { SectionHeader } from '@/components/ui/Card';
+import Input from '@/components/ui/Input';
+import { SkeletonCard } from '@/components/ui/Skeleton';
 
 interface Profile {
   id: string;
@@ -95,132 +101,109 @@ export default function SettingsClient() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-12 sm:px-6">
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <button
-            onClick={() => router.back()}
-            className="px-3 py-2 text-gray-600 hover:text-gray-900 transition text-sm font-medium"
-          >
-            ← Back
-          </button>
+    <div className="min-h-screen">
+      <header className="glass sticky top-0 z-40 border-b border-edge/8">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
+          <h1 className="font-display text-lg font-bold tracking-tight">Settings</h1>
+          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" /> Back
+          </Button>
         </div>
       </header>
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Account Info */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Account</h2>
-          <div className="space-y-3">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-8 sm:px-6">
+        <Card className="p-6">
+          <SectionHeader label="Profile" title="Account" />
+          <div className="space-y-4">
             <div>
-              <p className="text-sm text-gray-600">Email</p>
-              <p className="font-medium text-gray-900">{user?.email}</p>
+              <p className="section-label mb-0.5">Email</p>
+              <p className="text-sm font-medium">{user?.email}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Account Created</p>
-              <p className="font-medium text-gray-900">
+              <p className="section-label mb-0.5">Account created</p>
+              <p className="text-sm font-medium">
                 {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : '—'}
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Onboarding Status</p>
-              <p className="font-medium text-gray-900 capitalize">{profile?.onboarding_phase || '—'}</p>
+              <p className="section-label mb-0.5">Onboarding status</p>
+              <p className="text-sm font-medium capitalize">{profile?.onboarding_phase || '—'}</p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        {/* Income Settings */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Monthly Income</h2>
+        <Card className="p-6">
+          <SectionHeader label="Budget" title="Monthly income" />
           <form onSubmit={handleUpdateIncome} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Income (¥)
-              </label>
-              <input
+              <Input
+                label="Monthly income (¥)"
                 type="number"
                 value={income}
                 onChange={(e) => setIncome(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="0"
               />
-              <p className="text-xs text-gray-500 mt-1">Used for budget and savings calculations</p>
+              <p className="mt-1.5 text-xs text-muted">
+                Used for budget and savings calculations
+              </p>
             </div>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                {error}
-              </div>
-            )}
+            {error && <Alert kind="error">{error}</Alert>}
+            {success && <Alert kind="success">{success}</Alert>}
 
-            {success && (
-              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-                {success}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
-            >
-              {saving ? 'Saving...' : 'Save Income'}
-            </button>
+            <Button type="submit" loading={saving}>
+              {saving ? 'Saving' : 'Save income'}
+            </Button>
           </form>
-        </div>
+        </Card>
 
-        {/* Danger Zone */}
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h2 className="text-lg font-bold text-red-900 mb-4">Danger Zone</h2>
+        <Card className="border-danger/25 p-6">
+          <SectionHeader label="Irreversible" title="Danger zone" />
           <div className="space-y-4">
-            <p className="text-sm text-red-800">
-              Deleting your account will permanently remove all your data, transactions, and models.
-              This action cannot be undone.
+            <p className="text-sm text-muted">
+              Deleting your account will permanently remove all your data, transactions, and
+              models. This action cannot be undone.
             </p>
 
             {deleteConfirm ? (
-              <div className="space-y-3 bg-white p-4 rounded border border-red-300">
-                <p className="font-bold text-red-900">Are you absolutely sure?</p>
-                <p className="text-sm text-red-800">
+              <div className="space-y-3 rounded-lg border border-danger/30 bg-danger/5 p-4">
+                <p className="text-sm font-semibold text-danger">Are you absolutely sure?</p>
+                <p className="text-sm text-muted">
                   All transactions, categories, and trained models will be permanently deleted.
                 </p>
                 <div className="flex gap-3">
-                  <button
+                  <Button
+                    variant="danger"
                     onClick={handleDeleteAccount}
-                    disabled={deleting}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
+                    loading={deleting}
                   >
-                    {deleting ? 'Deleting...' : 'Yes, Delete Everything'}
-                  </button>
-                  <button
+                    {deleting ? 'Deleting' : 'Yes, delete everything'}
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => setDeleteConfirm(false)}
                     disabled={deleting}
-                    className="px-4 py-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 disabled:opacity-50 font-medium"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
-              <button
-                onClick={handleDeleteAccount}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
-              >
-                Delete Account
-              </button>
+              <Button variant="danger" onClick={handleDeleteAccount}>
+                Delete account
+              </Button>
             )}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

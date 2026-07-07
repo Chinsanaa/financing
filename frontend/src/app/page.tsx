@@ -1,10 +1,5 @@
-import HomeClient from './HomeClient';
-
-// Auth-gated redirect: depends on per-request session state, so it must
-// never be statically prerendered (createClient() would run at build time
-// inside a Client Component, which is what HomeClient.tsx is).
-export const dynamic = 'force-dynamic';
+import Landing from '@/components/landing/Landing';
 
 export default function HomePage() {
-  return <HomeClient />;
+  return <Landing />;
 }

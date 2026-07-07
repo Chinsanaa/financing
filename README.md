@@ -47,11 +47,15 @@ Two very different questions:
   that matters for new data, and why model output defaults to review instead of
   auto-applying. Details: `docs/FULL_AUDIT.md`.
 
-## Dashboard tabs (10)
+## Dashboard sections (5)
 
-Onboarding: **Upload** (default landing), **Categories**, **Label**, **Training**.
-Analytics: **Overview**, **Budget**, **Savings**, **Action Plan**, **Reports**, **Review Queue**.
-Plus a separate **Settings** page (income, account deletion).
+The ten original tabs are grouped into five compact sections with sub-tabs:
+**Overview**, **Transactions** (Upload / Label / Review queue), **Model**
+(Categories / Training), **Planning** (Budget / Savings / Action plan), and
+**Reports**. A dismissible onboarding checklist (Upload → Categories → Label →
+Train) guides new accounts. Plus a separate **Settings** page (income, account
+deletion). The UI is a dark-first design with a light theme toggle, skeleton
+loading states, and a marketing landing page at `/` for signed-out visitors.
 
 ## Quick start (local)
 

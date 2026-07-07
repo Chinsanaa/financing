@@ -22,7 +22,10 @@ export function middleware(req: NextRequest) {
   const authed = hasSessionCookie(req);
 
   if (pathname === '/') {
-    return NextResponse.redirect(new URL(authed ? '/dashboard' : '/auth', req.url));
+    // Signed-in users skip the marketing page; signed-out users see the landing.
+    return authed
+      ? NextResponse.redirect(new URL('/dashboard', req.url))
+      : NextResponse.next();
   }
   if (!authed && (pathname.startsWith('/dashboard') || pathname.startsWith('/settings'))) {
     return NextResponse.redirect(new URL('/auth', req.url));

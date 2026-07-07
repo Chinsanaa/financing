@@ -1,8 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  BrainCircuit,
+  ChartPie,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  Wallet,
+} from 'lucide-react';
 import { createClient } from '@/utils/supabase';
+import { TabBar, PillTabs, TabPanel, TabItem } from '@/components/ui/Tabs';
+import ThemeToggle from '@/components/ui/ThemeToggle';
+import DashboardLoading from './loading';
+import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
 import StatsTab from '@/components/tabs/StatsTab';
 import BudgetTab from '@/components/tabs/BudgetTab';
 import SavingsTab from '@/components/tabs/SavingsTab';
@@ -14,25 +28,84 @@ import CategoriesTab from '@/components/tabs/CategoriesTab';
 import LabelTab from '@/components/tabs/LabelTab';
 import TrainingTab from '@/components/tabs/TrainingTab';
 
-type TabType =
-  | 'overview'
-  | 'budget'
-  | 'savings'
-  | 'action'
-  | 'reports'
-  | 'review'
-  | 'upload'
-  | 'categories'
-  | 'label'
-  | 'training';
+/** Ten legacy tabs regrouped into five compact sections with sub-tabs. */
+const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard, subs: [] },
+  {
+    id: 'transactions',
+    label: 'Transactions',
+    icon: Wallet,
+    subs: [
+      { id: 'upload', label: 'Upload' },
+      { id: 'label', label: 'Label' },
+      { id: 'review', label: 'Review queue' },
+    ],
+  },
+  {
+    id: 'model',
+    label: 'Model',
+    icon: BrainCircuit,
+    subs: [
+      { id: 'categories', label: 'Categories' },
+      { id: 'training', label: 'Training' },
+    ],
+  },
+  {
+    id: 'planning',
+    label: 'Planning',
+    icon: ChartPie,
+    subs: [
+      { id: 'budget', label: 'Budget' },
+      { id: 'savings', label: 'Savings' },
+      { id: 'action', label: 'Action plan' },
+    ],
+  },
+  { id: 'reports', label: 'Reports', icon: FileText, subs: [] },
+];
+
+/** Legacy tab id → its section (for ActionTab's onNavigate and URL params). */
+const TAB_SECTION: Record<string, string> = {
+  overview: 'overview',
+  upload: 'transactions',
+  label: 'transactions',
+  review: 'transactions',
+  categories: 'model',
+  training: 'model',
+  budget: 'planning',
+  savings: 'planning',
+  action: 'planning',
+  reports: 'reports',
+};
+
+const DEFAULT_SUB: Record<string, string> = {
+  overview: 'overview',
+  transactions: 'upload',
+  model: 'categories',
+  planning: 'budget',
+  reports: 'reports',
+};
 
 export default function DashboardClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [supabase] = useState(() => createClient());
 
   const [user, setUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('upload');
   const [loading, setLoading] = useState(true);
+
+  const urlTab = searchParams.get('tab');
+  const activeTab = urlTab && TAB_SECTION[urlTab] ? urlTab : 'upload';
+  const activeSection = TAB_SECTION[activeTab];
+  const section = SECTIONS.find((s) => s.id === activeSection)!;
+
+  const goToTab = useCallback(
+    (tab: string) => {
+      router.replace(`/dashboard?tab=${tab}`, { scroll: false });
+    },
+    [router]
+  );
+
+  const goToSection = (sectionId: string) => goToTab(DEFAULT_SUB[sectionId]);
 
   useEffect(() => {
     // middleware.ts already gates unauthenticated visits server-side; this
@@ -70,88 +143,75 @@ export default function DashboardClient() {
     router.push('/auth');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    );
-  }
-
-  const tabs: { id: TabType; label: string; icon: string }[] = [
-    { id: 'upload', label: 'Upload', icon: '📤' },
-    { id: 'categories', label: 'Categories', icon: '🏷️' },
-    { id: 'label', label: 'Label', icon: '🖊️' },
-    { id: 'training', label: 'Training', icon: '🤖' },
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'budget', label: 'Budget', icon: '💰' },
-    { id: 'savings', label: 'Savings', icon: '🏦' },
-    { id: 'action', label: 'Action Plan', icon: '📋' },
-    { id: 'reports', label: 'Reports', icon: '📄' },
-    { id: 'review', label: 'Review Queue', icon: '✅' },
-  ];
+  if (loading) return <DashboardLoading />;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Financing</h1>
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-gray-600">{user?.email}</p>
-            <a
+      <header className="sticky top-0 z-40 glass border-b border-edge/8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+          <Link href="/dashboard" className="font-display text-lg font-bold tracking-tight">
+            Financing<span className="text-accent-strong">.</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <p className="mr-2 hidden text-sm text-muted sm:block">{user?.email}</p>
+            <ThemeToggle />
+            <Link
               href="/settings"
-              className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition text-sm font-medium"
+              aria-label="Settings"
+              className="flex h-9 w-9 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25"
             >
-              ⚙️ Settings
-            </a>
+              <Settings className="h-4 w-4" />
+            </Link>
             <button
               onClick={handleLogout}
-              className="px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition text-sm font-medium"
+              aria-label="Sign out"
+              className="flex h-9 w-9 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40"
             >
-              Logout
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
+
+        {/* Section tabs */}
+        <div className="mx-auto max-w-7xl border-t border-edge/8 px-4 sm:px-6 lg:px-8">
+          <TabBar
+            tabs={SECTIONS}
+            active={activeSection}
+            onChange={goToSection}
+            layoutId="section-tab"
+          />
+        </div>
       </header>
 
-      {/* Tabs Navigation */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-1 overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 border-b-2 whitespace-nowrap transition ${
-                  activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600 font-medium'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Content */}
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <OnboardingChecklist onNavigate={goToTab} activeTab={activeTab} />
 
-      {/* Tab Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'upload' && <UploadTab />}
-        {activeTab === 'categories' && <CategoriesTab />}
-        {activeTab === 'label' && <LabelTab />}
-        {activeTab === 'training' && <TrainingTab />}
-        {activeTab === 'overview' && <StatsTab />}
-        {activeTab === 'budget' && <BudgetTab />}
-        {activeTab === 'savings' && <SavingsTab />}
-        {activeTab === 'action' && (
-          <ActionTab onNavigate={(tab) => setActiveTab(tab as TabType)} />
+        {section.subs.length > 0 && (
+          <div className="mb-6">
+            <PillTabs
+              tabs={section.subs}
+              active={activeTab}
+              onChange={goToTab}
+              layoutId="sub-tab"
+            />
+          </div>
         )}
-        {activeTab === 'reports' && <ReportsTab />}
-        {activeTab === 'review' && <ReviewTab />}
-      </div>
+
+        <TabPanel key={activeTab}>
+          {activeTab === 'upload' && <UploadTab />}
+          {activeTab === 'categories' && <CategoriesTab />}
+          {activeTab === 'label' && <LabelTab />}
+          {activeTab === 'training' && <TrainingTab />}
+          {activeTab === 'overview' && <StatsTab />}
+          {activeTab === 'budget' && <BudgetTab />}
+          {activeTab === 'savings' && <SavingsTab />}
+          {activeTab === 'action' && <ActionTab onNavigate={goToTab} />}
+          {activeTab === 'reports' && <ReportsTab />}
+          {activeTab === 'review' && <ReviewTab />}
+        </TabPanel>
+      </main>
     </div>
   );
 }

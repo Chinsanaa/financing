@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import DashboardClient from './DashboardClient';
+import DashboardLoading from './loading';
 
 // Auth-gated: depends on per-request session state, so it must never be
 // statically prerendered (createClient() would run at build time inside
@@ -6,5 +8,9 @@ import DashboardClient from './DashboardClient';
 export const dynamic = 'force-dynamic';
 
 export default function DashboardPage() {
-  return <DashboardClient />;
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardClient />
+    </Suspense>
+  );
 }
