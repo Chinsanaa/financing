@@ -19,15 +19,19 @@ interface Transaction {
   amount: number;
   confidence: number;
   suggested_category: string | null;
+  category?: string | null;
 }
 
 interface ReviewQueueData {
   transactions: Transaction[];
   count: number;
+  type?: string;
 }
 
 export default function ReviewTab() {
-  const { data, setData, loading, error: loadError } = useApi<ReviewQueueData>('/dashboard/review-queue');
+  const [showLabeled, setShowLabeled] = useState(false);
+  const queryString = showLabeled ? '?show_labeled=true' : '';
+  const { data, setData, loading, error: loadError } = useApi<ReviewQueueData>(`/dashboard/review-queue${queryString}`);
   const categoriesQ = useApi<{ categories: Array<{ id: string; name: string }> }>('/categories/');
   const [selectedTxn, setSelectedTxn] = useState<string | null>(null);
   const [labeling, setLabeling] = useState<string | null>(null);
@@ -87,21 +91,57 @@ export default function ReviewTab() {
 
   const error = actionError || loadError;
 
+  const isShowingLabeled = showLabeled;
+  const title = isShowingLabeled ? 'Your labels' : 'Review queue';
+  const description = isShowingLabeled
+    ? 'Your manually labeled transactions. Review them to catch any human errors before retraining.'
+    : 'Low-confidence classifications waiting for your call.';
+
   return (
     <div className="space-y-6">
-      <SectionHeader label="Transactions" title="Review queue" />
-      <p className="-mt-4 text-sm text-muted">
-        Low-confidence classifications waiting for your call.
-        {data && <span className="ml-1 tabular-nums">{data.count} items.</span>}
-      </p>
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <SectionHeader label="Transactions" title={title} />
+          <p className="-mt-4 text-sm text-muted">
+            {description}
+            {data && <span className="ml-1 tabular-nums">{data.count} items.</span>}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowLabeled(false)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              !isShowingLabeled
+                ? 'bg-accent/20 text-accent-strong'
+                : 'bg-surface-2 text-muted hover:bg-surface-3'
+            }`}
+          >
+            Model Suggestions
+          </button>
+          <button
+            onClick={() => setShowLabeled(true)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              isShowingLabeled
+                ? 'bg-accent/20 text-accent-strong'
+                : 'bg-surface-2 text-muted hover:bg-surface-3'
+            }`}
+          >
+            My Labels
+          </button>
+        </div>
+      </div>
 
       {error && <Alert kind="error">{error}</Alert>}
 
       {!data || data.transactions.length === 0 ? (
         <EmptyState
           icon={CheckCircle2}
-          title="No pending reviews"
-          description="All transactions are categorized. The queue refills when the model is unsure about new data."
+          title={isShowingLabeled ? 'No labeled transactions' : 'No pending reviews'}
+          description={
+            isShowingLabeled
+              ? 'Label some transactions first, then come back here to review them.'
+              : 'All transactions are categorized. The queue refills when the model is unsure about new data.'
+          }
         />
       ) : (
         <Card className="overflow-hidden">
@@ -113,8 +153,12 @@ export default function ReviewTab() {
                   <th className="px-4 py-3 text-left font-medium text-muted">Merchant</th>
                   <th className="px-4 py-3 text-left font-medium text-muted">Description</th>
                   <th className="px-4 py-3 text-right font-medium text-muted">Amount</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted">Suggestion</th>
-                  <th className="px-4 py-3 text-center font-medium text-muted">Confidence</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted">
+                    {isShowingLabeled ? 'Your Category' : 'Suggestion'}
+                  </th>
+                  {!isShowingLabeled && (
+                    <th className="px-4 py-3 text-center font-medium text-muted">Confidence</th>
+                  )}
                   <th className="px-4 py-3 text-center font-medium text-muted">Action</th>
                 </tr>
               </thead>
@@ -141,7 +185,15 @@ export default function ReviewTab() {
                         ¥{tx.amount.toFixed(2)}
                       </td>
                       <td className="px-4 py-3">
-                        {tx.suggested_category ? (
+                        {isShowingLabeled ? (
+                          tx.category ? (
+                            <Badge tone={categoryColor(tx.category)}>
+                              {tx.category}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted">Uncategorized</span>
+                          )
+                        ) : tx.suggested_category ? (
                           <Badge tone={categoryColor(tx.suggested_category)}>
                             {tx.suggested_category}
                           </Badge>
@@ -149,9 +201,11 @@ export default function ReviewTab() {
                           <span className="text-xs text-muted">No suggestion</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center text-xs text-muted tabular-nums">
-                        {tx.confidence > 0 ? `${Math.round(tx.confidence * 100)}%` : '—'}
-                      </td>
+                      {!isShowingLabeled && (
+                        <td className="px-4 py-3 text-center text-xs text-muted tabular-nums">
+                          {tx.confidence > 0 ? `${Math.round(tx.confidence * 100)}%` : '—'}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-center">
                         {selectedTxn === tx.id ? (
                           <div className="space-y-1.5">
