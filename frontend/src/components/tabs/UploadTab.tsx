@@ -2,12 +2,23 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileSpreadsheet, UploadCloud, X } from 'lucide-react';
+import { FileSpreadsheet, UploadCloud, X, Trash2 } from 'lucide-react';
 import { api } from '@/utils/api';
-import { invalidate } from '@/utils/useApi';
+import { useApi, invalidate } from '@/utils/useApi';
 import { Alert } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
+import { SkeletonRows } from '@/components/ui/Skeleton';
+import EmptyState from '@/components/ui/EmptyState';
+
+interface Upload {
+  id: string;
+  original_filename: string;
+  file_type: string;
+  created_at: string;
+  row_count: number;
+  status: string;
+}
 
 export default function UploadTab() {
   const [dragActive, setDragActive] = useState(false);
@@ -15,6 +26,10 @@ export default function UploadTab() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  // Fetch upload history
+  const { data: uploadsData, loading: uploadsLoading, setData: setUploadsData } = useApi<{ uploads: Upload[] }>('/uploads/');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -55,11 +70,36 @@ export default function UploadTab() {
       setFile(null);
       // New transactions exist — every dashboard view is now stale.
       invalidate('/dashboard');
-      invalidate('/uploads');
+      invalidate('/uploads/');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDelete = async (uploadId: string) => {
+    if (!confirm('Delete this upload and all its transactions? This cannot be undone.')) {
+      return;
+    }
+
+    setDeleting(uploadId);
+    try {
+      await api.uploads.delete(uploadId);
+      // Remove from local list
+      setUploadsData((prev) =>
+        prev
+          ? {
+              uploads: prev.uploads.filter((u) => u.id !== uploadId),
+            }
+          : prev
+      );
+      // Refresh dashboard since transactions were deleted
+      invalidate('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to delete upload');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -139,6 +179,77 @@ export default function UploadTab() {
 
       {message && <Alert kind="success">{message}</Alert>}
       {error && <Alert kind="error">{error}</Alert>}
+
+      {/* Upload History */}
+      <div className="mt-10 border-t pt-8">
+        <SectionHeader label="History" title="Recent uploads" />
+        <p className="-mt-4 mb-4 text-sm text-muted">
+          Manage your uploaded files and their transactions.
+        </p>
+
+        {uploadsLoading ? (
+          <SkeletonRows rows={3} />
+        ) : uploadsData?.uploads && uploadsData.uploads.length > 0 ? (
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-edge/8 bg-surface-2/60">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-muted">File</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted">Type</th>
+                    <th className="px-4 py-3 text-right font-medium text-muted">Transactions</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted">Date</th>
+                    <th className="px-4 py-3 text-center font-medium text-muted">Status</th>
+                    <th className="px-4 py-3 text-center font-medium text-muted">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-edge/8">
+                  {uploadsData.uploads.map((upload) => (
+                    <tr key={upload.id} className="transition-colors hover:bg-edge/5">
+                      <td className="px-4 py-3 font-medium">{upload.original_filename}</td>
+                      <td className="px-4 py-3 text-xs text-muted capitalize">{upload.file_type}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{upload.row_count}</td>
+                      <td className="px-4 py-3 text-xs text-muted">
+                        {new Date(upload.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium ${
+                            upload.status === 'parsed'
+                              ? 'bg-success/15 text-success'
+                              : upload.status === 'failed'
+                                ? 'bg-danger/15 text-danger'
+                                : 'bg-accent/15 text-accent-strong'
+                          }`}
+                        >
+                          {upload.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleDelete(upload.id)}
+                          disabled={deleting === upload.id}
+                          aria-label="Delete upload"
+                          className="rounded-lg p-2 text-muted transition-colors hover:text-danger hover:bg-danger/10 disabled:opacity-50"
+                          title="Delete upload and all its transactions"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        ) : (
+          <EmptyState
+            icon={FileSpreadsheet}
+            title="No uploads yet"
+            description="Upload a statement to get started."
+          />
+        )}
+      </div>
     </div>
   );
 }

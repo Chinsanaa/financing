@@ -356,34 +356,58 @@ async def get_reports(request: Request, page: int = 1, per_page: int = 100):
 
 
 @router.get("/review-queue")
-async def get_review_queue(request: Request):
-    """Transactions needing review: needs_review=True, sorted by confidence."""
+async def get_review_queue(request: Request, show_labeled: bool = False):
+    """Transactions needing review.
+
+    By default (show_labeled=False): model suggestions with needs_review=True,
+    sorted by confidence (lowest first — least confident suggestions).
+
+    When show_labeled=True: manually labeled transactions (is_manually_labeled=True),
+    so user can audit their own labels and catch human errors. Useful for catching
+    accidental miscategorizations before retraining.
+    """
     user_id = request.state.user_id
 
     try:
-        from src.translate import description_label_english
+        from src.translate import merchant_label_english, description_label_english
 
-        response = (
-            supabase_client.table("transactions")
-            .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
-            .eq("user_id", user_id)
-            .eq("needs_review", True)
-            .order("confidence")
-            .limit(50)
-            .execute()
-        )
+        if show_labeled:
+            # Show manually labeled transactions for user review/correction
+            response = (
+                supabase_client.table("transactions")
+                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
+                .eq("user_id", user_id)
+                .eq("is_manually_labeled", True)
+                .order("timestamp", desc=True)  # Most recent labels first
+                .limit(50)
+                .execute()
+            )
+            label_type = "manually_labeled"
+        else:
+            # Show model suggestions needing review
+            response = (
+                supabase_client.table("transactions")
+                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
+                .eq("user_id", user_id)
+                .eq("needs_review", True)
+                .order("confidence")  # Least confident first
+                .limit(50)
+                .execute()
+            )
+            label_type = "model_suggestion"
 
         if not response.data:
-            return {"transactions": [], "count": 0}
+            return {"transactions": [], "count": 0, "type": label_type}
 
         transactions = [
             {
                 "id": txn["id"],
                 "date": txn["timestamp"],
-                "merchant": txn["merchant"],
+                "merchant": merchant_label_english(txn["merchant"]),
                 "description": description_label_english(txn["description"]),
                 "amount": float(txn["amount"]),
                 "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
+                "category": txn["categories"]["name"] if txn["categories"] else None,
                 "suggested_category": txn["categories"]["name"] if txn["categories"] else None,
             }
             for txn in response.data
@@ -392,6 +416,7 @@ async def get_review_queue(request: Request):
         return {
             "transactions": transactions,
             "count": len(transactions),
+            "type": label_type,
         }
     except HTTPException:
         raise

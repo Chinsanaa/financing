@@ -178,6 +178,43 @@ async def list_uploads(request: Request):
         raise internal_error(e, "uploads/list_uploads")
 
 
+@router.delete("/{upload_id}")
+async def delete_upload(request: Request, upload_id: str):
+    """Delete an upload and all its associated transactions.
+
+    This removes:
+    - The upload record from the uploads table
+    - All transactions imported from this upload (cascade delete)
+    - The original file from storage (if stored)
+    """
+    user_id = request.state.user_id
+    try:
+        # Verify the upload exists and belongs to the user
+        upload_resp = supabase_client.table("uploads").select("*").eq("id", upload_id).eq("user_id", user_id).execute()
+        if not upload_resp.data:
+            raise HTTPException(status_code=404, detail="Upload not found")
+
+        upload = upload_resp.data[0]
+
+        # Delete the upload record (cascade deletes transactions via foreign key)
+        supabase_client.table("uploads").delete().eq("id", upload_id).eq("user_id", user_id).execute()
+
+        # Delete the original file from storage if it was stored
+        if upload.get("storage_path"):
+            try:
+                supabase_client.storage.from_("uploads").remove([upload["storage_path"]])
+            except Exception as e:
+                logger.warning("Failed to delete upload file from storage: %s", e)
+                # Don't fail the whole operation if storage deletion fails
+
+        return {"success": True, "message": f"Deleted upload {upload_id} and all its transactions"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "uploads/delete_upload")
+
+
 # --- Helpers ---
 
 def _read_headers(file_path: str) -> list:

@@ -67,6 +67,10 @@ export const api = {
       formData.append('file', file);
       return apiClient.post('/uploads/', formData);
     },
+    delete: (uploadId: string) =>
+      apiClient.delete(`/uploads/${uploadId}`),
+    getStatus: (uploadId: string) =>
+      apiClient.get(`/uploads/${uploadId}`),
   },
 
   training: {

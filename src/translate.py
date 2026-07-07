@@ -62,6 +62,18 @@ def shorten(text: str, max_len: int = 28) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
+def merchant_label_english(merchant: str) -> str:
+    """English-only merchant name (never Chinese)."""
+    merchant = str(merchant or '').strip()
+    if not merchant:
+        return ''
+    if not has_cjk(merchant):
+        return shorten(merchant, 28)
+    translated = translate_to_english(merchant)
+    translated = _sanitize_english(translated, '')
+    return shorten(translated, 28) if translated else ''
+
+
 def description_label_english(description: str) -> str:
     """English-only description (never Chinese).
 
