@@ -361,7 +361,7 @@ async def get_review_queue(request: Request):
     user_id = request.state.user_id
 
     try:
-        from src.translate import description_label_english
+        from src.translate import merchant_label_english, description_label_english
 
         response = (
             supabase_client.table("transactions")
@@ -380,7 +380,7 @@ async def get_review_queue(request: Request):
             {
                 "id": txn["id"],
                 "date": txn["timestamp"],
-                "merchant": txn["merchant"],
+                "merchant": merchant_label_english(txn["merchant"]),
                 "description": description_label_english(txn["description"]),
                 "amount": float(txn["amount"]),
                 "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
