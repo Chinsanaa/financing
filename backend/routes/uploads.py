@@ -185,7 +185,23 @@ def _read_headers(file_path: str) -> list:
     format — pd.read_csv on an .xlsx file raises, which used to make Excel
     uploads undetectable."""
     if file_path.endswith('.xlsx'):
-        return pd.read_excel(file_path, nrows=0).columns.tolist()
+        # WeChat Excel files may have metadata rows before the actual headers
+        # Read all sheets and look for transaction table headers
+        try:
+            # Try reading first sheet with no header, look for header row
+            df = pd.read_excel(file_path, header=None, nrows=50)
+            for idx, row in df.iterrows():
+                row_str = ' '.join(str(v) for v in row.dropna() if pd.notna(v))
+                if '交易时间' in row_str or 'Transaction Time' in row_str:
+                    return row.dropna().tolist()
+        except Exception:
+            pass
+
+        # Fallback: try reading with default header
+        try:
+            return pd.read_excel(file_path, nrows=0).columns.tolist()
+        except Exception:
+            return []
 
     # WeChat CSVs have metadata rows before the actual headers.
     # Read first 50 rows and find the row with transaction table headers.
