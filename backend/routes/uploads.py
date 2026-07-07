@@ -207,11 +207,14 @@ def detect_source(file_path: str) -> Optional[str]:
     """Detect if a file is an Alipay or WeChat export by its headers."""
     try:
         columns = _read_headers(file_path)
+        logger.info(f"Detected columns: {columns}")
 
         # Alipay: has '交易时间' (Transaction Time), '交易对方' (Counterparty), etc.
         # WeChat: has '交易类型' (Transaction Type), '当前状态' (Current Status), '金额(元)' (Amount CNY)
         has_alipay_markers = any(c in columns for c in ['交易时间', '交易对方', 'Transaction Time', 'Transaction Counterparty'])
         has_wechat_markers = any(c in columns for c in ['交易类型', '当前状态', '金额(元)'])
+
+        logger.info(f"Alipay markers: {has_alipay_markers}, WeChat markers: {has_wechat_markers}")
 
         # WeChat markers are unique to WeChat exports, so check them first;
         # Alipay markers alone (e.g. English-only Alipay headers with no
@@ -221,7 +224,8 @@ def detect_source(file_path: str) -> Optional[str]:
         elif has_alipay_markers:
             return 'alipay'
         return None
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error detecting source: {e}", exc_info=True)
         return None
 
 
