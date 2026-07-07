@@ -27,8 +27,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Cache bust: 2026-07-07T05:30:00Z
-# Run the application. Shell form (not exec-form JSON array) so $PORT is
-# substituted at container start; Railway's deploy.startCommand overrides
-# this anyway, but this is the fallback if that override is ever removed.
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Cache bust: 2026-07-07T06:00:00Z
+# Run the application with verbose logging to debug startup issues
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level debug
