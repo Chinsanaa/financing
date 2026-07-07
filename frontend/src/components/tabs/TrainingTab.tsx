@@ -52,6 +52,7 @@ export default function TrainingTab() {
       const modelRunId: string = res.data.model_run_id;
       setMessage('Training started! Results appear below when it finishes.');
       await reload(true);
+      invalidate('/training'); // onboarding checklist's "Train" step
 
       stopPolling();
       pollRef.current = setInterval(async () => {

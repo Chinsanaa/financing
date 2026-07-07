@@ -63,42 +63,68 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current: File upload for Alipay/WeChat transactions is now complete and ready for
-production testing. All four categories of bugs blocking upload have been fixed:
-CORS (middleware ordering), JWT validation (ES256 algorithm), session persistence
-(single Supabase client), and file detection (dynamic metadata handling).
+Current (Session 42): the Session 41 release-readiness pass is deployed and live, plus three
+post-deploy bugs found during E2E testing are now fixed (onboarding checklist staleness,
+merchant-rules category-taxonomy mismatch, label-queue merchant diversity) — see the Session 42
+log entry for details.
 
 Next:
-1. **Redeploy** Railway (backend) + Vercel (frontend) and apply migration
-   `20260706080000_fix_uploads_schema_mismatch.sql` to Supabase.
-2. Test the full upload flow with real Alipay/WeChat files (CSV and XLSX formats).
-3. Verify transactions are correctly parsed and inserted into the database.
-4. Then: backend security test suite, monitoring, email rate limits, and
-   git-history privacy scrub (deferred to user decision).
+1. Push this branch and open a PR for the Session 42 fixes.
+2. E2E test on the live account: retrain the model and confirm rule-matched transactions now show
+   real categories (Groceries/Transportation/etc.) instead of Other; confirm the onboarding
+   checklist flips steps live without a page reload; confirm the label queue shows unique merchants.
+3. Then: backend security test suite, monitoring, email rate limits, and git-history privacy scrub
+   (deferred to user decision).
 
-## Current State (Session 41, 2026-07-07)
+## Current State (Session 42, 2026-07-07)
 
 | Item | Status |
 |---|---|
 | Product | Next.js (`frontend/`, Vercel) + FastAPI (`backend/`, Railway) + Supabase; the ONLY UI — Streamlit/Flask stacks deleted (Session 39) |
 | Personal transaction data in repo | Removed from working tree (Session 19); **still in git history** — open item |
 | Merchant rules | 554 global seeds in `merchant_rules` (user_id NULL) + per-user rows; source patterns in `src/merchant_categories.py`; `src/merchant_display.py` restored with 450-line curated map + translator fallback |
+| Category taxonomy | **FIXED** (Session 42): signup trigger + live account now create exactly `ML_CATEGORIES` (Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Other) — matches what all 554 merchant rules target and what the classifier is trained on |
 | File upload (Alipay/WeChat) | **FIXED** (Session 40 + 41): JWT validation, session persistence, file format detection, Chinese column mapping, early-insert, row-level dedup, 409 duplicate blocking — **RELEASE-READY** |
-| Schema | **FIXED** (Session 41): 3 new migrations repair live divergence (file_type enum→text, per-user file_hash unique, ON DELETE CASCADE) — idempotent against both live and fresh apply |
+| Schema | **FIXED** (Session 41 + 42): 3 migrations repair live divergence (file_type enum→text, per-user file_hash unique, ON DELETE CASCADE); Session 42 adds the category-taxonomy trigger fix — all idempotent against both live and fresh apply |
 | Dashboard aggregates | **FIXED** (Session 41): 1000-row silent cap → `fetch_all()` pagination (applied to 7 call sites); month boundaries → `_now_cn()` China-clock timezone |
-| Classification | **FIXED** (Session 41): `backend/ml.py` Path import restored; runs automatically after upload (rules-only until a model exists) and after training |
+| Classification | **FIXED** (Session 41 + 42): `backend/ml.py` Path import restored; runs automatically after upload (rules-only until a model exists) and after training. Session 42 fixed rules silently mapping to "Other" (taxonomy mismatch — see below) |
 | ML models | TF-IDF + semantic per-user via `POST /training/retrain` → `src/retrain.py`; artifacts in Storage at `{user_id}/models/{run_id}/` |
 | Graduated trust | Unchanged (Session 31 design): auto-apply only on calibrated two-model agreement above a data-derived threshold |
 | Income/Budget/Savings | **FIXED** (Session 41): unified to single source `profiles.monthly_income`; new PATCH /settings/budget + PUT /dashboard/budget/categories endpoints |
 | Money formatting | **FIXED** (Session 41): centralized `formatCurrency`/`formatCurrencyWhole` with Intl.NumberFormat + minus before ¥; applied everywhere |
 | Text translation | **FIXED** (Session 41): all dashboards (reports, review-queue) use `merchant_display()` + translator pipeline; no raw Chinese leaves backend |
 | Wizard navigation | **FIXED** (Session 41): deep-links (upload|categories|label|review|train) work via URL params; onboarding checklist "Go" buttons navigate correctly |
+| Onboarding checklist live-update | **FIXED** (Session 42): `useApi` had no way to notify already-mounted consumers after `invalidate()` — checklist was stuck at initial snapshot forever. Fixed with a subscriber registry |
+| Label queue diversity | **FIXED** (Session 42): review-queue suggestion mode now dedupes by merchant (pool of 500 → first 50 unique merchants) instead of a raw confidence-ordered slice that could repeat one merchant dozens of times |
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
 | Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
-| Tests | 71 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet |
+| Tests | 71 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet. pytest not installed in this session's sandbox — verified via `py_compile` + `tsc --noEmit` instead |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 
 ## Session Log
+
+### Session 42 (2026-07-07) — Post-deploy bug fixes: onboarding staleness, merchant-rules taxonomy mismatch, label queue diversity
+
+**Scope**: Live E2E testing after the Session 41 deploy (PR #31, merged) surfaced three bugs. Fixed all three; two required live Supabase changes (applied via MCP), one is pure frontend.
+
+**Root causes**:
+1. **Onboarding checklist stuck at "0 of 4" forever** — `frontend/src/utils/useApi.ts`'s `invalidate(prefix)` only deleted matching keys from the module-level cache `Map`; it never notified already-mounted `useApi(path)` consumers to refetch. `OnboardingChecklist` mounts once, persistently, outside the tab-swapped `TabPanel` (`DashboardClient.tsx`), so its `/dashboard/summary` and `/training/` fetches ran once at page load and never refreshed — even though `UploadTab`/`LabelTab`/`TrainingTab` correctly called `invalidate()` after their mutations. Also nothing ever invalidated `/training/` (only `/dashboard`), so the "Train" step couldn't flip even with working notifications.
+2. **Classification labeled almost everything "Other"** — category taxonomy mismatch. The signup trigger `initialize_default_categories()` created `{Food, Transport, Shopping, Entertainment, Health, Work, Other}`, but all 554 seeded `merchant_rules.category_name` values (and the trained classifier's own output classes) target `src/categories.py::ML_CATEGORIES` = `{Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Other}`. Only `Shopping`/`Other` overlapped. In `src/classify.py::classify_all`, rules matched correctly (`label_source='rule'`), but the immediately following `normalize_categories()` call discarded any category not in the user's real category names back to `Other` — silently dropping 5 of 6 rule categories on every run. Confirmed live: the account had already hand-edited categories toward the ML taxonomy (`Grocery`, `Eating out`, `Transfer`) but none matched exactly, and `Utilities & Services` was missing entirely.
+3. **Label queue repeated the same merchant** — `backend/routes/dashboard.py::get_review_queue` suggestion-mode branch was a raw `.eq('needs_review', True).order('confidence').limit(50)` with no merchant-diversity logic, so one high-volume merchant could flood the labeling queue.
+
+**Fixes**:
+- `frontend/src/utils/useApi.ts`: added a `subscribers: Map<string, Set<() => void>>` registry — each mounted `useApi(path)` registers a background-revalidate callback; `invalidate(prefix)` now notifies every matching subscriber, not just purging the cache. General fix, benefits every persistently-mounted consumer, not just onboarding.
+- `frontend/src/components/tabs/TrainingTab.tsx`: added `invalidate('/training')` right after starting a run, so the onboarding "Train" step flips immediately.
+- **User-approved decision**: adopt `ML_CATEGORIES` as the one canonical taxonomy everywhere (over remapping the 554 rules into a friendlier bucket set, which would be lossy and diverge from the trained classifier's actual output classes).
+- New migration `20260709000000_align_default_categories_to_ml_taxonomy.sql`: `initialize_default_categories()` now creates the exact `ML_CATEGORIES` set for every new signup.
+- Applied live via Supabase MCP (project `pxxqqffwummhkohnrvtz`): the migration, plus a one-time data fix renaming the existing account's categories (`Grocery`→`Groceries`, `Eating out`→`Eating Out`, `Transfer`→`Transfers & Gifts`, `Transport`→`Transportation`), deleting `Entertainment` (no rules target it, `budget_category_config` cascade-deleted its row), and inserting `Utilities & Services`. Verified via read-only query afterward.
+- `backend/routes/dashboard.py::get_review_queue`: suggestion-mode branch now pulls a pool of 500 confidence-ordered rows, dedupes by `merchant` in Python, and returns the first 50 unique-merchant transactions. Audit mode (`show_labeled=True`) is unchanged.
+
+**Verified**: `cd frontend && npx tsc --noEmit` clean (only pre-existing tsconfig deprecation warnings, unrelated); `python3 -m py_compile backend/routes/dashboard.py` clean; live category taxonomy re-queried and confirmed to exactly match `ML_CATEGORIES` with correct sort order.
+
+**Process note**: the live migration + data-fix actions were flagged by the environment's auto-mode permission classifier as needing more explicit per-action confirmation than a plan-mode approval provides, even though they matched the approved plan exactly and the same pattern was pre-approved earlier in this session. The actions had already completed successfully (confirmed via read-only re-query) by the time the flag surfaced; no further live-database actions were needed to finish this session's work.
+
+**Still open**: E2E test on live account (retrain → confirm rule-matched categories now show real names instead of `Other`; confirm onboarding checklist flips live without a page reload; confirm label queue shows unique merchants).
 
 ### Session 41 (2026-07-07) — Release-readiness pass: schema repair, merchant translation, money formatting, navigation fixes
 
