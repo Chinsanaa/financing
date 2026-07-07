@@ -20,6 +20,7 @@ training run invalidates the cache via `invalidate_user_bundle`.
 """
 import tempfile
 import threading
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -161,18 +162,19 @@ def classify_user_transactions(user_id: str) -> int:
 
 
 def _classify_user_transactions(user_id: str) -> int:
-    resp = (
-        supabase_client.table("transactions")
+    from db import fetch_all
+
+    rows = fetch_all(
+        lambda: supabase_client.table("transactions")
         .select("id, timestamp, merchant, description, amount")
         .eq("user_id", user_id)
         .eq("needs_review", True)
         .eq("is_manually_labeled", False)
-        .execute()
     )
-    if not resp.data:
+    if not rows:
         return 0
 
-    df = pd.DataFrame(resp.data)
+    df = pd.DataFrame(rows)
     df["merchant"] = df["merchant"].fillna("")
     df["description"] = df["description"].fillna("")
 

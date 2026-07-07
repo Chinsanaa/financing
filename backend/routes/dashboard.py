@@ -6,15 +6,24 @@ TypeError — it is not a method.
 """
 from fastapi import APIRouter, HTTPException, Request
 from config import supabase_client
+from db import fetch_all
 from errors import internal_error
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import pandas as pd
 
 router = APIRouter()
 
 
+def _now_cn() -> datetime:
+    """Naive China-clock 'now'. Transaction timestamps come from Alipay/WeChat
+    exports in China local time and are stored naive, so month boundaries and
+    cutoffs must use the same clock — not the server's (UTC on Railway)."""
+    return datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+
+
 def _month_start(now: datetime = None) -> datetime:
-    now = now or datetime.now()
+    now = now or _now_cn()
     return datetime(now.year, now.month, 1)
 
 
@@ -39,9 +48,12 @@ async def get_summary(request: Request):
         )
         labeled_count = labeled.count if labeled.count is not None else len(labeled.data)
 
-        # Total spend
-        all_transactions = supabase_client.table("transactions").select("amount").eq("user_id", user_id).execute()
-        total_spend = sum(float(t["amount"]) for t in all_transactions.data) if all_transactions.data else 0.0
+        # Total spend (fetch_all pages past PostgREST's 1000-row cap, which
+        # silently truncated — and understated — every sum here before)
+        all_transactions = fetch_all(
+            lambda: supabase_client.table("transactions").select("amount").eq("user_id", user_id)
+        )
+        total_spend = sum(float(t["amount"]) for t in all_transactions)
 
         return {
             "total_transactions": total_count,
@@ -61,18 +73,17 @@ async def get_by_category(request: Request):
     user_id = request.state.user_id
 
     try:
-        response = (
-            supabase_client.table("transactions")
+        rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("amount, category_id, categories(name)")
             .eq("user_id", user_id)
             .not_.is_("category_id", "null")
-            .execute()
         )
 
-        if not response.data:
+        if not rows:
             return {"categories": []}
 
-        df = pd.DataFrame(response.data)
+        df = pd.DataFrame(rows)
         df["category_name"] = df["categories"].apply(lambda x: x["name"] if x else "Unknown")
 
         breakdown = df.groupby("category_name")["amount"].agg(["sum", "count"]).reset_index()
@@ -100,21 +111,20 @@ async def get_trends(request: Request, days: int = 30):
     user_id = request.state.user_id
 
     try:
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = _now_cn() - timedelta(days=days)
         # Filter server-side; never pull the full transaction history.
-        response = (
-            supabase_client.table("transactions")
+        rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("timestamp, amount")
             .eq("user_id", user_id)
             .not_.is_("category_id", "null")
             .gte("timestamp", cutoff.isoformat())
-            .execute()
         )
 
-        if not response.data:
+        if not rows:
             return {"trends": []}
 
-        df = pd.DataFrame(response.data)
+        df = pd.DataFrame(rows)
         df["date"] = pd.to_datetime(df["timestamp"]).dt.date
         daily = df.groupby("date")["amount"].sum().reset_index()
 
@@ -136,17 +146,16 @@ async def get_trends(request: Request, days: int = 30):
 def _current_month_spend_by_category(user_id: str) -> dict:
     """This month's spend per category name (monthly budgets compare against
     the current month, not all-time history)."""
-    response = (
-        supabase_client.table("transactions")
+    rows = fetch_all(
+        lambda: supabase_client.table("transactions")
         .select("amount, category_id, categories(name)")
         .eq("user_id", user_id)
         .not_.is_("category_id", "null")
         .gte("timestamp", _month_start().isoformat())
-        .execute()
     )
-    if not response.data:
+    if not rows:
         return {}
-    df = pd.DataFrame(response.data)
+    df = pd.DataFrame(rows)
     df["category_name"] = df["categories"].apply(lambda x: x["name"] if x else "Unknown")
     return df.groupby("category_name")["amount"].sum().to_dict()
 
@@ -206,32 +215,30 @@ async def get_savings(request: Request):
         budget_resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
         budget_config = budget_resp.data[0] if budget_resp.data else None
 
-        now = datetime.now()
+        now = _now_cn()
         month_start = _month_start(now)
 
-        spending_resp = (
-            supabase_client.table("transactions")
+        spending_rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("amount")
             .eq("user_id", user_id)
             .gte("timestamp", month_start.isoformat())
-            .execute()
         )
-        current_spend = sum(float(t["amount"]) for t in spending_resp.data) if spending_resp.data else 0
+        current_spend = sum(float(t["amount"]) for t in spending_rows)
 
         # Simple anomaly detection: compare to average of last 3 months
         three_months_ago = datetime(now.year if now.month >= 4 else now.year - 1,
                                     now.month - 3 if now.month >= 4 else now.month + 9, 1)
 
-        historical_resp = (
-            supabase_client.table("transactions")
+        historical_rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("timestamp, amount")
             .eq("user_id", user_id)
             .gte("timestamp", three_months_ago.isoformat())
             .lt("timestamp", month_start.isoformat())
-            .execute()
         )
 
-        historical_df = pd.DataFrame(historical_resp.data) if historical_resp.data else pd.DataFrame()
+        historical_df = pd.DataFrame(historical_rows) if historical_rows else pd.DataFrame()
         avg_monthly = 0
         if not historical_df.empty:
             historical_df["month"] = pd.to_datetime(historical_df["timestamp"]).dt.to_period("M")
@@ -399,6 +406,9 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
         if not response.data:
             return {"transactions": [], "count": 0, "type": label_type}
 
+        # In suggestion mode the row's category_id IS the model's suggestion —
+        # report it only as suggested_category so the UI can distinguish
+        # "this is what it's labeled" from "this is what the model proposes".
         transactions = [
             {
                 "id": txn["id"],
@@ -407,7 +417,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 "description": description_label_english(txn["description"]),
                 "amount": float(txn["amount"]),
                 "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
-                "category": txn["categories"]["name"] if txn["categories"] else None,
+                "category": (txn["categories"]["name"] if txn["categories"] else None) if show_labeled else None,
                 "suggested_category": txn["categories"]["name"] if txn["categories"] else None,
             }
             for txn in response.data
@@ -433,7 +443,8 @@ async def get_onboarding_status(request: Request):
         # profiles.id IS the auth user id (PK referencing auth.users)
         response = supabase_client.table("profiles").select("onboarding_phase").eq("id", user_id).execute()
         if not response.data:
-            return {"onboarding_phase": "signup"}
+            # 'upload' is the enum's first phase; 'signup' is not a valid value
+            return {"onboarding_phase": "upload"}
 
         return {"onboarding_phase": response.data[0]["onboarding_phase"]}
     except HTTPException:
