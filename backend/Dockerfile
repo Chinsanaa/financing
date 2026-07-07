@@ -23,9 +23,9 @@ COPY src/ ./src/
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+# Health check (removed - Railway handles health via HTTP responses)
+# The slim Python image doesn't have curl, so we rely on Railway's
+# default health checks via HTTP status codes.
 
 # Cache bust: 2026-07-07T06:00:00Z
 # Run the application with verbose logging to debug startup issues
