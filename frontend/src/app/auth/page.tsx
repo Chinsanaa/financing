@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import AuthClient from './AuthClient';
 
 // Depends on createClient() at render time, which needs runtime env vars;
@@ -6,5 +7,9 @@ import AuthClient from './AuthClient';
 export const dynamic = 'force-dynamic';
 
 export default function AuthPage() {
-  return <AuthClient />;
+  return (
+    <Suspense>
+      <AuthClient />
+    </Suspense>
+  );
 }

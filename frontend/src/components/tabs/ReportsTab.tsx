@@ -1,8 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { ChevronLeft, ChevronRight, Download, FileText } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
-import { Alert, Loading } from '@/components/ui';
+import { Alert } from '@/components/ui';
+import Button from '@/components/ui/Button';
+import Card, { SectionHeader } from '@/components/ui/Card';
+import Badge, { categoryColor } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 
 interface Transaction {
   date: string;
@@ -21,6 +27,14 @@ interface ReportsData {
 }
 
 const PER_PAGE = 100;
+
+const LABEL_SOURCES: Record<string, string> = {
+  rule: 'Rule',
+  override: 'Manual',
+  model: 'Model',
+  model_agreed: 'Auto',
+  none: 'Unset',
+};
 
 function toCsv(transactions: Transaction[]): string {
   const esc = (v: unknown) => {
@@ -56,79 +70,82 @@ export default function ReportsTab() {
   };
 
   if (loading) {
-    return <Loading label="Loading reports..." />;
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-14 w-full" />
+        <SkeletonRows rows={8} />
+      </div>
+    );
   }
-
-  const getLabelSourceLabel = (source: string) => {
-    const labels: Record<string, string> = {
-      rule: '📋 Rule',
-      override: '✏️ Manual',
-      model: '🤖 Model',
-      model_agreed: '🎯 Auto',
-      none: '❓ Unset',
-    };
-    return labels[source] || source;
-  };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900">Reports</h2>
+      <SectionHeader
+        label="Reports"
+        title="All transactions"
+        action={
+          reports && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={reports.transactions.length === 0}
+            >
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </Button>
+          )
+        }
+      />
 
       {error && <Alert kind="error">{error}</Alert>}
 
-      {/* Summary + Export */}
       {reports && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 flex justify-between items-center">
-          <p className="text-gray-600 text-sm">
-            Showing {reports.transactions.length} of {reports.total_count} transactions
-          </p>
-          <button
-            onClick={handleExportCsv}
-            disabled={reports.transactions.length === 0}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm"
-          >
-            📥 Export CSV
-          </button>
-        </div>
+        <p className="-mt-2 text-sm text-muted">
+          Showing {reports.transactions.length} of {reports.total_count} transactions
+        </p>
       )}
 
-      {/* Transactions Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <Card className="overflow-hidden">
         {!reports || reports.transactions.length === 0 ? (
-          <div className="p-6 text-gray-600">
-            No transactions to display. Upload and categorize some data first.
+          <div className="p-6">
+            <EmptyState
+              icon={FileText}
+              title="No transactions to display"
+              description="Upload and categorize some data first — every labeled transaction shows up here."
+            />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="border-b border-edge/8 bg-surface-2/60">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Date</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Merchant</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Description</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Category</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-700">Amount</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-700">Source</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted">Date</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted">Merchant</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted">Description</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted">Category</th>
+                  <th className="px-4 py-3 text-right font-medium text-muted">Amount</th>
+                  <th className="px-4 py-3 text-center font-medium text-muted">Source</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-edge/8">
                 {reports.transactions.map((txn, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900">
+                  <tr key={idx} className="transition-colors hover:bg-edge/5">
+                    <td className="whitespace-nowrap px-4 py-3 text-muted">
                       {new Date(txn.date).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 text-gray-900 font-medium">{txn.merchant}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{txn.description}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded">
-                        {txn.category}
-                      </span>
+                    <td className="px-4 py-3 font-medium">{txn.merchant}</td>
+                    <td className="max-w-xs truncate px-4 py-3 text-xs text-muted">
+                      {txn.description}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">
+                    <td className="px-4 py-3">
+                      <Badge tone={categoryColor(txn.category)}>{txn.category}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">
                       ¥{txn.amount.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-center text-xs whitespace-nowrap">
-                      {getLabelSourceLabel(txn.label_source)}
+                    <td className="px-4 py-3 text-center">
+                      <Badge tone="neutral">{LABEL_SOURCES[txn.label_source] || txn.label_source}</Badge>
                     </td>
                   </tr>
                 ))}
@@ -136,28 +153,29 @@ export default function ReportsTab() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* Pagination */}
       {reports && totalPages > 1 && (
-        <div className="flex justify-between items-center">
-          <button
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-50"
           >
-            ← Previous
-          </button>
-          <p className="text-sm text-gray-600">
+            <ChevronLeft className="h-3.5 w-3.5" /> Previous
+          </Button>
+          <p className="text-sm text-muted tabular-nums">
             Page {page} of {totalPages}
           </p>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-50"
           >
-            Next →
-          </button>
+            Next <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
         </div>
       )}
     </div>

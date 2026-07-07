@@ -2,16 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens. Dark is the flagship theme; light is a tasteful inversion.
+   Values are space-separated RGB channels so Tailwind can apply alpha. */
+:root {
+  --bg: 250 250 248;
+  --surface: 255 255 255;
+  --surface-2: 241 241 243;
+  --ink: 16 16 20;
+  --muted: 95 95 107;
+  --edge: 16 16 20; /* used at low alpha via border-edge/10 */
+  --accent: 132 204 22; /* lime-500: readable fill on light */
+  --accent-ink: 10 10 15;
+  --accent-strong: 77 124 15; /* text-safe accent on light */
+  --violet: 124 58 237;
+  --cyan: 8 145 178;
+  --danger: 220 38 38;
+  --success: 22 163 74;
+  /* Categorical chart series (validated for light surface) */
+  --chart-1: #4d7c0f;
+  --chart-2: #7c3aed;
+  --chart-3: #0891b2;
+  --chart-4: #db2777;
+  --chart-5: #b45309;
+}
+
+.dark {
+  --bg: 10 10 15;
+  --surface: 19 19 24;
+  --surface-2: 27 27 35;
+  --ink: 245 245 247;
+  --muted: 154 154 165;
+  --edge: 255 255 255;
+  --accent: 200 255 61; /* electric lime */
+  --accent-ink: 10 10 15;
+  --accent-strong: 200 255 61;
+  --violet: 139 92 246;
+  --cyan: 34 211 238;
+  --danger: 248 113 113;
+  --success: 74 222 128;
+  /* Categorical chart series (validated for dark surface) */
+  --chart-1: #65a30d;
+  --chart-2: #8b5cf6;
+  --chart-3: #0284c7;
+  --chart-4: #db2777;
+  --chart-5: #d97706;
+}
+
 html {
   scroll-behavior: smooth;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--ink));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* Glassy panel used across cards, navbars, mockups */
+.glass {
+  background-color: rgb(var(--surface) / 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgb(var(--edge) / 0.08);
+}
+
+/* Faint background grid for hero / auth / 404 backdrops */
+.bg-grid {
+  background-image: linear-gradient(rgb(var(--edge) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--edge) / 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Skeleton shimmer surface */
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    rgb(var(--surface-2)) 40%,
+    rgb(var(--edge) / 0.1) 50%,
+    rgb(var(--surface-2)) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+  border-radius: 0.5rem;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* Uppercase tracked section label */
+.section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--muted));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

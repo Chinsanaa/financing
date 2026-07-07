@@ -1095,3 +1095,16 @@ FastAPI Backend (Railway)
 ### Sessions 1–17 (redacted)
 - Built full pipeline (parse → classify → dashboard) on private data.
 - Detailed logs removed in Session 19 for privacy.
+
+### Session 20 (2026-07-07) — Full frontend redesign ("Dark, Bold, Electric")
+**What was built**:
+- Design system: CSS-variable tokens for dark (flagship) + light themes, `darkMode: 'class'`, Space Grotesk/Inter via next/font, keyframes; new primitives in `frontend/src/components/ui/` (Button, Card, Input, Badge, Skeleton, Tabs, EmptyState, Stepper, ThemeToggle, motion utils).
+- New marketing landing page at `/` (hero, animated demo strip, feature grid, scroll reveals); middleware now shows it to signed-out users.
+- Auth redesign: split brand/form layout, animated Sign in / Create account toggle (`?mode=signup` deep link), restyled verify page.
+- New `not-found.tsx` (parallax 404) and `dashboard/loading.tsx` (route-level skeleton).
+- Dashboard: 10 tabs regrouped into 5 sections (Overview / Transactions / Model / Planning / Reports) with pill sub-tabs, URL `?tab=` persistence, sticky glass header with theme toggle. Emojis removed everywhere (lucide icons).
+- All tabs restyled with layout-matched skeleton loaders; Overview now uses recharts (area trend + category donut, palette validated for CVD/contrast on both surfaces via dataviz validator).
+- Onboarding checklist (`components/onboarding/`): 4 steps (Upload → Categories → Label → Train) derived from real API state, dismissible, progress bar.
+
+**Decided**: dark/electric-lime visual direction; both themes; framer-motion + recharts + lucide-react added.
+**Open**: dashboard screenshots with a real session (verified only via skeletons locally); category budgets editing UI; light-theme fine-tuning if user wants.

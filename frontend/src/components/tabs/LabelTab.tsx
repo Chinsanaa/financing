@@ -1,9 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Check, PartyPopper } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
-import { Alert, Loading, ProgressBar } from '@/components/ui';
+import { Alert, ProgressBar } from '@/components/ui';
+import Button from '@/components/ui/Button';
+import Card, { SectionHeader } from '@/components/ui/Card';
+import Badge, { categoryColor } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Skeleton, { SkeletonCard } from '@/components/ui/Skeleton';
 
 interface Transaction {
   id: string;
@@ -79,100 +86,125 @@ export default function LabelTab() {
   };
 
   if (queueQ.loading || categoriesQ.loading) {
-    return <Loading label="Loading transactions..." />;
+    return (
+      <div className="max-w-2xl space-y-6">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-16 w-full" />
+        <SkeletonCard />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
   }
 
   if (transactions.length === 0) {
-    return <Alert kind="success">All transactions labeled! Great job.</Alert>;
+    return (
+      <div className="max-w-2xl">
+        <EmptyState
+          icon={PartyPopper}
+          title="All transactions labeled"
+          description="Nothing left in the queue. Upload another statement or retrain your model with the new labels."
+        />
+      </div>
+    );
   }
 
   const tx = transactions[Math.min(currentIndex, transactions.length - 1)];
   const progress = Math.round(((currentIndex + 1) / transactions.length) * 100);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Label Transactions</h2>
-        <p className="text-gray-600">Review and categorize transactions</p>
-      </div>
+    <div className="max-w-2xl space-y-6">
+      <SectionHeader label="Transactions" title="Label transactions" />
+      <p className="-mt-4 text-sm text-muted">
+        Every label you set here becomes training data for your model.
+      </p>
 
-      {/* Progress */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-medium text-gray-700">Progress</span>
-          <span className="text-sm text-gray-600">
+      <Card className="p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="section-label">Progress</span>
+          <span className="text-sm text-muted tabular-nums">
             {currentIndex + 1} of {transactions.length}
           </span>
         </div>
         <ProgressBar percent={progress} />
-      </div>
+      </Card>
 
       {(actionError || queueQ.error) && (
         <Alert kind="error">{actionError || queueQ.error}</Alert>
       )}
 
-      {/* Current Transaction */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Merchant</label>
-            <p className="text-gray-900 font-medium">{tx.merchant}</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-            <p className="text-gray-900 font-medium">¥{tx.amount.toFixed(2)}</p>
-          </div>
-        </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tx.id}
+          initial={{ opacity: 0, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <Card className="space-y-4 p-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="section-label mb-1">Merchant</p>
+                <p className="font-medium">{tx.merchant}</p>
+              </div>
+              <div>
+                <p className="section-label mb-1">Amount</p>
+                <p className="font-display text-lg font-semibold tabular-nums">
+                  ¥{tx.amount.toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="section-label mb-1">Description</p>
+              <p className="text-sm text-muted">{tx.description}</p>
+            </div>
+
+            {tx.suggested_category && (
+              <div className="flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/5 px-4 py-3 text-sm">
+                <span className="text-muted">Model suggests</span>
+                <Badge tone={categoryColor(tx.suggested_category)}>
+                  {tx.suggested_category}
+                </Badge>
+                {tx.confidence > 0 && (
+                  <span className="text-muted">
+                    {Math.round(tx.confidence * 100)}% confident
+                  </span>
+                )}
+              </div>
+            )}
+          </Card>
+        </motion.div>
+      </AnimatePresence>
+
+      <div className="space-y-3">
+        {tx.suggested_category && (
+          <Button onClick={handleAccept} loading={acting} className="w-full" size="lg">
+            <Check className="h-4 w-4" /> Accept suggestion
+          </Button>
+        )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <p className="text-gray-700">{tx.description}</p>
-        </div>
-
-        {tx.suggested_category && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-gray-600">
-              <strong>Model Suggestion:</strong> {tx.suggested_category}
-              {tx.confidence > 0 && ` (${Math.round(tx.confidence * 100)}% confidence)`}
-            </p>
+          <p className="section-label mb-2">Or pick a category</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => handleOverride(cat.id)}
+                disabled={acting}
+                className="rounded-lg border border-edge/10 bg-surface px-3 py-2.5 text-sm font-medium transition-all hover:border-accent/40 hover:bg-accent/5 disabled:opacity-50"
+              >
+                {cat.name}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="space-y-2">
-        {tx.suggested_category && (
-          <button
-            onClick={handleAccept}
-            disabled={acting}
-            className="w-full bg-green-600 text-white font-medium py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
-          >
-            ✓ Accept Suggestion
-          </button>
-        )}
-
-        <div className="grid grid-cols-3 gap-2">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => handleOverride(cat.id)}
-              disabled={acting}
-              className="bg-gray-200 text-gray-900 font-medium py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 transition text-sm"
-            >
-              {cat.name}
-            </button>
-          ))}
         </div>
-      </div>
 
-      {transactions.length > 1 && (
-        <button
-          onClick={handleSkip}
-          className="w-full bg-gray-100 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-200 transition text-sm"
-        >
-          Skip
-        </button>
-      )}
+        {transactions.length > 1 && (
+          <Button variant="ghost" onClick={handleSkip} className="w-full">
+            Skip for now
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

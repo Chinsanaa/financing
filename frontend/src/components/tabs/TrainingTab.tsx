@@ -1,9 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { BrainCircuit, Play } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
-import { Alert, Loading } from '@/components/ui';
+import { Alert } from '@/components/ui';
+import Button from '@/components/ui/Button';
+import Card, { SectionHeader } from '@/components/ui/Card';
+import Badge from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 
 // Mirrors the model_runs table columns
 interface TrainingRun {
@@ -79,78 +85,70 @@ export default function TrainingTab() {
     }
   };
 
-  if (loading) {
-    return <Loading label="Loading training history..." />;
-  }
-
-  const statusStyle = (status: string) =>
-    status === 'succeeded'
-      ? 'bg-green-100 text-green-800'
-      : status === 'failed'
-      ? 'bg-red-100 text-red-800'
-      : 'bg-yellow-100 text-yellow-800';
+  const statusTone = (status: string) =>
+    status === 'succeeded' ? 'success' : status === 'failed' ? 'danger' : 'accent';
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Model Training</h2>
-        <p className="text-gray-600">Train a custom classification model with your labeled data</p>
-      </div>
+    <div className="max-w-2xl space-y-6">
+      <SectionHeader label="Model" title="Training" />
+      <p className="-mt-4 text-sm text-muted">
+        Trains a fresh classifier on your labeled transactions, then re-classifies everything else.
+      </p>
 
       {(error || loadError) && <Alert kind="error">{error || loadError}</Alert>}
       {message && <Alert kind="success">{message}</Alert>}
 
-      <button
-        onClick={handleRetrain}
-        disabled={training}
-        className="bg-blue-600 text-white font-medium py-3 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
-      >
-        {training ? 'Training in progress...' : 'Start Training'}
-      </button>
+      <Button onClick={handleRetrain} loading={training} size="lg">
+        {!training && <Play className="h-4 w-4" />}
+        {training ? 'Training in progress' : 'Start training'}
+      </Button>
 
-      {/* Training History */}
       <div className="space-y-3">
-        <h3 className="font-bold text-gray-900">Training History</h3>
+        <p className="section-label">Training history</p>
 
-        {runs.length === 0 ? (
-          <p className="text-gray-600">No training runs yet</p>
+        {loading ? (
+          <SkeletonRows rows={4} />
+        ) : runs.length === 0 ? (
+          <EmptyState
+            icon={BrainCircuit}
+            title="No training runs yet"
+            description="Label some transactions first, then start your first training run."
+          />
         ) : (
           runs.map((run) => (
-            <div
-              key={run.id}
-              className="bg-white rounded-lg border border-gray-200 p-4 space-y-2"
-            >
-              <div className="flex justify-between items-start">
+            <Card key={run.id} className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-medium text-gray-900">
-                    Run {run.id.slice(0, 8)}...
-                  </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-sm font-medium">Run {run.id.slice(0, 8)}</p>
+                  <p className="text-xs text-muted">
                     {new Date(run.created_at).toLocaleString()}
                   </p>
                 </div>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${statusStyle(run.status)}`}>
+                <Badge tone={statusTone(run.status)}>
+                  {(run.status === 'queued' || run.status === 'running') && (
+                    <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-glow-pulse rounded-full bg-current" />
+                  )}
                   {run.status}
-                </span>
+                </Badge>
               </div>
 
               {run.cv_accuracy != null && (
-                <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="grid grid-cols-3 gap-2 rounded-lg bg-surface-2 p-3 text-sm">
                   <div>
-                    <p className="text-gray-600">CV Accuracy</p>
-                    <p className="font-medium text-gray-900">
+                    <p className="section-label mb-0.5">CV accuracy</p>
+                    <p className="font-display font-semibold tabular-nums">
                       {(run.cv_accuracy * 100).toFixed(1)}%
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-600">F1-Macro</p>
-                    <p className="font-medium text-gray-900">
+                    <p className="section-label mb-0.5">F1-macro</p>
+                    <p className="font-display font-semibold tabular-nums">
                       {run.f1_macro != null ? run.f1_macro.toFixed(3) : '—'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-600">Samples</p>
-                    <p className="font-medium text-gray-900">
+                    <p className="section-label mb-0.5">Samples</p>
+                    <p className="font-display font-semibold tabular-nums">
                       {run.n_labeled_samples ?? '—'}
                     </p>
                   </div>
@@ -158,9 +156,9 @@ export default function TrainingTab() {
               )}
 
               {run.error_message && (
-                <p className="text-xs text-red-600">{run.error_message}</p>
+                <p className="text-xs text-danger">{run.error_message}</p>
               )}
-            </div>
+            </Card>
           ))
         )}
       </div>

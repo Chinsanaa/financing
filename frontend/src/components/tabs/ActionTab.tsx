@@ -1,7 +1,11 @@
 'use client';
 
+import { ArrowRight, CheckCircle2, ClipboardList, TriangleAlert } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
-import { Alert, Loading } from '@/components/ui';
+import { Alert } from '@/components/ui';
+import Button from '@/components/ui/Button';
+import Card, { SectionHeader } from '@/components/ui/Card';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 
 interface Action {
   type: string;
@@ -13,65 +17,85 @@ interface Action {
   message?: string;
 }
 
+const TIPS = [
+  'Review categories over 80% of budget and plan to reduce spending.',
+  'Check for recurring transactions you can negotiate or cancel.',
+  'Clear the review queue to keep categorization accurate.',
+  'Set realistic savings goals based on your average spending patterns.',
+];
+
 export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { data, loading, error } = useApi<{ actions: Action[] }>('/dashboard/action');
   const actions = data?.actions || [];
 
   if (loading) {
-    return <Loading label="Loading action items..." />;
+    return (
+      <div className="max-w-3xl space-y-6">
+        <SkeletonRows rows={4} />
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900">Action Plan</h2>
+    <div className="max-w-3xl space-y-6">
+      <SectionHeader label="Planning" title="Action plan" />
 
       {error && <Alert kind="error">{error}</Alert>}
 
       {actions.length === 0 ? (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-          <p className="text-green-900 font-medium">✓ All clear!</p>
-          <p className="text-green-700 text-sm mt-1">No over-budget categories or pending items.</p>
+        <div className="flex items-start gap-3 rounded-card border border-success/25 bg-success/10 p-5">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+          <div>
+            <p className="font-medium text-success">All clear</p>
+            <p className="mt-0.5 text-sm text-muted">
+              No over-budget categories or pending items.
+            </p>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
           {actions.map((action, idx) => {
             if (action.type === 'over_budget') {
               return (
-                <div
-                  key={idx}
-                  className="bg-red-50 border border-red-200 rounded-lg p-4"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-bold text-red-900">Over Budget: {action.category}</p>
-                      <p className="text-red-700 text-sm mt-1">
-                        Spent ¥{action.current?.toFixed(0)} of ¥{action.limit?.toFixed(0)} budget
-                      </p>
+                <Card key={idx} className="border-danger/25 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+                      <div>
+                        <p className="text-sm font-semibold">Over budget: {action.category}</p>
+                        <p className="mt-0.5 text-xs text-muted">
+                          Spent ¥{action.current?.toFixed(0)} of ¥{action.limit?.toFixed(0)} budget
+                        </p>
+                      </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold text-red-600">
+                      <p className="font-display text-lg font-bold text-danger tabular-nums">
                         ¥{action.overage?.toFixed(0)}
                       </p>
-                      <p className="text-xs text-red-600">over</p>
+                      <p className="text-xs text-danger">over</p>
                     </div>
                   </div>
-                </div>
+                </Card>
               );
             } else if (action.type === 'pending_review') {
               return (
-                <div
-                  key={idx}
-                  className="bg-blue-50 border border-blue-200 rounded-lg p-4"
-                >
-                  <p className="font-bold text-blue-900">📋 Pending Review</p>
-                  <p className="text-blue-700 text-sm mt-1">{action.message}</p>
-                  <button
-                    onClick={() => onNavigate?.('review')}
-                    className="mt-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
-                  >
-                    Review Transactions →
-                  </button>
-                </div>
+                <Card key={idx} className="p-4">
+                  <div className="flex items-start gap-2.5">
+                    <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" />
+                    <div>
+                      <p className="text-sm font-semibold">Pending review</p>
+                      <p className="mt-0.5 text-xs text-muted">{action.message}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => onNavigate?.('review')}
+                      >
+                        Review transactions <ArrowRight className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
               );
             }
             return null;
@@ -79,28 +103,17 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
         </div>
       )}
 
-      {/* Tips Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="font-bold text-gray-900 mb-4">Tips to Improve Your Finances</h3>
+      <Card className="p-6">
+        <p className="section-label mb-4">Tips to improve your finances</p>
         <ul className="space-y-3">
-          <li className="flex gap-3">
-            <span className="text-blue-600 font-bold flex-shrink-0">1.</span>
-            <span className="text-gray-700 text-sm">Review categories over 80% of budget and plan to reduce spending.</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="text-blue-600 font-bold flex-shrink-0">2.</span>
-            <span className="text-gray-700 text-sm">Check for recurring transactions you can negotiate or cancel.</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="text-blue-600 font-bold flex-shrink-0">3.</span>
-            <span className="text-gray-700 text-sm">Review the pending transactions in the queue to ensure accurate categorization.</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="text-blue-600 font-bold flex-shrink-0">4.</span>
-            <span className="text-gray-700 text-sm">Set realistic savings goals based on your average spending patterns.</span>
-          </li>
+          {TIPS.map((tip, i) => (
+            <li key={i} className="flex gap-3 text-sm">
+              <span className="font-display font-semibold text-accent-strong">{i + 1}.</span>
+              <span className="text-muted">{tip}</span>
+            </li>
+          ))}
         </ul>
-      </div>
+      </Card>
     </div>
   );
 }

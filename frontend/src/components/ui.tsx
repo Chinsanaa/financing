@@ -1,14 +1,15 @@
 'use client';
 
 import { ReactNode } from 'react';
+import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 
-/** Shared UI atoms — replaces the alert/loading/progress markup that was
- * copy-pasted across every tab. */
+/** Shared UI atoms used across the dashboard tabs, themed via design tokens. */
 
-const ALERT_STYLES: Record<string, string> = {
-  error: 'bg-red-50 border-red-200 text-red-700',
-  success: 'bg-green-50 border-green-200 text-green-700',
-  info: 'bg-blue-50 border-blue-200 text-blue-700',
+const ALERT_STYLES: Record<string, { classes: string; Icon: typeof Info }> = {
+  error: { classes: 'border-danger/25 bg-danger/10 text-danger', Icon: AlertCircle },
+  success: { classes: 'border-success/25 bg-success/10 text-success', Icon: CheckCircle2 },
+  info: { classes: 'border-cyan/25 bg-cyan/10 text-cyan', Icon: Info },
 };
 
 export function Alert({
@@ -19,18 +20,25 @@ export function Alert({
   children: ReactNode;
 }) {
   if (!children) return null;
+  const { classes, Icon } = ALERT_STYLES[kind];
   return (
-    <div className={`border px-4 py-3 rounded ${ALERT_STYLES[kind]}`}>{children}</div>
+    <div
+      className={`flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm animate-fade-up ${classes}`}
+    >
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <div>{children}</div>
+    </div>
   );
 }
 
-export function Loading({ label = 'Loading...' }: { label?: string }) {
-  return <div className="text-gray-600">{label}</div>;
+/** Legacy loading state — now renders a skeleton block instead of text. */
+export function Loading({ label }: { label?: string }) {
+  return <SkeletonRows rows={4} />;
 }
 
 export function ProgressBar({
   percent,
-  color = 'bg-blue-600',
+  color = 'bg-accent',
   height = 'h-2',
 }: {
   percent: number;
@@ -38,9 +46,9 @@ export function ProgressBar({
   height?: string;
 }) {
   return (
-    <div className={`w-full bg-gray-200 rounded-full ${height}`}>
+    <div className={`w-full overflow-hidden rounded-full bg-edge/10 ${height}`}>
       <div
-        className={`${color} ${height} rounded-full transition-all`}
+        className={`${color} ${height} rounded-full transition-all duration-500`}
         style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
       />
     </div>

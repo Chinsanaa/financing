@@ -1,7 +1,24 @@
 'use client';
 
 import { useApi } from '@/utils/useApi';
-import { Alert, Loading, ProgressBar } from '@/components/ui';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { Alert } from '@/components/ui';
+import Card, { SectionHeader } from '@/components/ui/Card';
+import { AnimatedNumber } from '@/components/ui/motion';
+import { SkeletonCard, SkeletonChart } from '@/components/ui/Skeleton';
+import EmptyState from '@/components/ui/EmptyState';
+import { LineChart as LineChartIcon } from 'lucide-react';
 
 interface Summary {
   total_transactions: number;
@@ -21,106 +38,209 @@ interface Trend {
   total_spend: number;
 }
 
+/* Categorical series colors — validated against both surfaces (see globals.css).
+   Fixed order by spend rank at first render; >5 categories fold into "Other". */
+const SERIES = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
+
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="glass rounded-lg px-3 py-2 text-xs shadow-card">
+      {label && <p className="mb-1 font-medium">{label}</p>}
+      {payload.map((p: any) => (
+        <p key={p.name} className="tabular-nums text-muted">
+          {p.payload?.category ?? p.name}: <span className="font-medium text-ink">¥{Number(p.value).toFixed(2)}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export default function StatsTab() {
   const summaryQ = useApi<Summary>('/dashboard/summary');
   const categoryQ = useApi<{ categories: Category[] }>('/dashboard/by-category');
   const trendsQ = useApi<{ trends: Trend[] }>('/dashboard/trends?days=30');
 
   if (summaryQ.loading || categoryQ.loading || trendsQ.loading) {
-    return <Loading label="Loading dashboard..." />;
+    return (
+      <div className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+        <div className="grid gap-5 lg:grid-cols-[3fr,2fr]">
+          <SkeletonChart />
+          <SkeletonChart />
+        </div>
+      </div>
+    );
   }
 
   const summary = summaryQ.data;
-  const byCategory = categoryQ.data?.categories || [];
+  const sorted = [...(categoryQ.data?.categories || [])].sort(
+    (a, b) => b.total_amount - a.total_amount
+  );
+  // >5 categories fold into "Other" so hues are never cycled.
+  const byCategory =
+    sorted.length > 5
+      ? [
+          ...sorted.slice(0, 4),
+          sorted.slice(4).reduce(
+            (acc, c) => ({
+              category: 'Other',
+              total_amount: acc.total_amount + c.total_amount,
+              transaction_count: acc.transaction_count + c.transaction_count,
+            }),
+            { category: 'Other', total_amount: 0, transaction_count: 0 }
+          ),
+        ]
+      : sorted;
   const trends = trendsQ.data?.trends || [];
   const error = summaryQ.error || categoryQ.error || trendsQ.error;
+  const categoryTotal = byCategory.reduce((sum, c) => sum + c.total_amount, 0);
+
+  const stats = summary
+    ? [
+        { label: 'Total spend', value: summary.total_spend, prefix: '¥', decimals: 0 },
+        { label: 'Transactions', value: summary.total_transactions },
+        { label: 'Labeled', value: summary.labeled_transactions },
+        { label: 'Labeling complete', value: summary.labeling_percentage, suffix: '%' },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900">Overview</h2>
+      <SectionHeader label="Overview" title="Your spending at a glance" />
 
       {error && <Alert kind="error">{error}</Alert>}
 
-      {/* Summary Cards */}
+      {/* Stat tiles */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <p className="text-gray-600 text-sm font-medium mb-1">Total Transactions</p>
-            <p className="text-3xl font-bold text-gray-900">{summary.total_transactions}</p>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <p className="text-gray-600 text-sm font-medium mb-1">Labeled</p>
-            <p className="text-3xl font-bold text-gray-900">{summary.labeled_transactions}</p>
-            <p className="text-xs text-gray-500 mt-1">{summary.labeling_percentage}% complete</p>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <p className="text-gray-600 text-sm font-medium mb-1">Total Spend</p>
-            <p className="text-3xl font-bold text-gray-900">¥{summary.total_spend.toFixed(0)}</p>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <p className="text-gray-600 text-sm font-medium mb-1">Status</p>
-            <p className="text-lg font-bold text-blue-600">
-              {summary.labeling_percentage === 100 ? '✓ Complete' : 'In Progress'}
-            </p>
-          </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map((s) => (
+            <Card key={s.label} hover className="p-5">
+              <p className="section-label mb-2">{s.label}</p>
+              <p className="font-display text-3xl font-bold tabular-nums tracking-tight">
+                {s.prefix}
+                <AnimatedNumber
+                  value={s.value}
+                  format={(n) =>
+                    n.toLocaleString(undefined, {
+                      maximumFractionDigits: s.decimals ?? 0,
+                    })
+                  }
+                />
+                {s.suffix}
+              </p>
+            </Card>
+          ))}
         </div>
       )}
 
-      {/* Spending by Category */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="font-bold text-gray-900 mb-4">Spending by Category</h3>
+      <div className="grid gap-5 lg:grid-cols-[3fr,2fr]">
+        {/* Spending trend */}
+        <Card className="p-5">
+          <p className="section-label mb-4">Spending trend — last 30 days</p>
+          {trends.length === 0 ? (
+            <EmptyState
+              icon={LineChartIcon}
+              title="No spending data yet"
+              description="Upload a statement to see your daily spending curve."
+            />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={trends} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgb(var(--edge) / 0.08)" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: 'rgb(var(--muted))', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={32}
+                  tickFormatter={(d: string) => d.slice(5)}
+                />
+                <YAxis
+                  tick={{ fill: 'rgb(var(--muted))', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={44}
+                  tickFormatter={(v: number) => `¥${v}`}
+                />
+                <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'rgb(var(--edge) / 0.2)' }} />
+                <Area
+                  type="monotone"
+                  dataKey="total_spend"
+                  name="Spend"
+                  stroke="rgb(var(--accent))"
+                  strokeWidth={2}
+                  fill="url(#trend-fill)"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: 'rgb(var(--surface))' }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
 
-        {byCategory.length === 0 ? (
-          <p className="text-gray-600">No categorized transactions yet. Upload and label some data!</p>
-        ) : (
-          <div className="space-y-3">
-            {[...byCategory]
-              .sort((a, b) => b.total_amount - a.total_amount)
-              .map((cat) => {
-                const total = byCategory.reduce((sum, c) => sum + c.total_amount, 0);
-                const percentage = total > 0 ? Math.round((cat.total_amount / total) * 100) : 0;
-
-                return (
-                  <div key={cat.category}>
-                    <div className="flex justify-between items-center mb-1">
-                      <p className="font-medium text-gray-900">{cat.category}</p>
-                      <p className="text-sm text-gray-600">
-                        ¥{cat.total_amount.toFixed(2)} ({cat.transaction_count} txns)
-                      </p>
-                    </div>
-                    <ProgressBar percent={percentage} />
-                    <p className="text-xs text-gray-500 mt-1">{percentage}%</p>
-                  </div>
-                );
-              })}
-          </div>
-        )}
+        {/* Category split */}
+        <Card className="p-5">
+          <p className="section-label mb-4">Spending by category</p>
+          {byCategory.length === 0 ? (
+            <EmptyState
+              icon={LineChartIcon}
+              title="Nothing categorized yet"
+              description="Label a few transactions and the split shows up here."
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-4">
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={byCategory}
+                    dataKey="total_amount"
+                    nameKey="category"
+                    innerRadius={52}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    stroke="rgb(var(--surface))"
+                    strokeWidth={2}
+                  >
+                    {byCategory.map((c, i) => (
+                      <Cell key={c.category} fill={SERIES[i]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Legend: color follows the entity; text wears text tokens */}
+              <ul className="w-full space-y-1.5">
+                {byCategory.map((c, i) => {
+                  const pct = categoryTotal > 0 ? Math.round((c.total_amount / categoryTotal) * 100) : 0;
+                  return (
+                    <li key={c.category} className="flex items-center gap-2 text-sm">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: SERIES[i] }}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{c.category}</span>
+                      <span className="tabular-nums text-muted">
+                        ¥{c.total_amount.toFixed(0)} · {pct}%
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </Card>
       </div>
-
-      {/* Spending Trend */}
-      {trends.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="font-bold text-gray-900 mb-4">Recent Spending (30 days)</h3>
-          <div className="space-y-2">
-            {trends.slice(-7).map((trend) => {
-              const max = Math.max(...trends.map((t) => t.total_spend));
-              const percentage = max > 0 ? (trend.total_spend / max) * 100 : 0;
-              return (
-                <div key={trend.date}>
-                  <div className="flex justify-between items-center mb-1">
-                    <p className="text-sm text-gray-600">{trend.date}</p>
-                    <p className="text-sm font-medium text-gray-900">¥{trend.total_spend.toFixed(0)}</p>
-                  </div>
-                  <ProgressBar percent={percentage} color="bg-green-500" height="h-1.5" />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

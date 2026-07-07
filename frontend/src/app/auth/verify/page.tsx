@@ -77,19 +77,25 @@ function VerifyContent() {
   }, [searchParams, supabase, router]);
 
   return (
-    <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
-      <h1 className="text-2xl font-bold mb-4">Email Verification</h1>
+    <div className="glass w-full max-w-md rounded-card p-8 shadow-card animate-fade-up">
+      <p className="section-label mb-2">Almost there</p>
+      <h1 className="font-display text-2xl font-bold tracking-tight mb-4">Email verification</h1>
 
-      {loading && <p className="text-gray-600">Verifying your email...</p>}
+      {loading && (
+        <div className="space-y-2.5" aria-hidden="true">
+          <div className="skeleton h-4 w-3/4" />
+          <div className="skeleton h-4 w-1/2" />
+        </div>
+      )}
 
       {message && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+        <div className="rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success">
           {message}
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger">
           <p>{error}</p>
           <button
             onClick={() => router.push('/auth')}
@@ -101,7 +107,7 @@ function VerifyContent() {
       )}
 
       {!loading && !message && !error && (
-        <p className="text-gray-600">
+        <p className="text-sm text-muted">
           Check your email for a verification link. Click it to complete signup.
         </p>
       )}
@@ -111,8 +117,9 @@ function VerifyContent() {
 
 export default function VerifyPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Suspense fallback={<p className="text-gray-600">Loading...</p>}>
+    <div className="bg-grid relative flex min-h-screen items-center justify-center px-4">
+      <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-[560px] -translate-x-1/2 rounded-full bg-accent/10 blur-3xl" />
+      <Suspense fallback={<div className="skeleton h-40 w-full max-w-md" aria-hidden="true" />}>
         <VerifyContent />
       </Suspense>
     </div>
