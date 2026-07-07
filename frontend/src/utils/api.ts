@@ -22,16 +22,24 @@ function getBaseUrl(): string {
   return 'http://localhost:8000';
 }
 
+// Create a single supabase client instance so session is properly persisted
+const supabaseClient = createClient();
+
 export const apiClient = axios.create();
 
 apiClient.interceptors.request.use(async (config) => {
   config.baseURL = getBaseUrl();
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    config.headers.Authorization = `Bearer ${session.access_token}`;
+  try {
+    const {
+      data: { session },
+    } = await supabaseClient.auth.getSession();
+    if (session?.access_token) {
+      config.headers.Authorization = `Bearer ${session.access_token}`;
+    } else {
+      console.warn('No Supabase session found - request may fail with 401');
+    }
+  } catch (err) {
+    console.error('Failed to get Supabase session:', err);
   }
   return config;
 });
