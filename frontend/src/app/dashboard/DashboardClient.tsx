@@ -71,16 +71,12 @@ export default function DashboardClient() {
   const [loading, setLoading] = useState(true);
 
   const urlTab = searchParams.get('tab');
-  // Map legacy tab names to new section
-  const legacyToNew: Record<string, string> = {
-    upload: 'transactions-model',
-    label: 'transactions-model',
-    review: 'transactions-model',
-    categories: 'transactions-model',
-    training: 'transactions-model',
-  };
-  const mappedTab = urlTab && legacyToNew[urlTab] ? legacyToNew[urlTab] : urlTab;
-  const activeTab = mappedTab && TAB_SECTION[mappedTab] ? mappedTab : 'transactions-model';
+  // Wizard step IDs become first-class deep links; 'training' alias for 'train'
+  const wizardSteps = ['upload', 'categories', 'label', 'review', 'train'];
+  const wizardStepAlias: Record<string, string> = { training: 'train' };
+  const resolvedTab = urlTab ? (wizardStepAlias[urlTab] || urlTab) : urlTab;
+  const isWizardStep = resolvedTab && wizardSteps.includes(resolvedTab);
+  const activeTab = isWizardStep ? 'transactions-model' : (resolvedTab || 'overview');
   const activeSection = TAB_SECTION[activeTab];
   const section = SECTIONS.find((s) => s.id === activeSection)!;
 
@@ -176,7 +172,12 @@ export default function DashboardClient() {
 
         <TabPanel key={activeTab}>
           {activeTab === 'overview' && <StatsTab />}
-          {activeTab === 'transactions-model' && <TransactionsModelTab />}
+          {activeTab === 'transactions-model' && (
+            <TransactionsModelTab
+              stepId={isWizardStep ? resolvedTab : undefined}
+              onStepChange={(stepId) => goToTab(stepId)}
+            />
+          )}
           {activeTab === 'budget' && <BudgetTab />}
           {activeTab === 'savings' && <SavingsTab />}
           {activeTab === 'action' && <ActionTab onNavigate={goToTab} />}

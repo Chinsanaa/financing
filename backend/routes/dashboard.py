@@ -5,12 +5,15 @@ Notes on postgrest-py usage: negated filters use the `.not_` PROPERTY
 TypeError — it is not a method.
 """
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from typing import List, Optional
 from config import supabase_client
 from db import fetch_all
 from errors import internal_error
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
+from translate import merchant_label_english, description_label_english
 
 router = APIRouter()
 
@@ -143,6 +146,19 @@ async def get_trends(request: Request, days: int = 30):
         raise internal_error(e, "dashboard/trends")
 
 
+def _monthly_income(user_id: str) -> float:
+    """Monthly income from profiles.monthly_income (the only written source)."""
+    resp = supabase_client.table("profiles").select("monthly_income").eq("id", user_id).execute()
+    if resp.data and resp.data[0].get("monthly_income") is not None:
+        return float(resp.data[0]["monthly_income"])
+    return 0.0
+
+
+def _budget_config(user_id: str):
+    resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
+    return resp.data[0] if resp.data else None
+
+
 def _current_month_spend_by_category(user_id: str) -> dict:
     """This month's spend per category name (monthly budgets compare against
     the current month, not all-time history)."""
@@ -166,8 +182,10 @@ async def get_budget(request: Request):
     user_id = request.state.user_id
 
     try:
-        budget_resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
-        budget_config = budget_resp.data[0] if budget_resp.data else None
+        # Monthly income's single source of truth is profiles.monthly_income
+        # (written by PATCH /settings/profile). budget_config.income is legacy
+        # and was never written by anything.
+        budget_config = _budget_config(user_id)
 
         cat_budget_resp = (
             supabase_client.table("budget_category_config")
@@ -177,9 +195,9 @@ async def get_budget(request: Request):
         )
 
         budget_config_out = {
-            "monthly_income": float(budget_config["income"]) if budget_config and budget_config["income"] else 0,
+            "monthly_income": _monthly_income(user_id),
             "currency": budget_config["currency"] if budget_config else "CNY",
-        } if budget_config else None
+        }
 
         if not cat_budget_resp.data:
             return {"budget_config": budget_config_out, "category_budgets": []}
@@ -206,14 +224,65 @@ async def get_budget(request: Request):
         raise internal_error(e, "dashboard/budget")
 
 
+class CategoryBudgetItem(BaseModel):
+    category_id: str
+    monthly_budget: Optional[float] = None
+    type: str = "Need"  # budget_type enum: 'Need' | 'Want'
+
+
+class CategoryBudgetsUpdate(BaseModel):
+    budgets: List[CategoryBudgetItem]
+
+
+@router.put("/budget/categories")
+async def put_category_budgets(request: Request, data: CategoryBudgetsUpdate):
+    """Set per-category monthly budgets (upsert on user_id + category_id).
+
+    This is the writer budget_category_config never had — the Budget tab and
+    the over-budget Action items read from it but nothing could populate it.
+    """
+    user_id = request.state.user_id
+
+    try:
+        if not data.budgets:
+            raise HTTPException(status_code=400, detail="No budgets provided")
+
+        # Only allow the user's own categories
+        cat_resp = supabase_client.table("categories").select("id").eq("user_id", user_id).execute()
+        own_ids = {c["id"] for c in (cat_resp.data or [])}
+
+        rows = []
+        for item in data.budgets:
+            if item.category_id not in own_ids:
+                raise HTTPException(status_code=400, detail="Unknown category")
+            if item.type not in ("Need", "Want"):
+                raise HTTPException(status_code=400, detail="type must be 'Need' or 'Want'")
+            rows.append({
+                "user_id": user_id,
+                "category_id": item.category_id,
+                "type": item.type,
+                "monthly_budget": item.monthly_budget,
+            })
+
+        response = (
+            supabase_client.table("budget_category_config")
+            .upsert(rows, on_conflict="user_id,category_id")
+            .execute()
+        )
+        return {"updated": len(response.data or rows)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/put_category_budgets")
+
+
 @router.get("/savings")
 async def get_savings(request: Request):
     """Savings info: goals, current savings, anomalies."""
     user_id = request.state.user_id
 
     try:
-        budget_resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
-        budget_config = budget_resp.data[0] if budget_resp.data else None
+        budget_config = _budget_config(user_id)
 
         now = _now_cn()
         month_start = _month_start(now)
@@ -246,7 +315,7 @@ async def get_savings(request: Request):
             avg_monthly = float(monthly_totals.mean()) if len(monthly_totals) > 0 else 0
 
         savings_goal = float(budget_config["saving_goal_monthly"]) if budget_config and budget_config["saving_goal_monthly"] else 0
-        income = float(budget_config["income"]) if budget_config and budget_config["income"] else 0
+        income = _monthly_income(user_id)
 
         return {
             "savings_goal_monthly": savings_goal,
@@ -341,8 +410,8 @@ async def get_reports(request: Request, page: int = 1, per_page: int = 100):
         transactions = [
             {
                 "date": txn["timestamp"],
-                "merchant": txn["merchant"],
-                "description": txn["description"],
+                "merchant": merchant_label_english(txn["merchant"]),
+                "description": description_label_english(txn["description"]),
                 "amount": float(txn["amount"]),
                 "category": txn["categories"]["name"] if txn["categories"] else "Unknown",
                 "label_source": txn["label_source"],
@@ -360,6 +429,91 @@ async def get_reports(request: Request, page: int = 1, per_page: int = 100):
         raise
     except Exception as e:
         raise internal_error(e, "dashboard/reports")
+
+
+@router.get("/export")
+async def export_transactions(request: Request):
+    """Export all user transactions as XLSX workbook.
+
+    Columns: Date | Merchant | Description | Category | Amount | Label source
+    All text is translated to English; amounts formatted as #,##0.00
+    """
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from datetime import datetime
+
+    user_id = request.state.user_id
+
+    try:
+        def make_query():
+            return (
+                supabase_client.table("transactions")
+                .select("timestamp, merchant, description, amount, category_id, categories(name), label_source")
+                .eq("user_id", user_id)
+                .order("timestamp", desc=True)
+            )
+
+        all_txns = fetch_all(make_query)
+
+        # Create workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Transactions"
+
+        # Headers
+        headers = ["Date", "Merchant", "Description", "Category", "Amount", "Label Source"]
+        ws.append(headers)
+
+        # Format header row
+        header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+        header_font = Font(bold=True)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        # Freeze header
+        ws.freeze_panes = "A2"
+
+        # Add data rows
+        for txn in all_txns:
+            ws.append([
+                txn["timestamp"],
+                merchant_label_english(txn["merchant"]),
+                description_label_english(txn["description"]),
+                txn["categories"]["name"] if txn["categories"] else "Uncategorized",
+                float(txn["amount"]),
+                txn["label_source"] or "",
+            ])
+
+        # Format amount column
+        for row in ws.iter_rows(min_row=2, max_row=len(all_txns) + 1, min_col=5, max_col=5):
+            for cell in row:
+                cell.number_format = '#,##0.00'
+
+        # Adjust column widths
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 20
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 18
+        ws.column_dimensions['E'].width = 12
+        ws.column_dimensions['F'].width = 14
+
+        # Write to bytes
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # Return as attachment
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=transactions_{now}.xlsx"}
+        )
+    except Exception as e:
+        raise internal_error(e, "dashboard/export")
 
 
 @router.get("/review-queue")

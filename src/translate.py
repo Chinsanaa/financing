@@ -24,7 +24,7 @@ def _mostly_ascii(text: str) -> bool:
         return False
 
 
-@lru_cache(maxsize=2048)
+@lru_cache(maxsize=4096)
 def translate_to_english(text: str) -> str:
     """Translate text to English; return unchanged if already non-CJK.
 
@@ -66,15 +66,14 @@ def merchant_label_english(merchant: str) -> str:
     """English-only merchant name (never Chinese).
 
     Returns 'Unknown merchant' if merchant is empty or untranslatable.
+    Delegates to display_merchant for curated mappings.
     """
+    from merchant_display import display_merchant
     merchant = str(merchant or '').strip()
     if not merchant:
         return 'Unknown merchant'
-    if not has_cjk(merchant):
-        return shorten(merchant, 28)
-    translated = translate_to_english(merchant)
-    translated = _sanitize_english(translated, '')
-    return shorten(translated, 28) if translated else 'Unknown merchant'
+    result = display_merchant(merchant)
+    return result if result else 'Unknown merchant'
 
 
 def description_label_english(description: str) -> str:

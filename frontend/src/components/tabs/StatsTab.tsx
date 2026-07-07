@@ -19,6 +19,7 @@ import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard, SkeletonChart } from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import { LineChart as LineChartIcon } from 'lucide-react';
+import { formatCurrency, formatNumber, formatCurrencyWhole } from '@/utils/format';
 
 interface Summary {
   total_transactions: number;
@@ -49,7 +50,7 @@ function ChartTooltip({ active, payload, label }: any) {
       {label && <p className="mb-1 font-medium">{label}</p>}
       {payload.map((p: any) => (
         <p key={p.name} className="tabular-nums text-muted">
-          {p.payload?.category ?? p.name}: <span className="font-medium text-ink">¥{Number(p.value).toFixed(2)}</span>
+          {p.payload?.category ?? p.name}: <span className="font-medium text-ink">{formatCurrency(Number(p.value))}</span>
         </p>
       ))}
     </div>
@@ -122,15 +123,16 @@ export default function StatsTab() {
             <Card key={s.label} hover className="p-5">
               <p className="section-label mb-2">{s.label}</p>
               <p className="font-display text-3xl font-bold tabular-nums tracking-tight">
-                {s.prefix}
                 <AnimatedNumber
                   value={s.value}
-                  format={(n) =>
-                    n.toLocaleString(undefined, {
-                      maximumFractionDigits: s.decimals ?? 0,
-                    })
-                  }
+                  format={(n) => {
+                    if (s.prefix === '¥') {
+                      return formatCurrencyWhole(n).replace('¥', '');
+                    }
+                    return formatNumber(n, s.decimals ?? 0);
+                  }}
                 />
+                {s.prefix}
                 {s.suffix}
               </p>
             </Card>
@@ -171,7 +173,7 @@ export default function StatsTab() {
                   tickLine={false}
                   axisLine={false}
                   width={44}
-                  tickFormatter={(v: number) => `¥${v}`}
+                  tickFormatter={(v: number) => formatCurrencyWhole(v)}
                 />
                 <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'rgb(var(--edge) / 0.2)' }} />
                 <Area
@@ -231,7 +233,7 @@ export default function StatsTab() {
                       />
                       <span className="min-w-0 flex-1 truncate">{c.category}</span>
                       <span className="tabular-nums text-muted">
-                        ¥{c.total_amount.toFixed(0)} · {pct}%
+                        {formatCurrencyWhole(c.total_amount)} · {pct}%
                       </span>
                     </li>
                   );

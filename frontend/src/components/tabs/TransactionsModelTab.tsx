@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronLeft,
@@ -12,8 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import Card, { SectionHeader } from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
+import Card from '@/components/ui/Card';
 import UploadWithIncomeTab from './UploadWithIncomeTab';
 import CategoriesTab from './CategoriesTab';
 import LabelTab from './LabelTab';
@@ -53,20 +52,40 @@ const STEPS = [
   },
 ];
 
-export default function TransactionsModelTab() {
-  const [currentStep, setCurrentStep] = useState(0);
+interface TransactionsModelTabProps {
+  stepId?: string;
+  onStepChange?: (stepId: string) => void;
+}
+
+export default function TransactionsModelTab({ stepId, onStepChange }: TransactionsModelTabProps = {}) {
+  const stepIndex = stepId ? STEPS.findIndex((s) => s.id === stepId) : 0;
+  const [currentStep, setCurrentStep] = useState(stepIndex >= 0 ? stepIndex : 0);
+
+  useEffect(() => {
+    if (stepId) {
+      const index = STEPS.findIndex((s) => s.id === stepId);
+      if (index >= 0) {
+        setCurrentStep(index);
+      }
+    }
+  }, [stepId]);
 
   const handleNext = useCallback(() => {
-    setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
-  }, []);
+    const newStep = Math.min(currentStep + 1, STEPS.length - 1);
+    setCurrentStep(newStep);
+    onStepChange?.(STEPS[newStep].id);
+  }, [currentStep, onStepChange]);
 
   const handlePrev = useCallback(() => {
-    setCurrentStep((prev) => Math.max(prev - 1, 0));
-  }, []);
+    const newStep = Math.max(currentStep - 1, 0);
+    setCurrentStep(newStep);
+    onStepChange?.(STEPS[newStep].id);
+  }, [currentStep, onStepChange]);
 
   const handleStepClick = useCallback((index: number) => {
     setCurrentStep(index);
-  }, []);
+    onStepChange?.(STEPS[index].id);
+  }, [onStepChange]);
 
   const currentStepData = STEPS[currentStep];
   const CurrentIcon = currentStepData.icon;

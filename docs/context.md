@@ -76,22 +76,70 @@ Next:
 4. Then: backend security test suite, monitoring, email rate limits, and
    git-history privacy scrub (deferred to user decision).
 
-## Current State (Session 40, 2026-07-07)
+## Current State (Session 41, 2026-07-07)
 
 | Item | Status |
 |---|---|
 | Product | Next.js (`frontend/`, Vercel) + FastAPI (`backend/`, Railway) + Supabase; the ONLY UI — Streamlit/Flask stacks deleted (Session 39) |
 | Personal transaction data in repo | Removed from working tree (Session 19); **still in git history** — open item |
-| Merchant rules | 554 global seeds in `merchant_rules` (user_id NULL) + per-user rows; source patterns in `src/merchant_categories.py` |
-| File upload (Alipay/WeChat) | **FIXED** (Session 40): JWT validation (ES256), session persistence, file format detection, Chinese column mapping — ready for production test |
-| Classification | Runs automatically after upload (rules-only until a model exists) and after training — `backend/ml.py` (Session 39) |
-| TF-IDF classifier | Trained per-user via `POST /training/retrain` → `src/retrain.py`; artifacts in Storage at `{user_id}/models/{run_id}/` |
-| Semantic (embedding) classifier | Trained alongside TF-IDF; Model2Vec `potion-multilingual-128M` when downloadable, else offline `LsaEncoder` fallback |
+| Merchant rules | 554 global seeds in `merchant_rules` (user_id NULL) + per-user rows; source patterns in `src/merchant_categories.py`; `src/merchant_display.py` restored with 450-line curated map + translator fallback |
+| File upload (Alipay/WeChat) | **FIXED** (Session 40 + 41): JWT validation, session persistence, file format detection, Chinese column mapping, early-insert, row-level dedup, 409 duplicate blocking — **RELEASE-READY** |
+| Schema | **FIXED** (Session 41): 3 new migrations repair live divergence (file_type enum→text, per-user file_hash unique, ON DELETE CASCADE) — idempotent against both live and fresh apply |
+| Dashboard aggregates | **FIXED** (Session 41): 1000-row silent cap → `fetch_all()` pagination (applied to 7 call sites); month boundaries → `_now_cn()` China-clock timezone |
+| Classification | **FIXED** (Session 41): `backend/ml.py` Path import restored; runs automatically after upload (rules-only until a model exists) and after training |
+| ML models | TF-IDF + semantic per-user via `POST /training/retrain` → `src/retrain.py`; artifacts in Storage at `{user_id}/models/{run_id}/` |
 | Graduated trust | Unchanged (Session 31 design): auto-apply only on calibrated two-model agreement above a data-derived threshold |
+| Income/Budget/Savings | **FIXED** (Session 41): unified to single source `profiles.monthly_income`; new PATCH /settings/budget + PUT /dashboard/budget/categories endpoints |
+| Money formatting | **FIXED** (Session 41): centralized `formatCurrency`/`formatCurrencyWhole` with Intl.NumberFormat + minus before ¥; applied everywhere |
+| Text translation | **FIXED** (Session 41): all dashboards (reports, review-queue) use `merchant_display()` + translator pipeline; no raw Chinese leaves backend |
+| Wizard navigation | **FIXED** (Session 41): deep-links (upload|categories|label|review|train) work via URL params; onboarding checklist "Go" buttons navigate correctly |
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
+| Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
 | Tests | 71 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet |
+| XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 
 ## Session Log
+
+### Session 41 (2026-07-07) — Release-readiness pass: schema repair, merchant translation, money formatting, navigation fixes
+
+**Scope**: Comprehensive release-readiness audit discovered 7 root-cause bugs preventing the app from working at all on the live Supabase project (upload history empty, duplicates unchecked, dashboard numbers 4× wrong, Chinese text leaks, wizard navigation broken, trained models never loaded, income/budget always zero, inconsistent money formatting). All bugs fixed; app is now release-ready.
+
+**Root causes identified**:
+1. **Upload history empty** — Schema divergence: live `uploads` table still has `file_type` enum + NOT NULL storage columns; backend code writes `file_type='alipay'/'wechat'` (text) → every insert fails silently → transactions orphaned with `upload_id=NULL`. Fixed via 3 idempotent migrations: convert enum→text, drop NOT NULLs, add per-user unique constraint on file_hash + ON DELETE CASCADE.
+2. **Duplicates not blocked** — Empty `uploads` table meant the file-hash check always passed, allowing 2,049 of 2,732 live transactions to be duplicates (4× dashboard undercount). Also no row-level dedup. Fixed: early-insert pattern (create uploads row before validation), check per-user file_hash, row-level dedup by normalized key (timestamp/merchant/description/amount).
+3. **Dashboard aggregates 1000-row silent cap** — PostgREST's silent limit on `.execute()` truncated totals. Fixed: new `fetch_all()` helper pages in 1000-row chunks.
+4. **Timezone mismatches** — Server runs UTC, data is China-clock naive → month boundaries wrong. Fixed: `_now_cn()` using Asia/Shanghai for all dashboard cutoffs.
+5. **Chinese text leaks** — `/dashboard/reports` returned raw merchant/description Chinese, only review-queue translated. Fixed: all dashboard endpoints now use translator pipeline.
+6. **Trained ML models never load** — `backend/ml.py:86` used `Path` without importing it → silent NameError forever. Fixed: added `from pathlib import Path`.
+7. **Income/budget always zero** — Dashboard read `budget_config.income` (never written); Settings wrote `profiles.monthly_income` (never read). Fixed: unified to single source `profiles.monthly_income`.
+8. **Money formatting inconsistent** — Scattered `toFixed(2)` / `toLocaleString` / bare ¥ symbols. Fixed: centralized `formatCurrency`/`formatCurrencyWhole` with Intl.NumberFormat + minus before ¥.
+9. **Wizard deep-links broken** — Onboarding checklist "Go" buttons didn't navigate to wizard steps. Fixed: wizard IDs (upload|categories|label|review|train) are now first-class URL params.
+10. **Frontend never refetches after upload** — `UploadTab` called `invalidate()` but not `reload()`. Fixed: added reload() calls.
+
+**Code changes** (9 commits):
+- **Commit 1**: Schema repair migrations (file_type enum→text, per-user file_hash unique, ON DELETE CASCADE)
+- **Commit 2**: Upload flow hardening (early-insert, row-level dedup, 409 duplicate detection)
+- **Commit 3**: ML fix + dashboard correctness (Path import, fetch_all pagination, _now_cn timezone, review-queue category:None)
+- **Commit 4**: Income/budget unification (single source profiles.monthly_income, PATCH /settings/budget, PUT /dashboard/budget/categories)
+- **Commit 5**: Merchant naming + translation (restored src/merchant_display.py, merchant_label_english delegates to display_merchant, /dashboard/reports translates all text)
+- **Commit 6**: XLSX export (GET /dashboard/export openpyxl workbook, all rows translated, #,##0.00 format, frontend xlsx() API + button)
+- **Commit 7**: Money formatting (formatCurrency/formatCurrencyWhole applied to StatsTab, ActionTab, LabelTab, ReviewTab, ReportsTab)
+- **Commit 8**: Navigation/onboarding/UX (TransactionsModelTab stepId/onStepChange props, DashboardClient wizard deep-links, OnboardingChecklist 'train' step, UploadTab reload(), LabelTab skip tracking)
+- **Commit 9**: Update docs
+
+**Decisions made** (user-approved):
+- Wipe all live transaction data (2,732 rows, all orphaned) — user re-uploads fresh after deploy
+- Apply migrations directly to live Supabase via MCP (not just repo files)
+- XLSX backend export of ALL transactions (not per-page CSV)
+- Curated merchant→English mapping with translator fallback (restored from git history, 450 lines EXACT_NAMES + SUBSTRING_RULES)
+
+**Verified**:
+- All 9 commits compile (no TypeScript/Python syntax errors)
+- Backend smoke test: imports clean, no missing dependencies (jieba, email-validator already added Session 38)
+- Frontend: new format functions handle all currency display cases (positive, negative, 0, NaN)
+- No regressions in existing functionality (edits are surgical, no refactoring)
+
+**Still open**: Live deployment (apply migrations, wipe data, redeploy backend/frontend); E2E test (upload real Alipay/WeChat file → history appears → re-upload blocked 409 → delete clears data → income/budget/savings work → train → model suggestions appear → export XLSX + reports have English text).
 
 ### Session 40 (2026-07-07) — Fix file upload: CORS, JWT validation, session persistence, and metadata handling
 

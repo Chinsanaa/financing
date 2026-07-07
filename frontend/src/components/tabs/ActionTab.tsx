@@ -6,6 +6,7 @@ import { Alert } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { SkeletonRows } from '@/components/ui/Skeleton';
+import { formatCurrencyWhole } from '@/utils/format';
 
 interface Action {
   type: string;
@@ -64,13 +65,13 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
                       <div>
                         <p className="text-sm font-semibold">Over budget: {action.category}</p>
                         <p className="mt-0.5 text-xs text-muted">
-                          Spent ¥{action.current?.toFixed(0)} of ¥{action.limit?.toFixed(0)} budget
+                          Spent {formatCurrencyWhole(action.current || 0)} of {formatCurrencyWhole(action.limit || 0)} budget
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="font-display text-lg font-bold text-danger tabular-nums">
-                        ¥{action.overage?.toFixed(0)}
+                        {formatCurrencyWhole(action.overage || 0)}
                       </p>
                       <p className="text-xs text-danger">over</p>
                     </div>

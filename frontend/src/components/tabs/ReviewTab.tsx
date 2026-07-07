@@ -10,6 +10,7 @@ import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge, { categoryColor } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
+import { formatCurrency } from '@/utils/format';
 
 interface Transaction {
   id: string;
@@ -182,7 +183,7 @@ export default function ReviewTab() {
                         {tx.description}
                       </td>
                       <td className="px-4 py-3 text-right font-medium tabular-nums">
-                        ¥{tx.amount.toFixed(2)}
+                        {formatCurrency(tx.amount)}
                       </td>
                       <td className="px-4 py-3">
                         {isShowingLabeled ? (
