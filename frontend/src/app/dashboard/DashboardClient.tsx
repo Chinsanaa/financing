@@ -4,16 +4,15 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  BrainCircuit,
   ChartPie,
   FileText,
   LayoutDashboard,
   LogOut,
   Settings,
-  Wallet,
+  Workflow,
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
-import { TabBar, PillTabs, TabPanel, TabItem } from '@/components/ui/Tabs';
+import { TabBar, TabPanel, TabItem } from '@/components/ui/Tabs';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import DashboardLoading from './loading';
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
@@ -22,33 +21,16 @@ import BudgetTab from '@/components/tabs/BudgetTab';
 import SavingsTab from '@/components/tabs/SavingsTab';
 import ActionTab from '@/components/tabs/ActionTab';
 import ReportsTab from '@/components/tabs/ReportsTab';
-import ReviewTab from '@/components/tabs/ReviewTab';
-import UploadTab from '@/components/tabs/UploadTab';
-import CategoriesTab from '@/components/tabs/CategoriesTab';
-import LabelTab from '@/components/tabs/LabelTab';
-import TrainingTab from '@/components/tabs/TrainingTab';
+import TransactionsModelTab from '@/components/tabs/TransactionsModelTab';
 
-/** Ten legacy tabs regrouped into five compact sections with sub-tabs. */
+/** Four sections with sub-tabs. Transactions & Model merged into one workflow. */
 const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, subs: [] },
   {
-    id: 'transactions',
-    label: 'Transactions',
-    icon: Wallet,
-    subs: [
-      { id: 'upload', label: 'Upload' },
-      { id: 'label', label: 'Label' },
-      { id: 'review', label: 'Review queue' },
-    ],
-  },
-  {
-    id: 'model',
-    label: 'Model',
-    icon: BrainCircuit,
-    subs: [
-      { id: 'categories', label: 'Categories' },
-      { id: 'training', label: 'Training' },
-    ],
+    id: 'transactions-model',
+    label: 'Transactions & Model',
+    icon: Workflow,
+    subs: [],
   },
   {
     id: 'planning',
@@ -63,14 +45,10 @@ const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
   { id: 'reports', label: 'Reports', icon: FileText, subs: [] },
 ];
 
-/** Legacy tab id → its section (for ActionTab's onNavigate and URL params). */
+/** Tab id → its section (for ActionTab's onNavigate and URL params). */
 const TAB_SECTION: Record<string, string> = {
   overview: 'overview',
-  upload: 'transactions',
-  label: 'transactions',
-  review: 'transactions',
-  categories: 'model',
-  training: 'model',
+  'transactions-model': 'transactions-model',
   budget: 'planning',
   savings: 'planning',
   action: 'planning',
@@ -79,8 +57,7 @@ const TAB_SECTION: Record<string, string> = {
 
 const DEFAULT_SUB: Record<string, string> = {
   overview: 'overview',
-  transactions: 'upload',
-  model: 'categories',
+  'transactions-model': 'transactions-model',
   planning: 'budget',
   reports: 'reports',
 };
@@ -94,7 +71,16 @@ export default function DashboardClient() {
   const [loading, setLoading] = useState(true);
 
   const urlTab = searchParams.get('tab');
-  const activeTab = urlTab && TAB_SECTION[urlTab] ? urlTab : 'upload';
+  // Map legacy tab names to new section
+  const legacyToNew: Record<string, string> = {
+    upload: 'transactions-model',
+    label: 'transactions-model',
+    review: 'transactions-model',
+    categories: 'transactions-model',
+    training: 'transactions-model',
+  };
+  const mappedTab = urlTab && legacyToNew[urlTab] ? legacyToNew[urlTab] : urlTab;
+  const activeTab = mappedTab && TAB_SECTION[mappedTab] ? mappedTab : 'transactions-model';
   const activeSection = TAB_SECTION[activeTab];
   const section = SECTIONS.find((s) => s.id === activeSection)!;
 
@@ -188,28 +174,13 @@ export default function DashboardClient() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <OnboardingChecklist onNavigate={goToTab} activeTab={activeTab} />
 
-        {section.subs.length > 0 && (
-          <div className="mb-6">
-            <PillTabs
-              tabs={section.subs}
-              active={activeTab}
-              onChange={goToTab}
-              layoutId="sub-tab"
-            />
-          </div>
-        )}
-
         <TabPanel key={activeTab}>
-          {activeTab === 'upload' && <UploadTab />}
-          {activeTab === 'categories' && <CategoriesTab />}
-          {activeTab === 'label' && <LabelTab />}
-          {activeTab === 'training' && <TrainingTab />}
           {activeTab === 'overview' && <StatsTab />}
+          {activeTab === 'transactions-model' && <TransactionsModelTab />}
           {activeTab === 'budget' && <BudgetTab />}
           {activeTab === 'savings' && <SavingsTab />}
           {activeTab === 'action' && <ActionTab onNavigate={goToTab} />}
           {activeTab === 'reports' && <ReportsTab />}
-          {activeTab === 'review' && <ReviewTab />}
         </TabPanel>
       </main>
     </div>
