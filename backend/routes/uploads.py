@@ -12,6 +12,7 @@ import re
 import tempfile
 import os
 import shutil
+import hashlib
 
 from src.parse import parse_alipay, parse_wechat_excel, parse_wechat_csv
 
@@ -36,10 +37,11 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     Validations:
     1. Extension check (CSV or XLSX only)
     2. Size limit (10MB max)
-    3. Content sniffing (read headers to detect format)
-    4. Row limit (50k max post-parse)
-    5. Normalize to common schema
-    6. Store original in Storage, insert into transactions table
+    3. Duplicate file check (same file already uploaded)
+    4. Content sniffing (read headers to detect format)
+    5. Row limit (50k max post-parse)
+    6. Normalize to common schema
+    7. Store original in Storage, insert into transactions table
 
     Returns upload_id. Failed uploads logged with error_message.
     """
@@ -58,17 +60,26 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         if len(content) > MAX_SIZE:
             raise ValueError(f"File exceeds 10MB limit ({len(content) / 1024 / 1024:.1f}MB)")
 
+        # Validation 3: Duplicate file check
+        file_hash = calculate_file_hash(content)
+        existing = check_duplicate_upload(user_id, file_hash)
+        if existing:
+            raise ValueError(
+                f"This file was already uploaded on {existing['created_at'][:10]}. "
+                f"To upload again and add duplicate transactions, use a different file."
+            )
+
         # Save to a temporary location for the parsers (always cleaned up in finally)
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
-        # Validation 3: Content sniffing - detect format
+        # Validation 4: Content sniffing - detect format
         file_type = detect_source(tmp_path)
         if not file_type:
             raise ValueError("Could not detect file source. Expected Alipay or WeChat format.")
 
-        # Validation 4: Parse and check row count
+        # Validation 5: Parse and check row count
         df = parse_with_src(tmp_path, file_type)
         if df is None or len(df) == 0:
             raise ValueError(f"Could not parse {file_type} file. Check format and encoding.")
@@ -88,7 +99,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         upload_id = create_upload_record(
             user_id, file.filename, file_type,
             storage_path=storage_path, size_bytes=len(content),
-            row_count=len(df_normalized),
+            row_count=len(df_normalized), file_hash=file_hash,
         )
 
         # Insert transactions
@@ -336,7 +347,7 @@ def store_original(user_id: str, file_name: str, content: bytes) -> Optional[str
 
 def create_upload_record(user_id: str, file_name: str, file_type: str,
                          storage_path: Optional[str] = None, size_bytes: int = 0,
-                         row_count: int = 0, error: str = None) -> Optional[str]:
+                         row_count: int = 0, error: str = None, file_hash: str = None) -> Optional[str]:
     """Create an uploads table entry."""
     try:
         response = supabase_client.table("uploads").insert({
@@ -348,6 +359,7 @@ def create_upload_record(user_id: str, file_name: str, file_type: str,
             "status": "failed" if error else "parsed",
             "row_count": row_count,
             "error_message": error,
+            "file_hash": file_hash,
         }).execute()
         return response.data[0]['id'] if response.data else None
     except Exception as e:
@@ -384,3 +396,27 @@ def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str, file_typ
 
     rows = df.to_dict('records')
     supabase_client.table("transactions").insert(rows).execute()
+
+
+def calculate_file_hash(content: bytes) -> str:
+    """Calculate SHA256 hash of file contents for duplicate detection."""
+    return hashlib.sha256(content).hexdigest()
+
+
+def check_duplicate_upload(user_id: str, file_hash: str) -> Optional[dict]:
+    """Check if a file with this hash was already uploaded by the user.
+
+    Returns the existing upload record if found, None otherwise.
+    """
+    try:
+        response = (
+            supabase_client.table("uploads")
+            .select("id, created_at, original_filename, file_hash")
+            .eq("user_id", user_id)
+            .eq("file_hash", file_hash)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.warning("Error checking for duplicate upload: %s", e)
+        return None

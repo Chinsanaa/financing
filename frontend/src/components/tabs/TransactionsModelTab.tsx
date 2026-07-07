@@ -14,7 +14,7 @@ import {
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
-import UploadTab from './UploadTab';
+import UploadWithIncomeTab from './UploadWithIncomeTab';
 import CategoriesTab from './CategoriesTab';
 import LabelTab from './LabelTab';
 import ReviewTab from './ReviewTab';
@@ -116,7 +116,7 @@ export default function TransactionsModelTab() {
           transition={{ duration: 0.2 }}
         >
           <div className="min-h-[400px]">
-            {currentStep === 0 && <UploadTab />}
+            {currentStep === 0 && <UploadWithIncomeTab />}
             {currentStep === 1 && <CategoriesTab />}
             {currentStep === 2 && <LabelTab />}
             {currentStep === 3 && <ReviewTab />}
