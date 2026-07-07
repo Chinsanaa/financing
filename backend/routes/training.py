@@ -5,6 +5,7 @@ and user's categories. Model artifacts uploaded to Supabase Storage.
 """
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
+from pathlib import Path
 from config import supabase_client
 from errors import internal_error, logger
 from datetime import datetime

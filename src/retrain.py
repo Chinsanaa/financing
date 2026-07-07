@@ -97,6 +97,14 @@ def retrain_model(
 
     y = df_labeled['category']
 
+    # Check if we have enough labeled data to train
+    if len(df_labeled) < 5:
+        raise ValueError(
+            f"Not enough labeled transactions to train a model. "
+            f"Found {len(df_labeled)}, need at least 5 samples (preferably 10+) "
+            f"with at least 2 samples per category."
+        )
+
     # Clean and vectorize using either hybrid or legacy approach
     print(f"\n2. Cleaning and vectorizing text...")
     if USE_HYBRID_FEATURES:
