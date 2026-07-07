@@ -4,6 +4,9 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
+# Add src to Python path so internal imports work
+ENV PYTHONPATH=/app:/app/src
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
