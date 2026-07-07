@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
+from pathlib import Path
 from config import supabase_client
 from errors import internal_error, logger
 import pandas as pd
@@ -9,6 +10,8 @@ from datetime import datetime
 from uuid import uuid4
 import re
 import tempfile
+import os
+import shutil
 
 from src.parse import parse_alipay, parse_wechat_excel, parse_wechat_csv
 
