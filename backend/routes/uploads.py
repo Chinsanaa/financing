@@ -186,6 +186,20 @@ def _read_headers(file_path: str) -> list:
     uploads undetectable."""
     if file_path.endswith('.xlsx'):
         return pd.read_excel(file_path, nrows=0).columns.tolist()
+
+    # WeChat CSVs have metadata rows before the actual headers.
+    # Read first 50 rows and find the row with transaction table headers.
+    try:
+        df = pd.read_csv(file_path, nrows=50, encoding='utf-8', header=None)
+        # Look for row containing WeChat transaction headers (Chinese or English)
+        for idx, row in df.iterrows():
+            row_str = ' '.join(str(v) for v in row.dropna() if pd.notna(v))
+            if '交易时间' in row_str or 'Transaction Time' in row_str:
+                return row.dropna().tolist()
+    except Exception:
+        pass
+
+    # Fallback: assume headers are in the first row
     return pd.read_csv(file_path, nrows=0, encoding='utf-8').columns.tolist()
 
 

@@ -286,32 +286,67 @@ def parse_wechat_excel(xlsx_path: str) -> pd.DataFrame:
 
 def parse_wechat_csv(csv_path: str) -> pd.DataFrame:
     """
-    Parse WeChat export CSV (English-translated version - fallback).
-
-    No transaction-type column in this format, so internal transfers can't
-    be detected/excluded here — use the Excel export (parse_wechat_excel)
-    for that split.
+    Parse WeChat export CSV (handles both Chinese and English versions with metadata).
     """
-    df = pd.read_csv(csv_path, encoding='utf-8', skiprows=17)
+    # Read all rows to find where the actual table headers are
+    df_raw = pd.read_csv(csv_path, encoding='utf-8', header=None)
 
-    status = df['Current Status'].astype(str)
-    is_settled = status.str.contains('successful|Transferred', case=False, na=False)
-    is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS_EN), case=False, na=False)
+    # Find the header row (contains 交易时间 or Transaction Time)
+    header_row = None
+    for idx, row in df_raw.iterrows():
+        row_str = ' '.join(str(v) for v in row.dropna() if pd.notna(v))
+        if '交易时间' in row_str or 'Transaction Time' in row_str:
+            header_row = idx
+            break
 
-    is_expense = (df['Income/Expense'] == 'Expense') & is_settled
+    if header_row is None:
+        raise ValueError("Could not find WeChat transaction table headers")
+
+    # Re-read starting from the header row
+    df = pd.read_csv(csv_path, encoding='utf-8', skiprows=header_row)
+
+    # Map Chinese column names to English (if needed)
+    column_map = {
+        '交易时间': 'Transaction Time',
+        '当前状态': 'Current Status',
+        '收/支': 'Income/Expense',
+        '金额(元)': 'Amount (CNY)',
+        '交易对方': 'Counterparty',
+        '商品': 'Product',
+    }
+
+    # Rename columns if they're in Chinese
+    df = df.rename(columns=column_map)
+
+    # Use "Current Status" or try Chinese name
+    status_col = 'Current Status' if 'Current Status' in df.columns else '当前状态'
+    status = df[status_col].astype(str)
+    is_settled = status.str.contains('successful|Transferred|已完成', case=False, na=False)
+    is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS_EN + _REFUND_KEYWORDS), case=False, na=False)
+
+    # Income/Expense column
+    ie_col = 'Income/Expense' if 'Income/Expense' in df.columns else '收/支'
+    is_expense = ((df[ie_col] == 'Expense') | (df[ie_col] == '支出')) & is_settled
     df = df[is_expense | is_refund].copy()
     is_refund = is_refund.loc[df.index]
 
-    amount = df['Amount (CNY)'].astype(float)
+    # Amount column
+    amount_col = 'Amount (CNY)' if 'Amount (CNY)' in df.columns else '金额(元)'
+    amount = df[amount_col].astype(float)
     amount = amount.mask(is_refund.values, -amount)
 
     if is_refund.sum():
         print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
 
+    # Get merchant/description columns
+    merchant_col = 'Counterparty' if 'Counterparty' in df.columns else '交易对方'
+    desc_col = 'Product' if 'Product' in df.columns else '商品'
+    time_col = 'Transaction Time' if 'Transaction Time' in df.columns else '交易时间'
+
     return pd.DataFrame({
-        'timestamp': pd.to_datetime(df['Transaction Time']),
-        'merchant': df['Counterparty'].fillna('').str.strip(),
-        'description': df['Product'].fillna('').str.strip(),
+        'timestamp': pd.to_datetime(df[time_col]),
+        'merchant': df[merchant_col].fillna('').str.strip(),
+        'description': df[desc_col].fillna('').str.strip(),
         'amount': amount,
         'source': 'wechat',
     })
