@@ -29,7 +29,7 @@ export default function UploadTab() {
   const [deleting, setDeleting] = useState<string | null>(null);
 
   // Fetch upload history
-  const { data: uploadsData, loading: uploadsLoading, setData: setUploadsData } = useApi<{ uploads: Upload[] }>('/uploads/');
+  const { data: uploadsData, loading: uploadsLoading, setData: setUploadsData, reload } = useApi<{ uploads: Upload[] }>('/uploads/');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -71,6 +71,7 @@ export default function UploadTab() {
       // New transactions exist — every dashboard view is now stale.
       invalidate('/dashboard');
       invalidate('/uploads/');
+      await reload();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Upload failed');
     } finally {
@@ -79,7 +80,7 @@ export default function UploadTab() {
   };
 
   const handleDelete = async (uploadId: string) => {
-    if (!confirm('Delete this upload and all its transactions? This cannot be undone.')) {
+    if (!confirm('Delete this upload and all its transactions? Any manually labeled transactions will also be removed. This cannot be undone.')) {
       return;
     }
 
@@ -96,6 +97,7 @@ export default function UploadTab() {
       );
       // Refresh dashboard since transactions were deleted
       invalidate('/dashboard');
+      await reload();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to delete upload');
     } finally {

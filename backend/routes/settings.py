@@ -12,6 +12,11 @@ class ProfileUpdate(BaseModel):
     monthly_income: Optional[float] = None
 
 
+class BudgetSettingsUpdate(BaseModel):
+    saving_goal_monthly: Optional[float] = None
+    currency: Optional[str] = None
+
+
 @router.get("/profile")
 async def get_profile(request: Request):
     """Get user profile (from profiles table)."""
@@ -48,6 +53,32 @@ async def update_profile(request: Request, data: ProfileUpdate):
         raise
     except Exception as e:
         raise internal_error(e, "settings/update_profile")
+
+
+@router.patch("/budget")
+async def update_budget_settings(request: Request, data: BudgetSettingsUpdate):
+    """Update budget settings (savings goal, currency) in budget_config.
+
+    Monthly income lives on profiles.monthly_income (PATCH /settings/profile);
+    budget_config keeps only goal/currency to avoid a second income field.
+    """
+    user_id = request.state.user_id
+
+    try:
+        update_data = data.dict(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        update_data["user_id"] = user_id
+        response = (
+            supabase_client.table("budget_config")
+            .upsert(update_data, on_conflict="user_id")
+            .execute()
+        )
+        return {"budget_config": response.data[0] if response.data else update_data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "settings/update_budget_settings")
 
 
 @router.delete("/account")

@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { ArrowDown, ArrowUp, TriangleAlert } from 'lucide-react';
+import { api } from '@/utils/api';
 import { useApi } from '@/utils/useApi';
 import { Alert, ProgressBar } from '@/components/ui';
+import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { formatCurrencyWhole, formatNumber } from '@/utils/format';
 
 interface SavingsInfo {
   savings_goal_monthly: number;
@@ -17,7 +21,30 @@ interface SavingsInfo {
 }
 
 export default function SavingsTab() {
-  const { data: savings, loading, error } = useApi<SavingsInfo>('/dashboard/savings');
+  const { data: savings, loading, error, reload } = useApi<SavingsInfo>('/dashboard/savings');
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
+  const [savingGoal, setSavingGoal] = useState(false);
+  const [goalError, setGoalError] = useState('');
+
+  const handleSaveGoal = async () => {
+    const value = parseFloat(goalInput);
+    if (!Number.isFinite(value) || value < 0) {
+      setGoalError('Please enter a valid amount');
+      return;
+    }
+    setSavingGoal(true);
+    setGoalError('');
+    try {
+      await api.patch('/settings/budget', { saving_goal_monthly: value });
+      setEditingGoal(false);
+      await reload();
+    } catch (err: any) {
+      setGoalError(err.response?.data?.detail || 'Failed to save goal');
+    } finally {
+      setSavingGoal(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -53,10 +80,10 @@ export default function SavingsTab() {
               <Card key={s.label} hover className="p-5">
                 <p className="section-label mb-2">{s.label}</p>
                 <p className={`font-display text-3xl font-bold tabular-nums tracking-tight ${s.tone}`}>
-                  ¥
+                  {s.value < 0 ? '-' : ''}¥
                   <AnimatedNumber
-                    value={s.value}
-                    format={(n) => n.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    value={Math.abs(s.value)}
+                    format={(n) => formatNumber(n, 0)}
                   />
                 </p>
               </Card>
@@ -65,12 +92,44 @@ export default function SavingsTab() {
 
           <Card className="p-6">
             <p className="section-label mb-4">Savings goal</p>
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between gap-3">
               <p className="text-sm text-muted">Monthly goal</p>
-              <p className="text-sm font-semibold tabular-nums">
-                ¥{savings.savings_goal_monthly.toFixed(0)}
-              </p>
+              {editingGoal ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={goalInput}
+                    onChange={(e) => setGoalInput(e.target.value)}
+                    placeholder="e.g. 3000"
+                    className="w-32 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none"
+                  />
+                  <Button onClick={handleSaveGoal} loading={savingGoal} className="!px-3 !py-1.5 text-sm">
+                    Save
+                  </Button>
+                  <button
+                    onClick={() => { setEditingGoal(false); setGoalError(''); }}
+                    className="text-sm text-muted hover:text-ink"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setGoalInput(savings.savings_goal_monthly > 0 ? String(savings.savings_goal_monthly) : '');
+                    setEditingGoal(true);
+                  }}
+                  className="text-sm font-semibold tabular-nums underline decoration-dotted underline-offset-4 hover:text-accent-strong"
+                  title="Edit monthly savings goal"
+                >
+                  {savings.savings_goal_monthly > 0
+                    ? formatCurrencyWhole(savings.savings_goal_monthly)
+                    : 'Set a goal'}
+                </button>
+              )}
             </div>
+            {goalError && <Alert kind="error">{goalError}</Alert>}
             <ProgressBar
               percent={
                 savings.savings_goal_monthly > 0
@@ -86,7 +145,7 @@ export default function SavingsTab() {
             <p className="mt-1.5 text-xs text-muted">
               {savings.projected_savings >= savings.savings_goal_monthly
                 ? 'On track to hit your goal'
-                : `¥${(savings.savings_goal_monthly - savings.projected_savings).toFixed(0)} short of your goal`}
+                : `${formatCurrencyWhole(savings.savings_goal_monthly - savings.projected_savings)} short of your goal`}
             </p>
           </Card>
 
@@ -96,7 +155,7 @@ export default function SavingsTab() {
               <div>
                 <p className="mb-1 text-sm text-muted">3-month average</p>
                 <p className="font-display text-2xl font-bold tabular-nums">
-                  ¥{savings.average_monthly_spend.toFixed(0)}
+                  {formatCurrencyWhole(savings.average_monthly_spend)}
                 </p>
               </div>
               <div>
@@ -111,12 +170,12 @@ export default function SavingsTab() {
                   {savings.current_spend > savings.average_monthly_spend ? (
                     <>
                       <ArrowUp className="h-5 w-5" />
-                      ¥{(savings.current_spend - savings.average_monthly_spend).toFixed(0)}
+                      {formatCurrencyWhole(savings.current_spend - savings.average_monthly_spend)}
                     </>
                   ) : (
                     <>
                       <ArrowDown className="h-5 w-5" />
-                      ¥{(savings.average_monthly_spend - savings.current_spend).toFixed(0)}
+                      {formatCurrencyWhole(savings.average_monthly_spend - savings.current_spend)}
                     </>
                   )}
                 </p>

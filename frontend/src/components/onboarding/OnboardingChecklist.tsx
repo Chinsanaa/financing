@@ -42,7 +42,7 @@ const STEPS = [
   },
   {
     id: 'train',
-    tab: 'training',
+    tab: 'train',
     title: 'Train your model',
     text: 'Kick off training and let it categorize the rest.',
   },

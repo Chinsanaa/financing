@@ -11,6 +11,7 @@ import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge, { categoryColor } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonCard } from '@/components/ui/Skeleton';
+import { formatCurrency } from '@/utils/format';
 
 interface Transaction {
   id: string;
@@ -33,9 +34,11 @@ export default function LabelTab() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
 
   const transactions = queueQ.data?.transactions || [];
   const categories = categoriesQ.data?.categories || [];
+  const allSeen = transactions.length > 0 && skippedIds.size === transactions.length;
 
   const removeCurrent = () => {
     const tx = transactions[currentIndex];
@@ -81,8 +84,21 @@ export default function LabelTab() {
   };
 
   const handleSkip = () => {
-    if (transactions.length === 0) return;
-    setCurrentIndex((i) => (i + 1) % transactions.length);
+    if (transactions.length === 0 || allSeen) return;
+    const tx = transactions[currentIndex];
+    setSkippedIds((prev) => new Set(prev).add(tx.id));
+
+    // Find next unskipped transaction
+    let nextIndex = (currentIndex + 1) % transactions.length;
+    while (nextIndex !== currentIndex && skippedIds.has(transactions[nextIndex].id)) {
+      nextIndex = (nextIndex + 1) % transactions.length;
+    }
+    setCurrentIndex(nextIndex);
+  };
+
+  const handleResetSkipped = () => {
+    setSkippedIds(new Set());
+    setCurrentIndex(0);
   };
 
   if (queueQ.loading || categoriesQ.loading) {
@@ -149,7 +165,7 @@ export default function LabelTab() {
               <div>
                 <p className="section-label mb-1">Amount</p>
                 <p className="font-display text-lg font-semibold tabular-nums">
-                  ¥{tx.amount.toFixed(2)}
+                  {formatCurrency(tx.amount)}
                 </p>
               </div>
             </div>
@@ -177,32 +193,48 @@ export default function LabelTab() {
       </AnimatePresence>
 
       <div className="space-y-3">
-        {tx.suggested_category && (
-          <Button onClick={handleAccept} loading={acting} className="w-full" size="lg">
-            <Check className="h-4 w-4" /> Accept suggestion
-          </Button>
-        )}
-
-        <div>
-          <p className="section-label mb-2">Or pick a category</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => handleOverride(cat.id)}
-                disabled={acting}
-                className="rounded-lg border border-edge/10 bg-surface px-3 py-2.5 text-sm font-medium transition-all hover:border-accent/40 hover:bg-accent/5 disabled:opacity-50"
-              >
-                {cat.name}
-              </button>
-            ))}
+        {allSeen ? (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-lg border border-accent/25 bg-accent/5 p-4">
+              <p className="font-medium text-accent-strong mb-1">All reviewed</p>
+              <p className="text-sm text-muted">
+                You've reviewed all {transactions.length} transactions. Reset skipped to review again.
+              </p>
+            </div>
+            <Button variant="outline" onClick={handleResetSkipped} className="w-full">
+              Reset skipped
+            </Button>
           </div>
-        </div>
+        ) : (
+          <>
+            {tx.suggested_category && (
+              <Button onClick={handleAccept} loading={acting} className="w-full" size="lg">
+                <Check className="h-4 w-4" /> Accept suggestion
+              </Button>
+            )}
 
-        {transactions.length > 1 && (
-          <Button variant="ghost" onClick={handleSkip} className="w-full">
-            Skip for now
-          </Button>
+            <div>
+              <p className="section-label mb-2">Or pick a category</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleOverride(cat.id)}
+                    disabled={acting}
+                    className="rounded-lg border border-edge/10 bg-surface px-3 py-2.5 text-sm font-medium transition-all hover:border-accent/40 hover:bg-accent/5 disabled:opacity-50"
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {transactions.length > 1 && (
+              <Button variant="ghost" onClick={handleSkip} className="w-full">
+                Skip for now
+              </Button>
+            )}
+          </>
         )}
       </div>
     </div>

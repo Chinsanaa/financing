@@ -91,4 +91,8 @@ export const api = {
     create: (name: string) => apiClient.post('/categories/', { name }),
     delete: (id: string) => apiClient.delete(`/categories/${id}`),
   },
+
+  export: {
+    xlsx: () => apiClient.get('/dashboard/export', { responseType: 'blob' }),
+  },
 };

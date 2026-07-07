@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, FileText } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
+import { api } from '@/utils/api';
 import { Alert } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge, { categoryColor } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
+import { formatCurrencyWhole } from '@/utils/format';
 
 interface Transaction {
   date: string;
@@ -50,11 +52,29 @@ function toCsv(transactions: Transaction[]): string {
 
 export default function ReportsTab() {
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const { data: reports, loading, error } = useApi<ReportsData>(
     `/dashboard/reports?page=${page}&per_page=${PER_PAGE}`
   );
 
   const totalPages = reports ? Math.max(1, Math.ceil(reports.total_count / PER_PAGE)) : 1;
+
+  const handleExportXlsx = async () => {
+    setExporting(true);
+    try {
+      const response = await api.export.xlsx();
+      const url = URL.createObjectURL(response.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.headers['content-disposition']?.split('filename=')[1]?.replace(/"/g, '') || 'transactions.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export XLSX:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleExportCsv = () => {
     if (!reports || reports.transactions.length === 0) return;
@@ -86,14 +106,24 @@ export default function ReportsTab() {
         title="All transactions"
         action={
           reports && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportCsv}
-              disabled={reports.transactions.length === 0}
-            >
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={handleExportXlsx}
+                loading={exporting}
+                disabled={exporting || reports.transactions.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" /> Export Excel (all)
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCsv}
+                disabled={reports.transactions.length === 0}
+              >
+                Export CSV
+              </Button>
+            </div>
           )
         }
       />
@@ -142,7 +172,7 @@ export default function ReportsTab() {
                       <Badge tone={categoryColor(txn.category)}>{txn.category}</Badge>
                     </td>
                     <td className="px-4 py-3 text-right font-medium tabular-nums">
-                      ¥{txn.amount.toFixed(2)}
+                      {formatCurrencyWhole(txn.amount)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Badge tone="neutral">{LABEL_SOURCES[txn.label_source] || txn.label_source}</Badge>

@@ -19,8 +19,9 @@ export default function UploadWithIncomeTab() {
     const fetchIncome = async () => {
       try {
         const res = await api.get('/settings/profile');
-        if (res.data?.monthly_income) {
-          setIncome(res.data.monthly_income.toString());
+        const monthlyIncome = res.data?.profile?.monthly_income;
+        if (monthlyIncome != null) {
+          setIncome(monthlyIncome.toString());
         }
       } catch (err) {
         console.error('Failed to fetch income:', err);

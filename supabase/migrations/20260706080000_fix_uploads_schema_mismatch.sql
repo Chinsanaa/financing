@@ -9,7 +9,7 @@
 --    nullable so a Storage hiccup can't block recording the upload.
 
 ALTER TABLE uploads ALTER COLUMN file_type TYPE text USING file_type::text;
-DROP TYPE upload_file_type;
+DROP TYPE IF EXISTS upload_file_type;
 
 ALTER TABLE uploads ALTER COLUMN storage_path DROP NOT NULL;
 ALTER TABLE uploads ALTER COLUMN size_bytes DROP NOT NULL;

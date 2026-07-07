@@ -5,16 +5,28 @@ Notes on postgrest-py usage: negated filters use the `.not_` PROPERTY
 TypeError — it is not a method.
 """
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from typing import List, Optional
 from config import supabase_client
+from db import fetch_all
 from errors import internal_error
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import pandas as pd
+from translate import merchant_label_english, description_label_english
 
 router = APIRouter()
 
 
+def _now_cn() -> datetime:
+    """Naive China-clock 'now'. Transaction timestamps come from Alipay/WeChat
+    exports in China local time and are stored naive, so month boundaries and
+    cutoffs must use the same clock — not the server's (UTC on Railway)."""
+    return datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+
+
 def _month_start(now: datetime = None) -> datetime:
-    now = now or datetime.now()
+    now = now or _now_cn()
     return datetime(now.year, now.month, 1)
 
 
@@ -39,9 +51,12 @@ async def get_summary(request: Request):
         )
         labeled_count = labeled.count if labeled.count is not None else len(labeled.data)
 
-        # Total spend
-        all_transactions = supabase_client.table("transactions").select("amount").eq("user_id", user_id).execute()
-        total_spend = sum(float(t["amount"]) for t in all_transactions.data) if all_transactions.data else 0.0
+        # Total spend (fetch_all pages past PostgREST's 1000-row cap, which
+        # silently truncated — and understated — every sum here before)
+        all_transactions = fetch_all(
+            lambda: supabase_client.table("transactions").select("amount").eq("user_id", user_id)
+        )
+        total_spend = sum(float(t["amount"]) for t in all_transactions)
 
         return {
             "total_transactions": total_count,
@@ -61,18 +76,17 @@ async def get_by_category(request: Request):
     user_id = request.state.user_id
 
     try:
-        response = (
-            supabase_client.table("transactions")
+        rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("amount, category_id, categories(name)")
             .eq("user_id", user_id)
             .not_.is_("category_id", "null")
-            .execute()
         )
 
-        if not response.data:
+        if not rows:
             return {"categories": []}
 
-        df = pd.DataFrame(response.data)
+        df = pd.DataFrame(rows)
         df["category_name"] = df["categories"].apply(lambda x: x["name"] if x else "Unknown")
 
         breakdown = df.groupby("category_name")["amount"].agg(["sum", "count"]).reset_index()
@@ -100,21 +114,20 @@ async def get_trends(request: Request, days: int = 30):
     user_id = request.state.user_id
 
     try:
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = _now_cn() - timedelta(days=days)
         # Filter server-side; never pull the full transaction history.
-        response = (
-            supabase_client.table("transactions")
+        rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("timestamp, amount")
             .eq("user_id", user_id)
             .not_.is_("category_id", "null")
             .gte("timestamp", cutoff.isoformat())
-            .execute()
         )
 
-        if not response.data:
+        if not rows:
             return {"trends": []}
 
-        df = pd.DataFrame(response.data)
+        df = pd.DataFrame(rows)
         df["date"] = pd.to_datetime(df["timestamp"]).dt.date
         daily = df.groupby("date")["amount"].sum().reset_index()
 
@@ -133,20 +146,32 @@ async def get_trends(request: Request, days: int = 30):
         raise internal_error(e, "dashboard/trends")
 
 
+def _monthly_income(user_id: str) -> float:
+    """Monthly income from profiles.monthly_income (the only written source)."""
+    resp = supabase_client.table("profiles").select("monthly_income").eq("id", user_id).execute()
+    if resp.data and resp.data[0].get("monthly_income") is not None:
+        return float(resp.data[0]["monthly_income"])
+    return 0.0
+
+
+def _budget_config(user_id: str):
+    resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
+    return resp.data[0] if resp.data else None
+
+
 def _current_month_spend_by_category(user_id: str) -> dict:
     """This month's spend per category name (monthly budgets compare against
     the current month, not all-time history)."""
-    response = (
-        supabase_client.table("transactions")
+    rows = fetch_all(
+        lambda: supabase_client.table("transactions")
         .select("amount, category_id, categories(name)")
         .eq("user_id", user_id)
         .not_.is_("category_id", "null")
         .gte("timestamp", _month_start().isoformat())
-        .execute()
     )
-    if not response.data:
+    if not rows:
         return {}
-    df = pd.DataFrame(response.data)
+    df = pd.DataFrame(rows)
     df["category_name"] = df["categories"].apply(lambda x: x["name"] if x else "Unknown")
     return df.groupby("category_name")["amount"].sum().to_dict()
 
@@ -157,8 +182,10 @@ async def get_budget(request: Request):
     user_id = request.state.user_id
 
     try:
-        budget_resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
-        budget_config = budget_resp.data[0] if budget_resp.data else None
+        # Monthly income's single source of truth is profiles.monthly_income
+        # (written by PATCH /settings/profile). budget_config.income is legacy
+        # and was never written by anything.
+        budget_config = _budget_config(user_id)
 
         cat_budget_resp = (
             supabase_client.table("budget_category_config")
@@ -168,9 +195,9 @@ async def get_budget(request: Request):
         )
 
         budget_config_out = {
-            "monthly_income": float(budget_config["income"]) if budget_config and budget_config["income"] else 0,
+            "monthly_income": _monthly_income(user_id),
             "currency": budget_config["currency"] if budget_config else "CNY",
-        } if budget_config else None
+        }
 
         if not cat_budget_resp.data:
             return {"budget_config": budget_config_out, "category_budgets": []}
@@ -197,41 +224,90 @@ async def get_budget(request: Request):
         raise internal_error(e, "dashboard/budget")
 
 
+class CategoryBudgetItem(BaseModel):
+    category_id: str
+    monthly_budget: Optional[float] = None
+    type: str = "Need"  # budget_type enum: 'Need' | 'Want'
+
+
+class CategoryBudgetsUpdate(BaseModel):
+    budgets: List[CategoryBudgetItem]
+
+
+@router.put("/budget/categories")
+async def put_category_budgets(request: Request, data: CategoryBudgetsUpdate):
+    """Set per-category monthly budgets (upsert on user_id + category_id).
+
+    This is the writer budget_category_config never had — the Budget tab and
+    the over-budget Action items read from it but nothing could populate it.
+    """
+    user_id = request.state.user_id
+
+    try:
+        if not data.budgets:
+            raise HTTPException(status_code=400, detail="No budgets provided")
+
+        # Only allow the user's own categories
+        cat_resp = supabase_client.table("categories").select("id").eq("user_id", user_id).execute()
+        own_ids = {c["id"] for c in (cat_resp.data or [])}
+
+        rows = []
+        for item in data.budgets:
+            if item.category_id not in own_ids:
+                raise HTTPException(status_code=400, detail="Unknown category")
+            if item.type not in ("Need", "Want"):
+                raise HTTPException(status_code=400, detail="type must be 'Need' or 'Want'")
+            rows.append({
+                "user_id": user_id,
+                "category_id": item.category_id,
+                "type": item.type,
+                "monthly_budget": item.monthly_budget,
+            })
+
+        response = (
+            supabase_client.table("budget_category_config")
+            .upsert(rows, on_conflict="user_id,category_id")
+            .execute()
+        )
+        return {"updated": len(response.data or rows)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/put_category_budgets")
+
+
 @router.get("/savings")
 async def get_savings(request: Request):
     """Savings info: goals, current savings, anomalies."""
     user_id = request.state.user_id
 
     try:
-        budget_resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
-        budget_config = budget_resp.data[0] if budget_resp.data else None
+        budget_config = _budget_config(user_id)
 
-        now = datetime.now()
+        now = _now_cn()
         month_start = _month_start(now)
 
-        spending_resp = (
-            supabase_client.table("transactions")
+        spending_rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("amount")
             .eq("user_id", user_id)
             .gte("timestamp", month_start.isoformat())
-            .execute()
         )
-        current_spend = sum(float(t["amount"]) for t in spending_resp.data) if spending_resp.data else 0
+        current_spend = sum(float(t["amount"]) for t in spending_rows)
 
         # Simple anomaly detection: compare to average of last 3 months
         three_months_ago = datetime(now.year if now.month >= 4 else now.year - 1,
                                     now.month - 3 if now.month >= 4 else now.month + 9, 1)
 
-        historical_resp = (
-            supabase_client.table("transactions")
+        historical_rows = fetch_all(
+            lambda: supabase_client.table("transactions")
             .select("timestamp, amount")
             .eq("user_id", user_id)
             .gte("timestamp", three_months_ago.isoformat())
             .lt("timestamp", month_start.isoformat())
-            .execute()
         )
 
-        historical_df = pd.DataFrame(historical_resp.data) if historical_resp.data else pd.DataFrame()
+        historical_df = pd.DataFrame(historical_rows) if historical_rows else pd.DataFrame()
         avg_monthly = 0
         if not historical_df.empty:
             historical_df["month"] = pd.to_datetime(historical_df["timestamp"]).dt.to_period("M")
@@ -239,7 +315,7 @@ async def get_savings(request: Request):
             avg_monthly = float(monthly_totals.mean()) if len(monthly_totals) > 0 else 0
 
         savings_goal = float(budget_config["saving_goal_monthly"]) if budget_config and budget_config["saving_goal_monthly"] else 0
-        income = float(budget_config["income"]) if budget_config and budget_config["income"] else 0
+        income = _monthly_income(user_id)
 
         return {
             "savings_goal_monthly": savings_goal,
@@ -334,8 +410,8 @@ async def get_reports(request: Request, page: int = 1, per_page: int = 100):
         transactions = [
             {
                 "date": txn["timestamp"],
-                "merchant": txn["merchant"],
-                "description": txn["description"],
+                "merchant": merchant_label_english(txn["merchant"]),
+                "description": description_label_english(txn["description"]),
                 "amount": float(txn["amount"]),
                 "category": txn["categories"]["name"] if txn["categories"] else "Unknown",
                 "label_source": txn["label_source"],
@@ -353,6 +429,91 @@ async def get_reports(request: Request, page: int = 1, per_page: int = 100):
         raise
     except Exception as e:
         raise internal_error(e, "dashboard/reports")
+
+
+@router.get("/export")
+async def export_transactions(request: Request):
+    """Export all user transactions as XLSX workbook.
+
+    Columns: Date | Merchant | Description | Category | Amount | Label source
+    All text is translated to English; amounts formatted as #,##0.00
+    """
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from datetime import datetime
+
+    user_id = request.state.user_id
+
+    try:
+        def make_query():
+            return (
+                supabase_client.table("transactions")
+                .select("timestamp, merchant, description, amount, category_id, categories(name), label_source")
+                .eq("user_id", user_id)
+                .order("timestamp", desc=True)
+            )
+
+        all_txns = fetch_all(make_query)
+
+        # Create workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Transactions"
+
+        # Headers
+        headers = ["Date", "Merchant", "Description", "Category", "Amount", "Label Source"]
+        ws.append(headers)
+
+        # Format header row
+        header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+        header_font = Font(bold=True)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        # Freeze header
+        ws.freeze_panes = "A2"
+
+        # Add data rows
+        for txn in all_txns:
+            ws.append([
+                txn["timestamp"],
+                merchant_label_english(txn["merchant"]),
+                description_label_english(txn["description"]),
+                txn["categories"]["name"] if txn["categories"] else "Uncategorized",
+                float(txn["amount"]),
+                txn["label_source"] or "",
+            ])
+
+        # Format amount column
+        for row in ws.iter_rows(min_row=2, max_row=len(all_txns) + 1, min_col=5, max_col=5):
+            for cell in row:
+                cell.number_format = '#,##0.00'
+
+        # Adjust column widths
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 20
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 18
+        ws.column_dimensions['E'].width = 12
+        ws.column_dimensions['F'].width = 14
+
+        # Write to bytes
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # Return as attachment
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=transactions_{now}.xlsx"}
+        )
+    except Exception as e:
+        raise internal_error(e, "dashboard/export")
 
 
 @router.get("/review-queue")
@@ -399,6 +560,9 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
         if not response.data:
             return {"transactions": [], "count": 0, "type": label_type}
 
+        # In suggestion mode the row's category_id IS the model's suggestion —
+        # report it only as suggested_category so the UI can distinguish
+        # "this is what it's labeled" from "this is what the model proposes".
         transactions = [
             {
                 "id": txn["id"],
@@ -407,7 +571,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 "description": description_label_english(txn["description"]),
                 "amount": float(txn["amount"]),
                 "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
-                "category": txn["categories"]["name"] if txn["categories"] else None,
+                "category": (txn["categories"]["name"] if txn["categories"] else None) if show_labeled else None,
                 "suggested_category": txn["categories"]["name"] if txn["categories"] else None,
             }
             for txn in response.data
@@ -433,7 +597,8 @@ async def get_onboarding_status(request: Request):
         # profiles.id IS the auth user id (PK referencing auth.users)
         response = supabase_client.table("profiles").select("onboarding_phase").eq("id", user_id).execute()
         if not response.data:
-            return {"onboarding_phase": "signup"}
+            # 'upload' is the enum's first phase; 'signup' is not a valid value
+            return {"onboarding_phase": "upload"}
 
         return {"onboarding_phase": response.data[0]["onboarding_phase"]}
     except HTTPException:
