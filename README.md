@@ -50,12 +50,20 @@ Two very different questions:
 ## Dashboard sections (5)
 
 The ten original tabs are grouped into five compact sections with sub-tabs:
-**Overview**, **Transactions** (Upload / Label / Review queue), **Model**
-(Categories / Training), **Planning** (Budget / Savings / Action plan), and
-**Reports**. A dismissible onboarding checklist (Upload → Categories → Label →
-Train) guides new accounts. Plus a separate **Settings** page (income, account
-deletion). The UI is a dark-first design with a light theme toggle, skeleton
-loading states, and a marketing landing page at `/` for signed-out visitors.
+**Overview** (a monthly-spending line chart + category split), **Transactions**
+(Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
+(Budget / Savings / Action plan), and **Reports**. A dismissible onboarding
+checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
+separate **Settings** page (income, account deletion). The UI is a dark-first
+design with a light theme toggle, skeleton loading states, and a marketing
+landing page at `/` for signed-out visitors.
+
+**Correcting categories**: the **Reports → All transactions** table is editable —
+click any category (including uncategorized rows) to reassign it; the change is
+saved immediately and flows through to the Overview and Budget views. **Per-month
+budgets**: the **Budget** tab has a month selector so you can see how each past
+month tracked against your budget (budgets are global, so past months compare
+against your current budget).
 
 ## Quick start (local)
 

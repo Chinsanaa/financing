@@ -63,20 +63,22 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 42): the Session 41 release-readiness pass is deployed and live, plus three
-post-deploy bugs found during E2E testing are now fixed (onboarding checklist staleness,
-merchant-rules category-taxonomy mismatch, label-queue merchant diversity) — see the Session 42
-log entry for details.
+Current (Session 43): three requested features + a training-crash fix shipped (see Session 43 log):
+inline category editing in All Transactions, a per-month budget selector (retroactive), the Overview
+trend switched to a monthly line chart, and the `positional indexers are out-of-bounds` retrain crash
+fixed. Session 42 fixes (onboarding staleness, taxonomy, label-queue diversity) are merged (PR #32).
 
 Next:
-1. Push this branch and open a PR for the Session 42 fixes.
-2. E2E test on the live account: retrain the model and confirm rule-matched transactions now show
-   real categories (Groceries/Transportation/etc.) instead of Other; confirm the onboarding
-   checklist flips steps live without a page reload; confirm the label queue shows unique merchants.
+1. Push this branch and open a PR for the Session 43 changes.
+2. E2E on the live account: retrain (confirm no crash + rule-matched rows show real categories);
+   open All Transactions and correct a mislabeled row (badge updates instantly, Overview/Budget
+   reflect it); switch the budget month selector across past months; confirm the Overview line chart
+   shows monthly buckets.
 3. Then: backend security test suite, monitoring, email rate limits, and git-history privacy scrub
-   (deferred to user decision).
+   (deferred to user decision). Deferred here too: true per-month budget *history* (needs a versioned
+   budget table), multi-currency, and replacing `_available_months`' full-column scan with a Postgres RPC.
 
-## Current State (Session 42, 2026-07-07)
+## Current State (Session 43, 2026-07-08)
 
 | Item | Status |
 |---|---|
@@ -96,16 +98,57 @@ Next:
 | Wizard navigation | **FIXED** (Session 41): deep-links (upload|categories|label|review|train) work via URL params; onboarding checklist "Go" buttons navigate correctly |
 | Onboarding checklist live-update | **FIXED** (Session 42): `useApi` had no way to notify already-mounted consumers after `invalidate()` — checklist was stuck at initial snapshot forever. Fixed with a subscriber registry |
 | Label queue diversity | **FIXED** (Session 42): review-queue suggestion mode now dedupes by merchant (pool of 500 → first 50 unique merchants) instead of a raw confidence-ordered slice that could repeat one merchant dozens of times |
+| Retrain crash | **FIXED** (Session 43): `positional indexers are out-of-bounds` — `extract_numeric_features` returns a label index but `retrain.py`/`classify.py` sliced with `.iloc` (positional); a gappy index after the <2-samples/class filter overflowed. Fixed with `reset_index(drop=True)` before extraction (retrain) and `.loc` (classify). Regression test in `tests/test_retrain_index.py` |
+| Manual category correction | **NEW** (Session 43): All Transactions table (`ReportsTab`) is now editable — click a category to reassign via a dropdown (reuses `POST /classify/{id}/label`); `get_reports` returns `id`/`category_id`, includes uncategorized rows, and supports `uncategorized_only`/`category_id` filters |
+| Per-month budgets | **NEW** (Session 43): `GET /dashboard/budget?month=YYYY-MM` windows spend by month; `BudgetTab` has a month selector. Retroactive — budgets stay global (no schema change), so past months compare against the current budget (caveat shown in UI). Response adds `month` + `available_months` |
+| Overview trend | **CHANGED** (Session 43): daily last-30-days area chart → monthly last-12-months line chart. `get_trends` gained `granularity=month`/`months` params (daily default preserved) |
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
 | Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
-| Tests | 71 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet. pytest not installed in this session's sandbox — verified via `py_compile` + `tsc --noEmit` instead |
+| Tests | 74 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet. Session 43 added `tests/test_retrain_index.py` (3 tests) and verified frontend via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 
 ## Session Log
 
-### Session 43 (2026-07-08) — Add Playwright MCP server config
+### Session 43 (2026-07-08) — Manual category editing, per-month budgets, monthly trend + retrain crash fix
 
-**Completed**: Added `.mcp.json` at repo root registering the `playwright` MCP server (`npx -y @playwright/mcp@latest`), so Claude Code sessions get browser automation tools for testing the Next.js frontend (e.g. E2E checks after deploy) without relying on a separate manual setup step. No app code changed.
+**Scope**: Three user-requested features, a training-crash fix, and a bounded UX-polish pass. All on
+branch `claude/finance-app-ux-review-9ado2d` (restarted from `main` after PR #32 merged).
+
+**1. Retrain crash (`positional indexers are out-of-bounds`).** The user hit this on a live training
+run. `src/feature_engineering.py::extract_numeric_features` returns `df.index` (label index), but
+`src/retrain.py:117-118` and `src/classify.py:262` sliced with `.iloc` (positional). After the
+"<2 samples per class" filter (`retrain.py:90-96`) leaves a gappy index, `.iloc[valid_indices]`
+overflows. Fix: `df_labeled = df_labeled.reset_index(drop=True)` before feature extraction in retrain
+(makes positional==label), and `.loc[valid_indices]` in classify (matches the already-correct
+`df.loc[df_valid.index]` writes just below it). New `tests/test_retrain_index.py` reproduces the gappy
+index and pins the contract (confirmed the pre-fix path raises, post-fix passes).
+
+**2. Manual category correction (inline in All Transactions).** `backend/routes/dashboard.py::get_reports`
+now returns each row's `id` and `category_id`, includes uncategorized rows (dropped the
+`category_id NOT NULL` filter), and accepts `uncategorized_only` / `category_id` filters.
+`frontend/.../ReportsTab.tsx` makes the category cell a click-to-edit dropdown, saves optimistically
+via the existing `api.classifyTx.label` (`POST /classify/{id}/label`) + `invalidate('/dashboard')`,
+and rolls back on failure. Added an "Uncategorized only" toggle. No new backend endpoint needed.
+
+**3. Per-month budget view (retroactive — user's chosen approach, no schema change).**
+`_current_month_spend_by_category` → `_spend_by_category(user_id, start, end)` (adds a `.lt(end)` upper
+bound); new `_month_bounds(month)` and `_available_months(user_id)` helpers. `GET /dashboard/budget`
+accepts `?month=YYYY-MM` and returns `month` + `available_months`. `BudgetTab.tsx` gains a month
+selector; budgets stay global so past months compare against the current budget — stated as a caveat
+in the UI. `get_action` still uses current-month bounds.
+
+**4. Overview trend → monthly line chart.** `get_trends` gained `granularity=month`/`months=12`
+(daily default preserved for backward compat — only `StatsTab` calls it). `StatsTab.tsx` swapped the
+recharts `AreaChart` for a `LineChart` with month-labeled ticks.
+
+**5. UX polish.** Centralized the currency glyph as `CURRENCY_SYMBOL` in `utils/format.ts` (single
+source; multi-currency still deferred) and threaded it through `BudgetTab`/`SavingsTab`/`StatsTab`;
+mobile `flex-wrap` on the new Reports/Budget header controls; corrected stale copy.
+
+**Verification**: `pytest tests/` → 74 passing; frontend `tsc --noEmit` clean + `next build` green.
+
+**Deferred (flagged, not done)**: true per-month budget *history* (needs a versioned budget table),
+end-to-end multi-currency, `_available_months` → Postgres RPC, configurable anomaly threshold.
 
 ### Session 42 (2026-07-07) — Post-deploy bug fixes: onboarding staleness, merchant-rules taxonomy mismatch, label queue diversity
 

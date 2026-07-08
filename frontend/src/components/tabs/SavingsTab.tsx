@@ -9,7 +9,7 @@ import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { formatCurrencyWhole, formatNumber } from '@/utils/format';
+import { formatCurrencyWhole, formatNumber, CURRENCY_SYMBOL } from '@/utils/format';
 
 interface SavingsInfo {
   savings_goal_monthly: number;
@@ -80,7 +80,7 @@ export default function SavingsTab() {
               <Card key={s.label} hover className="p-5">
                 <p className="section-label mb-2">{s.label}</p>
                 <p className={`font-display text-3xl font-bold tabular-nums tracking-tight ${s.tone}`}>
-                  {s.value < 0 ? '-' : ''}¥
+                  {s.value < 0 ? '-' : ''}{CURRENCY_SYMBOL}
                   <AnimatedNumber
                     value={Math.abs(s.value)}
                     format={(n) => formatNumber(n, 0)}

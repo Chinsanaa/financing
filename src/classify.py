@@ -259,7 +259,10 @@ def classify_all(
 
             # Extract numeric features
             numeric_features, valid_indices = extract_numeric_features(df)
-            df_valid = df.iloc[valid_indices].copy()
+            # valid_indices are df.index *labels* (a subset after dropna), so use
+            # .loc — matching the df.loc[df_valid.index, ...] writes below. Using
+            # .iloc here treats labels as positions and overflows on a gappy index.
+            df_valid = df.loc[valid_indices].copy()
 
             # Create hybrid feature matrix with desc and merch vectorizers
             X = create_hybrid_feature_matrix(df_valid, vectorizer['desc'], vectorizer['merch'], numeric_features)

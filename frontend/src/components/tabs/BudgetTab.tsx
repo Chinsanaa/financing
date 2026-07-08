@@ -11,7 +11,7 @@ import Badge, { categoryColor } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
-import { formatCurrencyWhole, formatNumber } from '@/utils/format';
+import { formatCurrencyWhole, formatNumber, CURRENCY_SYMBOL } from '@/utils/format';
 
 interface BudgetInfo {
   budget_config: {
@@ -24,6 +24,15 @@ interface BudgetInfo {
     current_spend: number;
     type: string;
   }>;
+  month: string; // resolved "YYYY-MM"
+  available_months: string[]; // months with transactions, newest first
+}
+
+/* "YYYY-MM" -> e.g. "June 2026". */
+function monthLabel(ym: string): string {
+  const d = new Date(ym + '-01');
+  if (isNaN(d.getTime())) return ym;
+  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 interface Category {
@@ -38,8 +47,22 @@ interface BudgetDraft {
 }
 
 export default function BudgetTab() {
-  const { data: budget, loading, error, reload } = useApi<BudgetInfo>('/dashboard/budget');
+  // Empty string = current month. useApi caches per path, so each selected month
+  // is fetched once and re-displayed instantly on revisit.
+  const [month, setMonth] = useState('');
+  const { data: budget, loading, error, reload } = useApi<BudgetInfo>(
+    month ? `/dashboard/budget?month=${month}` : '/dashboard/budget'
+  );
   const { data: categoriesData } = useApi<{ categories: Category[] }>('/categories/');
+
+  // Options for the selector: the resolved current month is always first, then
+  // any other months that have transactions.
+  const monthOptions = (() => {
+    const opts = budget?.available_months ? [...budget.available_months] : [];
+    if (budget?.month && !opts.includes(budget.month)) opts.unshift(budget.month);
+    return opts;
+  })();
+  const selectedMonth = month || budget?.month || '';
 
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, BudgetDraft>>({});
@@ -109,7 +132,7 @@ export default function BudgetTab() {
         <Card className="p-5">
           <p className="section-label mb-2">Monthly income</p>
           <p className="font-display text-3xl font-bold tabular-nums tracking-tight">
-            ¥
+            {CURRENCY_SYMBOL}
             <AnimatedNumber
               value={budget.budget_config.monthly_income}
               format={(n) => formatNumber(n, 0)}
@@ -119,20 +142,45 @@ export default function BudgetTab() {
       )}
 
       <Card className="p-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <p className="section-label">Budget by category — this month</p>
-          {!editing && categories.length > 0 && (
-            <Button variant="outline" onClick={startEditing} className="!px-3 !py-1.5 text-sm">
-              <Pencil className="mr-1.5 h-3.5 w-3.5" />
-              {budget && budget.category_budgets.length > 0 ? 'Edit budgets' : 'Set budgets'}
-            </Button>
-          )}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="section-label">
+            Budget by category — {selectedMonth ? monthLabel(selectedMonth) : 'this month'}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {!editing && monthOptions.length > 1 && (
+              <select
+                value={selectedMonth}
+                onChange={(e) => setMonth(e.target.value)}
+                className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none"
+              >
+                {monthOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {monthLabel(m)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!editing && categories.length > 0 && (
+              <Button variant="outline" onClick={startEditing} className="!px-3 !py-1.5 text-sm">
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                {budget && budget.category_budgets.length > 0 ? 'Edit budgets' : 'Set budgets'}
+              </Button>
+            )}
+          </div>
         </div>
+
+        {!editing && budget && budget.category_budgets.length > 0 && (
+          <p className="-mt-2 mb-4 text-xs text-muted">
+            Budgets are global. Past months show that month&apos;s actual spend compared against your
+            current budget.
+          </p>
+        )}
 
         {editing ? (
           <div className="space-y-4">
             <p className="text-sm text-muted">
-              Set a monthly limit per category. Leave a field empty to skip that category.
+              Set a monthly limit per category. Leave a field empty to skip that category. Budgets
+              apply to every month.
             </p>
             {categories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-3">
@@ -149,7 +197,7 @@ export default function BudgetTab() {
                       [cat.id]: { ...prev[cat.id], amount: e.target.value },
                     }))
                   }
-                  placeholder="¥ per month"
+                  placeholder={`${CURRENCY_SYMBOL} per month`}
                   className="w-36 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none"
                 />
                 <select

@@ -7,6 +7,12 @@
  * -¥1,234.56, never ¥-1234.56.
  */
 
+// Single source of truth for the currency glyph. The app is CNY-only today;
+// centralizing it here means the handful of places that render a bare symbol
+// (income tiles, input placeholders) stay consistent, and switching to true
+// multi-currency later is one edit instead of a grep-and-replace.
+export const CURRENCY_SYMBOL = '¥';
+
 const formatters = new Map<number, Intl.NumberFormat>();
 
 function numberFormatter(decimals: number): Intl.NumberFormat {
@@ -28,7 +34,7 @@ export function formatNumber(value: number, decimals = 0): string {
 export function formatCurrency(value: number, decimals = 2): string {
   const n = Number.isFinite(value) ? value : 0;
   const sign = n < 0 ? '-' : '';
-  return `${sign}¥${numberFormatter(decimals).format(Math.abs(n))}`;
+  return `${sign}${CURRENCY_SYMBOL}${numberFormatter(decimals).format(Math.abs(n))}`;
 }
 
 export function formatCurrencyWhole(value: number): string {
