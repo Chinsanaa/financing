@@ -2,10 +2,10 @@
 
 import { useApi } from '@/utils/useApi';
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -19,7 +19,7 @@ import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard, SkeletonChart } from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import { LineChart as LineChartIcon } from 'lucide-react';
-import { formatCurrency, formatNumber, formatCurrencyWhole } from '@/utils/format';
+import { formatCurrency, formatNumber, formatCurrencyWhole, CURRENCY_SYMBOL } from '@/utils/format';
 
 interface Summary {
   total_transactions: number;
@@ -43,11 +43,19 @@ interface Trend {
    Fixed order by spend rank at first render; >5 categories fold into "Other". */
 const SERIES = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
 
+/* "YYYY-MM" -> short month label, e.g. "2026-06" -> "Jun 26". */
+function formatMonth(ym: string): string {
+  const d = new Date(ym + '-01');
+  if (isNaN(d.getTime())) return ym;
+  return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+}
+
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
+  const labelText = typeof label === 'string' && /^\d{4}-\d{2}$/.test(label) ? formatMonth(label) : label;
   return (
     <div className="glass rounded-lg px-3 py-2 text-xs shadow-card">
-      {label && <p className="mb-1 font-medium">{label}</p>}
+      {labelText && <p className="mb-1 font-medium">{labelText}</p>}
       {payload.map((p: any) => (
         <p key={p.name} className="tabular-nums text-muted">
           {p.payload?.category ?? p.name}: <span className="font-medium text-ink">{formatCurrency(Number(p.value))}</span>
@@ -60,7 +68,7 @@ function ChartTooltip({ active, payload, label }: any) {
 export default function StatsTab() {
   const summaryQ = useApi<Summary>('/dashboard/summary');
   const categoryQ = useApi<{ categories: Category[] }>('/dashboard/by-category');
-  const trendsQ = useApi<{ trends: Trend[] }>('/dashboard/trends?days=30');
+  const trendsQ = useApi<{ trends: Trend[] }>('/dashboard/trends?granularity=month&months=12');
 
   if (summaryQ.loading || categoryQ.loading || trendsQ.loading) {
     return (
@@ -103,7 +111,7 @@ export default function StatsTab() {
 
   const stats = summary
     ? [
-        { label: 'Total spend', value: summary.total_spend, prefix: '¥', decimals: 0 },
+        { label: 'Total spend', value: summary.total_spend, prefix: CURRENCY_SYMBOL, decimals: 0 },
         { label: 'Transactions', value: summary.total_transactions },
         { label: 'Labeled', value: summary.labeled_transactions },
         { label: 'Labeling complete', value: summary.labeling_percentage, suffix: '%' },
@@ -126,8 +134,8 @@ export default function StatsTab() {
                 <AnimatedNumber
                   value={s.value}
                   format={(n) => {
-                    if (s.prefix === '¥') {
-                      return formatCurrencyWhole(n).replace('¥', '');
+                    if (s.prefix === CURRENCY_SYMBOL) {
+                      return formatCurrencyWhole(n).replace(CURRENCY_SYMBOL, '');
                     }
                     return formatNumber(n, s.decimals ?? 0);
                   }}
@@ -143,30 +151,24 @@ export default function StatsTab() {
       <div className="grid gap-5 lg:grid-cols-[3fr,2fr]">
         {/* Spending trend */}
         <Card className="p-5">
-          <p className="section-label mb-4">Spending trend — last 30 days</p>
+          <p className="section-label mb-4">Monthly spending — last 12 months</p>
           {trends.length === 0 ? (
             <EmptyState
               icon={LineChartIcon}
               title="No spending data yet"
-              description="Upload a statement to see your daily spending curve."
+              description="Upload a statement to see your monthly spending trend."
             />
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={trends} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <LineChart data={trends} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="rgb(var(--edge) / 0.08)" vertical={false} />
                 <XAxis
                   dataKey="date"
                   tick={{ fill: 'rgb(var(--muted))', fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
-                  minTickGap={32}
-                  tickFormatter={(d: string) => d.slice(5)}
+                  minTickGap={16}
+                  tickFormatter={formatMonth}
                 />
                 <YAxis
                   tick={{ fill: 'rgb(var(--muted))', fontSize: 11 }}
@@ -176,17 +178,16 @@ export default function StatsTab() {
                   tickFormatter={(v: number) => formatCurrencyWhole(v)}
                 />
                 <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'rgb(var(--edge) / 0.2)' }} />
-                <Area
+                <Line
                   type="monotone"
                   dataKey="total_spend"
                   name="Spend"
                   stroke="rgb(var(--accent))"
                   strokeWidth={2}
-                  fill="url(#trend-fill)"
-                  dot={false}
+                  dot={{ r: 3, strokeWidth: 0, fill: 'rgb(var(--accent))' }}
                   activeDot={{ r: 4, strokeWidth: 2, stroke: 'rgb(var(--surface))' }}
                 />
-              </AreaChart>
+              </LineChart>
             </ResponsiveContainer>
           )}
         </Card>

@@ -95,6 +95,15 @@ def retrain_model(
         df_labeled = df_labeled[df_labeled['category'].isin(classes_to_keep)].copy()
         print(f"   Kept {len(classes_to_keep)} categories, now training on {len(df_labeled)} samples")
 
+    # The row filters above (labeled/category/min-class) preserve the original
+    # index labels, so df_labeled can end up with a gappy index (e.g. [1,2,3,4]).
+    # extract_numeric_features() returns df.index (those labels), but the callers
+    # below slice with .iloc (positional) — a mismatch that raised
+    # "positional indexers are out-of-bounds" whenever any label >= len(df).
+    # Reset once here so positional == label and the .iloc[valid_indices] below
+    # is correct.
+    df_labeled = df_labeled.reset_index(drop=True)
+
     y = df_labeled['category']
 
     # Check if we have enough labeled data to train

@@ -109,12 +109,30 @@ async def get_by_category(request: Request):
 
 
 @router.get("/trends")
-async def get_trends(request: Request, days: int = 30):
-    """Spending trends: daily spend over last N days."""
+async def get_trends(request: Request, days: int = 30, granularity: str = "day", months: int = 12):
+    """Spending trends.
+
+    - granularity="day" (default): daily spend over the last `days` days. Keeps
+      the original behavior/response shape intact.
+    - granularity="month": monthly spend over the last `months` months, so the
+      Overview can show each month's progression. Buckets are "YYYY-MM".
+
+    Both return {"trends": [{"date": ..., "total_spend": ...}]}; only the `date`
+    string format differs (day vs month).
+    """
     user_id = request.state.user_id
 
     try:
-        cutoff = _now_cn() - timedelta(days=days)
+        if granularity == "month":
+            # First day of the month (months-1) back, so we return `months`
+            # buckets inclusive of the current month.
+            start = _month_start()
+            year = start.year + (start.month - 1 - (months - 1)) // 12
+            month = (start.month - 1 - (months - 1)) % 12 + 1
+            cutoff = datetime(year, month, 1)
+        else:
+            cutoff = _now_cn() - timedelta(days=days)
+
         # Filter server-side; never pull the full transaction history.
         rows = fetch_all(
             lambda: supabase_client.table("transactions")
@@ -128,16 +146,19 @@ async def get_trends(request: Request, days: int = 30):
             return {"trends": []}
 
         df = pd.DataFrame(rows)
-        df["date"] = pd.to_datetime(df["timestamp"]).dt.date
-        daily = df.groupby("date")["amount"].sum().reset_index()
+        if granularity == "month":
+            df["bucket"] = pd.to_datetime(df["timestamp"]).dt.to_period("M").astype(str)
+        else:
+            df["bucket"] = pd.to_datetime(df["timestamp"]).dt.date.astype(str)
+        grouped = df.groupby("bucket")["amount"].sum().sort_index().reset_index()
 
         return {
             "trends": [
                 {
-                    "date": str(row["date"]),
+                    "date": str(row["bucket"]),
                     "total_spend": float(row["amount"]),
                 }
-                for _, row in daily.iterrows()
+                for _, row in grouped.iterrows()
             ]
         }
     except HTTPException:
@@ -159,15 +180,19 @@ def _budget_config(user_id: str):
     return resp.data[0] if resp.data else None
 
 
-def _current_month_spend_by_category(user_id: str) -> dict:
-    """This month's spend per category name (monthly budgets compare against
-    the current month, not all-time history)."""
+def _spend_by_category(user_id: str, start: datetime, end: datetime) -> dict:
+    """Spend per category name within [start, end) — a single month window.
+
+    Monthly budgets compare against one month's spend, so callers pass that
+    month's bounds. The `.lt(end)` upper bound matters for past months (the old
+    current-month-only version had only a lower bound)."""
     rows = fetch_all(
         lambda: supabase_client.table("transactions")
         .select("amount, category_id, categories(name)")
         .eq("user_id", user_id)
         .not_.is_("category_id", "null")
-        .gte("timestamp", _month_start().isoformat())
+        .gte("timestamp", start.isoformat())
+        .lt("timestamp", end.isoformat())
     )
     if not rows:
         return {}
@@ -176,12 +201,54 @@ def _current_month_spend_by_category(user_id: str) -> dict:
     return df.groupby("category_name")["amount"].sum().to_dict()
 
 
+def _month_bounds(month: Optional[str] = None) -> tuple:
+    """Parse a 'YYYY-MM' string into (first-of-month, first-of-next-month).
+
+    None → the current month. Raises HTTPException(400) on malformed input."""
+    if not month:
+        start = _month_start()
+    else:
+        try:
+            start = datetime(int(month[:4]), int(month[5:7]), 1)
+            if len(month) != 7 or month[4] != "-":
+                raise ValueError
+        except (ValueError, IndexError):
+            raise HTTPException(status_code=400, detail="month must be formatted as YYYY-MM")
+    end = datetime(start.year + (start.month == 12), (start.month % 12) + 1, 1)
+    return start, end
+
+
+def _available_months(user_id: str) -> list:
+    """Distinct 'YYYY-MM' values that actually have transactions, newest first,
+    so the frontend can populate a month selector."""
+    rows = fetch_all(
+        lambda: supabase_client.table("transactions")
+        .select("timestamp")
+        .eq("user_id", user_id)
+    )
+    if not rows:
+        return []
+    months = pd.to_datetime(pd.DataFrame(rows)["timestamp"]).dt.to_period("M").astype(str)
+    return sorted(months.unique().tolist(), reverse=True)
+
+
 @router.get("/budget")
-async def get_budget(request: Request):
-    """Budget info: limits by category, current-month spend vs budget."""
+async def get_budget(request: Request, month: Optional[str] = None):
+    """Budget info: limits by category, spend vs budget for a chosen month.
+
+    `month` is 'YYYY-MM'; omitted → current month (preserves prior behavior).
+    Budgets themselves are global (one value per category, no per-month history),
+    so for past months the *spend* is real but it's compared against today's
+    budget — the response carries `month` + `available_months` so the UI can
+    offer a selector and label the caveat.
+    """
     user_id = request.state.user_id
 
     try:
+        start, end = _month_bounds(month)
+        resolved_month = f"{start.year:04d}-{start.month:02d}"
+        available_months = _available_months(user_id)
+
         # Monthly income's single source of truth is profiles.monthly_income
         # (written by PATCH /settings/profile). budget_config.income is legacy
         # and was never written by anything.
@@ -200,9 +267,14 @@ async def get_budget(request: Request):
         }
 
         if not cat_budget_resp.data:
-            return {"budget_config": budget_config_out, "category_budgets": []}
+            return {
+                "budget_config": budget_config_out,
+                "category_budgets": [],
+                "month": resolved_month,
+                "available_months": available_months,
+            }
 
-        spending_by_cat = _current_month_spend_by_category(user_id)
+        spending_by_cat = _spend_by_category(user_id, start, end)
 
         category_budgets = []
         for row in cat_budget_resp.data:
@@ -217,6 +289,8 @@ async def get_budget(request: Request):
         return {
             "budget_config": budget_config_out,
             "category_budgets": category_budgets,
+            "month": resolved_month,
+            "available_months": available_months,
         }
     except HTTPException:
         raise
@@ -347,7 +421,9 @@ async def get_action(request: Request):
         )
 
         if cat_budget_resp.data:
-            spending_by_cat = _current_month_spend_by_category(user_id)
+            # Action items are always about the current month.
+            start, end = _month_bounds(None)
+            spending_by_cat = _spend_by_category(user_id, start, end)
 
             for budget_row in cat_budget_resp.data:
                 cat_name = budget_row["categories"]["name"] if budget_row["categories"] else "Unknown"
@@ -387,20 +463,39 @@ async def get_action(request: Request):
 
 
 @router.get("/reports")
-async def get_reports(request: Request, page: int = 1, per_page: int = 100):
-    """Detailed reports: paginated categorized-transaction list."""
+async def get_reports(
+    request: Request,
+    page: int = 1,
+    per_page: int = 100,
+    uncategorized_only: bool = False,
+    category_id: Optional[str] = None,
+):
+    """Detailed reports: paginated transaction list.
+
+    Now includes uncategorized rows (so users can categorize anything from the
+    table) and returns each row's `id`/`category_id` so the frontend can edit
+    the category inline via POST /classify/{id}/label. Optional filters:
+    `uncategorized_only` and a specific `category_id`.
+    """
     user_id = request.state.user_id
     page = max(1, page)
     per_page = min(max(1, per_page), 500)
 
     try:
         start = (page - 1) * per_page
-        response = (
+        query = (
             supabase_client.table("transactions")
-            .select("timestamp, merchant, description, amount, category_id, categories(name), label_source",
+            .select("id, timestamp, merchant, description, amount, category_id, categories(name), label_source",
                     count="exact")
             .eq("user_id", user_id)
-            .not_.is_("category_id", "null")
+        )
+        if uncategorized_only:
+            query = query.is_("category_id", "null")
+        elif category_id:
+            query = query.eq("category_id", category_id)
+
+        response = (
+            query
             .order("timestamp", desc=True)
             .range(start, start + per_page - 1)
             .execute()
@@ -409,11 +504,13 @@ async def get_reports(request: Request, page: int = 1, per_page: int = 100):
         total_count = response.count if response.count is not None else len(response.data or [])
         transactions = [
             {
+                "id": txn["id"],
                 "date": txn["timestamp"],
                 "merchant": merchant_label_english(txn["merchant"]),
                 "description": description_label_english(txn["description"]),
                 "amount": float(txn["amount"]),
-                "category": txn["categories"]["name"] if txn["categories"] else "Unknown",
+                "category": txn["categories"]["name"] if txn["categories"] else "Uncategorized",
+                "category_id": txn["category_id"],
                 "label_source": txn["label_source"],
             }
             for txn in (response.data or [])
