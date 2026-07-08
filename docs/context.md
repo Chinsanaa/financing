@@ -103,6 +103,10 @@ Next:
 
 ## Session Log
 
+### Session 43 (2026-07-08) — Add Playwright MCP server config
+
+**Completed**: Added `.mcp.json` at repo root registering the `playwright` MCP server (`npx -y @playwright/mcp@latest`), so Claude Code sessions get browser automation tools for testing the Next.js frontend (e.g. E2E checks after deploy) without relying on a separate manual setup step. No app code changed.
+
 ### Session 42 (2026-07-07) — Post-deploy bug fixes: onboarding staleness, merchant-rules taxonomy mismatch, label queue diversity
 
 **Scope**: Live E2E testing after the Session 41 deploy (PR #31, merged) surfaced three bugs. Fixed all three; two required live Supabase changes (applied via MCP), one is pure frontend.
