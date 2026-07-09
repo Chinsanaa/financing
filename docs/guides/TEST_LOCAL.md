@@ -52,7 +52,6 @@ You should see:
 SUPABASE_URL=https://<your-project-ref>.supabase.co
 SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_JWT_SECRET=...
 ```
 
 ### 1.3: Start the FastAPI Server
@@ -344,11 +343,12 @@ Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Proc
 
 ### Issue: "401 Unauthorized"
 
-**Cause**: JWT token missing or invalid
+**Cause**: JWT token missing, expired, or fails signature verification
 
 **Fix**:
 1. Check browser DevTools → Network → Headers → `Authorization: Bearer ...`
-2. Verify `SUPABASE_JWT_SECRET` in `.env.local` matches Supabase dashboard
+2. Verify `SUPABASE_URL` in backend `.env` matches the Supabase project that issued
+   the token (the backend verifies signatures against that project's JWKS endpoint)
 3. Try logout/login again
 
 ### Issue: "Cannot find module 'src.retrain'"

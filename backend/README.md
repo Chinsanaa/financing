@@ -7,7 +7,7 @@ scopes every query by `user_id`, and drives the ML pipeline in `../src/`.
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env    # SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET
+cp .env.example .env    # SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 python -m uvicorn main:app --reload    # http://localhost:8000, docs at /docs
 ```
 
@@ -16,10 +16,12 @@ python -m uvicorn main:app --reload    # http://localhost:8000, docs at /docs
 | File | Purpose |
 |---|---|
 | `main.py` | App, auth middleware (JWT → `request.state.user_id`), CORS, rate limiting |
+| `auth_utils.py` | Verifies Supabase JWTs' ES256 signature against the project's JWKS |
 | `config.py` | Env settings + the shared service-role Supabase client |
 | `ml.py` | Loads the user's latest trained model from Storage (cached) and bulk-classifies pending transactions |
 | `errors.py` | Log-and-mask helper so 500s never leak internals |
 | `routes/` | Route groups (below) |
+| `tests/` | JWT verification + cross-user isolation tests (`pip install -r requirements-dev.txt && pytest tests/`) |
 
 ## Endpoints
 

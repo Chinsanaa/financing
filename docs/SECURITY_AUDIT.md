@@ -109,22 +109,38 @@ Production checklist for financing SaaS before launch.
 
 ## 11. Security Testing
 
-### Cross-User RLS Tests
+**Implemented** in `backend/tests/test_auth.py` and `backend/tests/test_isolation.py`
+(run with `cd backend && pip install -r requirements-dev.txt && pytest tests/`).
+The backend's Supabase client always uses the **service-role key**
+(`backend/config.py`), which bypasses Postgres RLS entirely — so the real
+isolation boundary at the API layer is each route handler's manual
+`.eq("user_id", user_id)` scoping plus the JWT auth middleware, not RLS
+itself. The tests below exercise that real boundary. Testing actual RLS
+policies would mean hitting PostgREST directly with an anon key + a real
+user JWT (a local/CLI Supabase stack) — separate infrastructure, not covered
+here.
 
-**Test 1: Read another user's transactions**
+### Cross-User Isolation Tests
+
+**Test 1: Read another user's data**
 ```
-1. Create User A, User B
-2. User A uploads transactions
-3. User B attempts: GET /transactions?user_id=<A's ID>
-4. Result: RLS blocks at Postgres, 401 from FastAPI
+1. Create User A, User B; seed categories for both
+2. User B attempts: GET /categories/
+3. Result: only B's categories are returned (never A's)
 ```
+(`/categories/` stands in for the general pattern here — `GET
+/dashboard/reports` and other list endpoints use the same
+`.eq("user_id", user_id)` scoping, but pull in a translation pipeline that
+can call an external API, so the deterministic, network-free test targets
+`/categories/` instead.)
 
 **Test 2: Update another user's category**
 ```
 1. User A creates category X
-2. User B attempts: PATCH /categories/<X's ID> with name="Hacked"
-3. Result: RLS blocks (no matching row for B), 404 from FastAPI
+2. User B attempts: PUT /categories/<X's ID> with name="Hacked"
+3. Result: 404 from FastAPI (no row matches B's user_id), A's row unchanged
 ```
+(Route is `PUT`, not `PATCH` — corrected from the original spec below.)
 
 **Test 3: Delete another user's account**
 ```
@@ -135,19 +151,35 @@ Production checklist for financing SaaS before launch.
 
 ### JWT Tampering Tests
 
+`backend/main.py`'s `AuthMiddleware` used to decode tokens with
+`verify_signature: False` (a fix for an ES256/HS256 algorithm mismatch that
+went too far and left signature verification off entirely — any
+self-crafted JWT with an arbitrary `sub` claim was accepted). Fixed via
+`backend/auth_utils.py`, which verifies against Supabase's real JWKS. The
+tests below were only meaningful once that fix landed.
+
 **Test 1: Expired token**
 ```
 1. Login, get access token
 2. Wait past expiry (or set JWT exp to past)
-3. Attempt: GET /dashboard/summary with expired token
+3. Attempt: GET /categories/ with expired token
 4. Result: 401 Unauthorized
 ```
 
 **Test 2: Tampered token**
 ```
 1. Take valid JWT, flip one character in signature
-2. Attempt: GET /dashboard/summary with tampered token
+2. Attempt: GET /categories/ with tampered token
 3. Result: 401 Unauthorized (signature invalid)
+```
+
+**Test 3: Forged token (wrong keypair)**
+```
+1. Sign a token with a locally-generated keypair, not Supabase's real one,
+   with an arbitrary sub and a valid-looking aud claim
+2. Attempt: GET /categories/ with the forged token
+3. Result: 401 Unauthorized — this is the direct regression test for the
+   impersonation bug above; it fails against the pre-fix code
 ```
 
 ### Rate Limit Tests
