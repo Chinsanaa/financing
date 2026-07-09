@@ -8,14 +8,17 @@ import { useApi, invalidate } from '@/utils/useApi';
 import { Alert } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Badge, { categoryColor } from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge';
+import CategoryColorPicker from '@/components/ui/CategoryColorPicker';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
+import { hashCategoryKey, toneForKey } from '@/utils/categoryColors';
 
 interface Category {
   id: string;
   name: string;
   is_catch_all?: boolean;
+  color?: string | null;
 }
 
 export default function CategoriesTab() {
@@ -23,6 +26,7 @@ export default function CategoriesTab() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [savingColorId, setSavingColorId] = useState<string | null>(null);
 
   const categories = data?.categories || [];
 
@@ -62,11 +66,50 @@ export default function CategoriesTab() {
     }
   };
 
+  const handleColorChange = async (cat: Category, colorKey: string | null) => {
+    const previous = cat.color ?? null;
+    if (colorKey === previous) return;
+
+    setError('');
+    setSavingColorId(cat.id);
+    // Optimistic: recolor immediately; revert on failure.
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            categories: prev.categories.map((c) =>
+              c.id === cat.id ? { ...c, color: colorKey } : c
+            ),
+          }
+        : prev
+    );
+    try {
+      await api.categories.update(cat.id, { color: colorKey });
+      // Recolors badges/charts everywhere useCategoryColors is consumed.
+      invalidate('/categories');
+    } catch (err: any) {
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              categories: prev.categories.map((c) =>
+                c.id === cat.id ? { ...c, color: previous } : c
+              ),
+            }
+          : prev
+      );
+      setError(err.response?.data?.detail || 'Failed to save color');
+    } finally {
+      setSavingColorId(null);
+    }
+  };
+
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-4xl space-y-6">
       <SectionHeader label="Model" title="Categories" />
       <p className="-mt-4 text-sm text-muted">
         The labels your model learns to predict. Keep them broad enough to be learnable.
+        Pick a color per category — it's used everywhere: charts, badges, and reports.
       </p>
 
       {(error || loadError) && <Alert kind="error">{error || loadError}</Alert>}
@@ -94,34 +137,52 @@ export default function CategoriesTab() {
           description="Add a few categories to start labeling — Food, Transport and Shopping are good openers."
         />
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence initial={false}>
-            {categories.map((cat) => (
-              <motion.div
-                key={cat.id}
-                layout
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: -24 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Card className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-3">
-                    <Badge tone={categoryColor(cat.name)}>{cat.name}</Badge>
-                    {cat.is_catch_all && <Badge tone="neutral">catch-all</Badge>}
-                  </div>
-                  {!cat.is_catch_all && (
-                    <button
-                      onClick={() => handleDeleteCategory(cat.id)}
-                      aria-label={`Delete ${cat.name}`}
-                      className="rounded-pill p-2 text-muted transition-colors hover:text-danger hover:bg-danger/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </Card>
-              </motion.div>
-            ))}
+            {categories.map((cat) => {
+              // Colors chosen by OTHER categories are disabled in the picker.
+              const takenBy = new Map<string, string>();
+              for (const other of categories) {
+                if (other.id !== cat.id && other.color) takenBy.set(other.color, other.name);
+              }
+              return (
+                <motion.div
+                  key={cat.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -24 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Card className="flex h-full flex-col justify-between gap-3 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={toneForKey(cat.color || hashCategoryKey(cat.name))}>
+                        {cat.name}
+                      </Badge>
+                      {cat.is_catch_all && <Badge tone="neutral">catch-all</Badge>}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <CategoryColorPicker
+                        categoryName={cat.name}
+                        color={cat.color}
+                        takenBy={takenBy}
+                        saving={savingColorId === cat.id}
+                        onSelect={(key) => handleColorChange(cat, key)}
+                      />
+                      {!cat.is_catch_all && (
+                        <button
+                          onClick={() => handleDeleteCategory(cat.id)}
+                          aria-label={`Delete ${cat.name}`}
+                          className="rounded-pill p-2 text-muted transition-colors hover:text-danger hover:bg-danger/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
       )}

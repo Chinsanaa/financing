@@ -63,7 +63,12 @@ click any category (including uncategorized rows) to reassign it; the change is
 saved immediately and flows through to the Overview and Budget views. **Per-month
 budgets**: the **Budget** tab has a month selector so you can see how each past
 month tracked against your budget (budgets are global, so past months compare
-against your current budget).
+against your current budget). **Category colors**: pick a color per category in
+**Model → Categories** (12 design-system choices, hex shown, no duplicates) — the
+same color follows that category everywhere: the Overview pie chart, badges in
+Budget/Review/Label, and Reports. Categories without a chosen color get a stable
+automatic color. The dashboard layout is fluid — it fills large desktop screens
+(capped for ultrawides) and adapts down to tablet and phone.
 
 ## Quick start (local)
 

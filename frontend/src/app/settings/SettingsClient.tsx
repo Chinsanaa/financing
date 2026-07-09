@@ -101,7 +101,7 @@ export default function SettingsClient() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6 px-4 py-12 sm:px-6">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-12 sm:px-6 lg:px-8">
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
@@ -112,7 +112,7 @@ export default function SettingsClient() {
   return (
     <div className="min-h-screen">
       <header className="glass sticky top-0 z-40 border-b border-edge/8">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
           <h1 className="font-display text-lg font-bold tracking-tight">Settings</h1>
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" /> Back
@@ -120,7 +120,7 @@ export default function SettingsClient() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-2xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <Card className="p-6">
           <SectionHeader label="Profile" title="Account" />
           <div className="space-y-4">

@@ -7,7 +7,8 @@ import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
 import { Alert } from '@/components/ui';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Badge, { categoryColor } from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge';
+import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrency } from '@/utils/format';
@@ -34,6 +35,7 @@ export default function ReviewTab() {
   const queryString = showLabeled ? '?show_labeled=true' : '';
   const { data, setData, loading, error: loadError } = useApi<ReviewQueueData>(`/dashboard/review-queue${queryString}`);
   const categoriesQ = useApi<{ categories: Array<{ id: string; name: string }> }>('/categories/');
+  const { toneFor } = useCategoryColors();
   const [selectedTxn, setSelectedTxn] = useState<string | null>(null);
   const [labeling, setLabeling] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
@@ -188,14 +190,14 @@ export default function ReviewTab() {
                       <td className="px-4 py-3">
                         {isShowingLabeled ? (
                           tx.category ? (
-                            <Badge tone={categoryColor(tx.category)}>
+                            <Badge tone={toneFor(tx.category)}>
                               {tx.category}
                             </Badge>
                           ) : (
                             <span className="text-xs text-muted">Uncategorized</span>
                           )
                         ) : tx.suggested_category ? (
-                          <Badge tone={categoryColor(tx.suggested_category)}>
+                          <Badge tone={toneFor(tx.suggested_category)}>
                             {tx.suggested_category}
                           </Badge>
                         ) : (

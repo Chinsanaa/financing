@@ -131,7 +131,7 @@ export default function DashboardClient() {
     <div className="min-h-screen">
       {/* Header */}
       <header className="sticky top-0 z-40 glass border-b border-edge/8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between px-4 py-3 sm:px-6 lg:px-8 2xl:px-12">
           <Link href="/dashboard" className="font-display text-lg font-bold tracking-tight">
             Financing<span className="text-accent-strong">.</span>
           </Link>
@@ -156,7 +156,7 @@ export default function DashboardClient() {
         </div>
 
         {/* Section tabs */}
-        <div className="mx-auto max-w-7xl border-t border-edge/8 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1800px] border-t border-edge/8 px-4 sm:px-6 lg:px-8 2xl:px-12">
           <TabBar
             tabs={SECTIONS}
             active={activeSection}
@@ -167,7 +167,8 @@ export default function DashboardClient() {
       </header>
 
       {/* Content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Fluid shell: fills large screens (1920 included), caps only on ultrawides. */}
+      <main className="mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 2xl:px-12">
         <OnboardingChecklist onNavigate={goToTab} activeTab={activeTab} />
 
         <TabPanel key={activeTab}>

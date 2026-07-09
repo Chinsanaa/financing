@@ -8,7 +8,8 @@ import { useApi, invalidate } from '@/utils/useApi';
 import { Alert, ProgressBar } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Badge, { categoryColor } from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge';
+import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonCard } from '@/components/ui/Skeleton';
 import { formatCurrency } from '@/utils/format';
@@ -31,6 +32,7 @@ interface Category {
 export default function LabelTab() {
   const queueQ = useApi<{ transactions: Transaction[] }>('/dashboard/review-queue');
   const categoriesQ = useApi<{ categories: Category[] }>('/categories/');
+  const { toneFor } = useCategoryColors();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -103,7 +105,7 @@ export default function LabelTab() {
 
   if (queueQ.loading || categoriesQ.loading) {
     return (
-      <div className="max-w-2xl space-y-6">
+      <div className="mx-auto max-w-2xl space-y-6">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-16 w-full" />
         <SkeletonCard />
@@ -114,7 +116,7 @@ export default function LabelTab() {
 
   if (transactions.length === 0) {
     return (
-      <div className="max-w-2xl">
+      <div className="mx-auto max-w-2xl">
         <EmptyState
           icon={PartyPopper}
           title="All transactions labeled"
@@ -128,7 +130,7 @@ export default function LabelTab() {
   const progress = Math.round(((currentIndex + 1) / transactions.length) * 100);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <SectionHeader label="Transactions" title="Label transactions" />
       <p className="-mt-4 text-sm text-muted">
         Every label you set here becomes training data for your model.
@@ -178,7 +180,7 @@ export default function LabelTab() {
             {tx.suggested_category && (
               <div className="flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/5 px-4 py-3 text-sm">
                 <span className="text-muted">Model suggests</span>
-                <Badge tone={categoryColor(tx.suggested_category)}>
+                <Badge tone={toneFor(tx.suggested_category)}>
                   {tx.suggested_category}
                 </Badge>
                 {tx.confidence > 0 && (

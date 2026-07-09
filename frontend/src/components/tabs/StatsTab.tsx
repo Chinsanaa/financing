@@ -1,6 +1,7 @@
 'use client';
 
 import { useApi } from '@/utils/useApi';
+import { useCategoryColors } from '@/utils/useCategoryColors';
 import {
   CartesianGrid,
   Cell,
@@ -19,7 +20,14 @@ import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard, SkeletonChart } from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import { LineChart as LineChartIcon } from 'lucide-react';
-import { formatCurrency, formatNumber, formatCurrencyWhole, CURRENCY_SYMBOL } from '@/utils/format';
+import {
+  formatCurrency,
+  formatNumber,
+  formatCurrencyWhole,
+  formatMonthShort,
+  formatMonthLong,
+  CURRENCY_SYMBOL,
+} from '@/utils/format';
 
 interface Summary {
   total_transactions: number;
@@ -32,6 +40,9 @@ interface Category {
   category: string;
   total_amount: number;
   transaction_count: number;
+  /** True for the folded ">5 categories" bucket — painted neutral so it can't
+   *  collide with a real category that happens to be named "Other". */
+  synthetic?: boolean;
 }
 
 interface Trend {
@@ -39,20 +50,13 @@ interface Trend {
   total_spend: number;
 }
 
-/* Categorical series colors — validated against both surfaces (see globals.css).
-   Fixed order by spend rank at first render; >5 categories fold into "Other". */
-const SERIES = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
-
-/* "YYYY-MM" -> short month label, e.g. "2026-06" -> "Jun 26". */
-function formatMonth(ym: string): string {
-  const d = new Date(ym + '-01');
-  if (isNaN(d.getTime())) return ym;
-  return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
-}
+/** Neutral paint for the synthetic fold bucket. */
+const FOLDED_FILL = 'rgb(var(--muted))';
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
-  const labelText = typeof label === 'string' && /^\d{4}-\d{2}$/.test(label) ? formatMonth(label) : label;
+  // Ticks show month-only ("Jun"); the tooltip carries the full year.
+  const labelText = typeof label === 'string' && /^\d{4}-\d{2}$/.test(label) ? formatMonthLong(label) : label;
   return (
     <div className="glass rounded-lg px-3 py-2 text-xs shadow-card">
       {labelText && <p className="mb-1 font-medium">{labelText}</p>}
@@ -69,6 +73,8 @@ export default function StatsTab() {
   const summaryQ = useApi<Summary>('/dashboard/summary');
   const categoryQ = useApi<{ categories: Category[] }>('/dashboard/by-category');
   const trendsQ = useApi<{ trends: Trend[] }>('/dashboard/trends?granularity=month&months=12');
+  // Category identity colors (user-chosen, hash fallback) — shared site-wide.
+  const { chartColorFor } = useCategoryColors();
 
   if (summaryQ.loading || categoryQ.loading || trendsQ.loading) {
     return (
@@ -90,8 +96,8 @@ export default function StatsTab() {
   const sorted = [...(categoryQ.data?.categories || [])].sort(
     (a, b) => b.total_amount - a.total_amount
   );
-  // >5 categories fold into "Other" so hues are never cycled.
-  const byCategory =
+  // >5 categories fold into a synthetic "Other" bucket to keep the pie legible.
+  const byCategory: Category[] =
     sorted.length > 5
       ? [
           ...sorted.slice(0, 4),
@@ -100,8 +106,9 @@ export default function StatsTab() {
               category: 'Other',
               total_amount: acc.total_amount + c.total_amount,
               transaction_count: acc.transaction_count + c.transaction_count,
+              synthetic: true,
             }),
-            { category: 'Other', total_amount: 0, transaction_count: 0 }
+            { category: 'Other', total_amount: 0, transaction_count: 0, synthetic: true }
           ),
         ]
       : sorted;
@@ -168,7 +175,7 @@ export default function StatsTab() {
                   tickLine={false}
                   axisLine={false}
                   minTickGap={16}
-                  tickFormatter={formatMonth}
+                  tickFormatter={formatMonthShort}
                 />
                 <YAxis
                   tick={{ fill: 'rgb(var(--muted))', fontSize: 11 }}
@@ -215,8 +222,11 @@ export default function StatsTab() {
                     stroke="rgb(var(--surface))"
                     strokeWidth={2}
                   >
-                    {byCategory.map((c, i) => (
-                      <Cell key={c.category} fill={SERIES[i]} />
+                    {byCategory.map((c) => (
+                      <Cell
+                        key={c.category}
+                        fill={c.synthetic ? FOLDED_FILL : chartColorFor(c.category)}
+                      />
                     ))}
                   </Pie>
                   <Tooltip content={<ChartTooltip />} />
@@ -224,13 +234,13 @@ export default function StatsTab() {
               </ResponsiveContainer>
               {/* Legend: color follows the entity; text wears text tokens */}
               <ul className="w-full space-y-1.5">
-                {byCategory.map((c, i) => {
+                {byCategory.map((c) => {
                   const pct = categoryTotal > 0 ? Math.round((c.total_amount / categoryTotal) * 100) : 0;
                   return (
                     <li key={c.category} className="flex items-center gap-2 text-sm">
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: SERIES[i] }}
+                        style={{ backgroundColor: c.synthetic ? FOLDED_FILL : chartColorFor(c.category) }}
                       />
                       <span className="min-w-0 flex-1 truncate">{c.category}</span>
                       <span className="tabular-nums text-muted">
