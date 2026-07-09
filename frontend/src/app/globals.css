@@ -24,6 +24,20 @@
   --chart-3: #0891b2;
   --chart-4: #db2777;
   --chart-5: #b45309;
+  /* Category palette — user-selectable, keyed by name in categoryColors.ts.
+     Validated (lightness band, chroma, contrast) for light surfaces. */
+  --cat-lime: 63 98 18;
+  --cat-violet: 124 58 237;
+  --cat-cyan: 8 145 178;
+  --cat-pink: 219 39 119;
+  --cat-amber: 161 98 7;
+  --cat-sky: 7 89 133;
+  --cat-emerald: 4 120 87;
+  --cat-rose: 159 18 57;
+  --cat-indigo: 67 56 202;
+  --cat-teal: 13 148 136;
+  --cat-orange: 154 52 18;
+  --cat-fuchsia: 192 38 211;
 }
 
 .dark {
@@ -46,6 +60,19 @@
   --chart-3: #0284c7;
   --chart-4: #db2777;
   --chart-5: #d97706;
+  /* Category palette — dark-surface values of the same 12 keys. */
+  --cat-lime: 77 124 15;
+  --cat-violet: 139 92 246;
+  --cat-cyan: 8 145 178;
+  --cat-pink: 236 72 153;
+  --cat-amber: 217 119 6;
+  --cat-sky: 2 132 199;
+  --cat-emerald: 5 150 105;
+  --cat-rose: 225 29 72;
+  --cat-indigo: 99 102 241;
+  --cat-teal: 13 148 136;
+  --cat-orange: 194 65 12;
+  --cat-fuchsia: 217 70 239;
 }
 
 html {
@@ -94,6 +121,23 @@ code {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
 }
+
+/* Category badge tones — one class per palette key in categoryColors.ts.
+   Plain CSS (not Tailwind utilities) so runtime-composed class names like
+   `cat-violet` can't be purged. Text at full strength, tinted 15% fill —
+   mirrors Badge's built-in tones. */
+.cat-lime { color: rgb(var(--cat-lime)); background-color: rgb(var(--cat-lime) / 0.15); }
+.cat-violet { color: rgb(var(--cat-violet)); background-color: rgb(var(--cat-violet) / 0.15); }
+.cat-cyan { color: rgb(var(--cat-cyan)); background-color: rgb(var(--cat-cyan) / 0.15); }
+.cat-pink { color: rgb(var(--cat-pink)); background-color: rgb(var(--cat-pink) / 0.15); }
+.cat-amber { color: rgb(var(--cat-amber)); background-color: rgb(var(--cat-amber) / 0.15); }
+.cat-sky { color: rgb(var(--cat-sky)); background-color: rgb(var(--cat-sky) / 0.15); }
+.cat-emerald { color: rgb(var(--cat-emerald)); background-color: rgb(var(--cat-emerald) / 0.15); }
+.cat-rose { color: rgb(var(--cat-rose)); background-color: rgb(var(--cat-rose) / 0.15); }
+.cat-indigo { color: rgb(var(--cat-indigo)); background-color: rgb(var(--cat-indigo) / 0.15); }
+.cat-teal { color: rgb(var(--cat-teal)); background-color: rgb(var(--cat-teal) / 0.15); }
+.cat-orange { color: rgb(var(--cat-orange)); background-color: rgb(var(--cat-orange) / 0.15); }
+.cat-fuchsia { color: rgb(var(--cat-fuchsia)); background-color: rgb(var(--cat-fuchsia) / 0.15); }
 
 /* Uppercase tracked section label */
 .section-label {

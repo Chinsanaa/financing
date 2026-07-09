@@ -63,22 +63,23 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 43): three requested features + a training-crash fix shipped (see Session 43 log):
-inline category editing in All Transactions, a per-month budget selector (retroactive), the Overview
-trend switched to a monthly line chart, and the `positional indexers are out-of-bounds` retrain crash
-fixed. Session 42 fixes (onboarding staleness, taxonomy, label-queue diversity) are merged (PR #32).
+Current (Session 44): three UX changes shipped (see Session 44 log): clean month-only chart labels
+(the "Jun 26" 2-digit year read as a day-of-month), user-selectable category colors consistent
+site-wide (12-key design-system palette, picker in the Categories tab, migration applied live), and
+a responsive full-width layout (1280px cap → fluid max 1800px shell; left-stuck narrow tabs fixed).
+Session 43 features (inline editing, per-month budgets, monthly trend, retrain crash fix) are merged.
 
 Next:
-1. Push this branch and open a PR for the Session 43 changes.
-2. E2E on the live account: retrain (confirm no crash + rule-matched rows show real categories);
-   open All Transactions and correct a mislabeled row (badge updates instantly, Overview/Budget
-   reflect it); switch the budget month selector across past months; confirm the Overview line chart
-   shows monthly buckets.
+1. Push this branch and open a PR for the Session 44 changes; Vercel CI is the frontend
+   typecheck/build gate (no Node.js available on the local Windows machine this session).
+2. E2E on the live account at 1920×1080 + phone: chart ticks read "Jun" and tooltip "June 2026";
+   pick colors in Categories and confirm the pie/legend/badges recolor everywhere without reload;
+   confirm a taken color is disabled in the picker; confirm the dashboard fills the screen.
 3. Then: backend security test suite, monitoring, email rate limits, and git-history privacy scrub
-   (deferred to user decision). Deferred here too: true per-month budget *history* (needs a versioned
-   budget table), multi-currency, and replacing `_available_months`' full-column scan with a Postgres RPC.
+   (deferred to user decision). Still deferred: true per-month budget *history*, multi-currency,
+   `_available_months` → Postgres RPC.
 
-## Current State (Session 43, 2026-07-08)
+## Current State (Session 44, 2026-07-09)
 
 | Item | Status |
 |---|---|
@@ -101,13 +102,63 @@ Next:
 | Retrain crash | **FIXED** (Session 43): `positional indexers are out-of-bounds` — `extract_numeric_features` returns a label index but `retrain.py`/`classify.py` sliced with `.iloc` (positional); a gappy index after the <2-samples/class filter overflowed. Fixed with `reset_index(drop=True)` before extraction (retrain) and `.loc` (classify). Regression test in `tests/test_retrain_index.py` |
 | Manual category correction | **NEW** (Session 43): All Transactions table (`ReportsTab`) is now editable — click a category to reassign via a dropdown (reuses `POST /classify/{id}/label`); `get_reports` returns `id`/`category_id`, includes uncategorized rows, and supports `uncategorized_only`/`category_id` filters |
 | Per-month budgets | **NEW** (Session 43): `GET /dashboard/budget?month=YYYY-MM` windows spend by month; `BudgetTab` has a month selector. Retroactive — budgets stay global (no schema change), so past months compare against the current budget (caveat shown in UI). Response adds `month` + `available_months` |
-| Overview trend | **CHANGED** (Session 43): daily last-30-days area chart → monthly last-12-months line chart. `get_trends` gained `granularity=month`/`months` params (daily default preserved) |
+| Overview trend | **CHANGED** (Session 43): daily last-30-days area chart → monthly last-12-months line chart. `get_trends` gained `granularity=month`/`months` params (daily default preserved). Session 44 fixed labels: ticks month-only ("Jun"), tooltip "June 2026" — the old `year: '2-digit'` format ("Jun 26") read as a day; also fixed `new Date("YYYY-MM-01")` UTC parsing (month shifted back in UTC-negative timezones) via shared `parseYearMonth`/`formatMonthShort`/`formatMonthLong` in `utils/format.ts` |
+| Category colors | **NEW** (Session 44): user-selectable per category, consistent site-wide (pie chart, legend, badges in Budget/Review/Label/Reports/Categories). `categories.color` stores a palette KEY (12 keys, not hex) mapped to theme-aware light/dark values via `--cat-*` CSS vars; picker (popover swatch grid with hex codes) in the Categories tab; taken colors disabled (UI + backend 400 + partial unique index). Hash fallback for unset categories. Pie now colors by category identity (was spend rank); folded ">5" bucket is neutral gray. Migration `20260709120000_add_category_color.sql` applied live |
+| Responsive layout | **FIXED** (Session 44): dashboard shell `max-w-7xl` (1280px) → fluid `max-w-[1800px]` with `2xl:px-12` gutters; left-aligned narrow caps removed from Budget/Savings/Action (now full width, Budget list `xl:grid-cols-2`); wizard steps (Upload/Label/Training) centered via `mx-auto`; Categories is a centered `max-w-4xl` card grid; Settings widened to `max-w-3xl`. No behavior change below `lg` — phone/tablet layouts untouched |
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
 | Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
 | Tests | 74 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet. Session 43 added `tests/test_retrain_index.py` (3 tests) and verified frontend via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 
 ## Session Log
+
+### Session 44 (2026-07-09) — Month labels, user-chosen category colors, responsive layout
+
+**Scope**: Three UX requests from live 1920×1080 use, on branch
+`claude/month-labels-category-colors-layout`.
+
+**1. "The 25th/26th on the monthly chart" wasn't a day — it was the year.** `formatMonth` used
+`{month:'short', year:'2-digit'}` → "Jun 26". Fix: shared `parseYearMonth`/`formatMonthShort`
+("Jun", axis ticks)/`formatMonthLong` ("June 2026", tooltip + Budget month selector) in
+`utils/format.ts`. `parseYearMonth` builds a LOCAL date from split parts — `new Date("YYYY-MM-01")`
+parses UTC and shifted labels back one month for UTC-negative viewers (latent bug, also fixed in
+BudgetTab).
+
+**2. User-selectable category colors, consistent site-wide.** Key design decision: store a palette
+KEY (`'violet'`), not a hex — each key maps to validated light/dark values via `--cat-*` CSS vars,
+keeping choices theme-aware and inside the design system. 12 keys (lime, violet, cyan, pink, amber,
+sky, emerald, rose, indigo, teal, orange, fuchsia), hexes validated with the dataviz palette
+validator (lightness band, chroma floor, contrast ≥3:1 per theme; residual close CVD pairs are
+mitigated by text labels on every colored element). Migration `20260709120000_add_category_color.sql`
+(nullable `categories.color` + CHECK + partial unique index per user) applied to live project
+`pxxqqffwummhkohnrvtz` AND committed. Backend: `ALLOWED_COLORS` + `_validate_color` (400 on unknown
+key or color taken by another category) in POST/PUT `/categories`. Frontend: pure
+`utils/categoryColors.ts` (palette, hash fallback, `toneForKey`/`chartColorForKey`) +
+`utils/useCategoryColors.ts` hook (name→key map off the shared `/categories/` cache; recolors
+site-wide on `invalidate('/categories')`). `Badge.categoryColor` is now the 12-key hash fallback
+(landing demos unchanged). New `CategoryColorPicker` (popover swatch grid, hex shown per active
+theme, taken swatches disabled with "In use", "Auto" clears) in a redesigned CategoriesTab card
+grid. StatsTab pie/legend now color by category IDENTITY (was spend rank — same category changed
+color month to month); the folded ">5 categories" bucket is `synthetic: true` and painted neutral
+gray so it can't impersonate a real category named "Other". Deliberate call: Budget progress BARS
+keep threshold status colors (green/amber/red = budget health); the adjacent badge carries identity.
+
+**3. Responsive layout.** Root causes from audit: dashboard shell capped at `max-w-7xl` (1280px,
+~640px dead on 1920) AND Planning/wizard tabs added 672–768px caps WITHOUT `mx-auto` (left-stuck).
+Fix: shell → `mx-auto w-full max-w-[1800px] px-4 sm:px-6 lg:px-8 2xl:px-12` (header, tab row, main,
+loading.tsx); Budget/Savings/Action drop inner caps (full width; Budget category list
+`xl:grid-cols-2`, Action items `xl:grid-cols-2`); Upload/Label/Training stay narrow but centered
+(`mx-auto max-w-2xl`; UploadWithIncomeTab now matches nested UploadTab width); Categories =
+centered `max-w-4xl` + `sm:grid-cols-2 xl:grid-cols-3` card grid; Settings `max-w-2xl`→`max-w-3xl`
++ `lg:px-8`. Only additive `xl:`/`2xl:` classes and removed caps — phone/tablet behavior unchanged.
+Also fixed loading.tsx skeleton chart grid `[2fr,1fr]` → `[3fr,2fr]` to match StatsTab.
+
+**Environment note**: Windows machine, no Node.js (MSI install needs an admin prompt; user said to
+skip Node-dependent steps). Palette validation ran via a portable Node extract before that request;
+`tsc`/`next build` verification delegated to Vercel CI on the PR. Backend verified via `py_compile`.
+
+**Deferred**: theme-reactive hex display in picker (shows active theme's hex at open time), palette
+keys beyond 12, coloring budget bars by category (rejected — bars encode status).
 
 ### Session 43 (2026-07-08) — Manual category editing, per-month budgets, monthly trend + retrain crash fix
 

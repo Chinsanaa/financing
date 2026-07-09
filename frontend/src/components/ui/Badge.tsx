@@ -1,18 +1,14 @@
 import { ReactNode } from 'react';
+import { hashCategoryKey, toneForKey } from '@/utils/categoryColors';
 
-/** Deterministic color for a category name so badges stay stable across renders. */
-const PALETTE = [
-  'text-accent-strong bg-accent/15',
-  'text-violet bg-violet/15',
-  'text-cyan bg-cyan/15',
-  'text-success bg-success/15',
-  'text-danger bg-danger/15',
-];
-
+/**
+ * Deterministic fallback tone for a category name (stable across renders).
+ * Components with access to the user's saved colors should prefer
+ * `useCategoryColors().toneFor(name)` — this hash is for static contexts
+ * (landing demos) and categories with no chosen color.
+ */
 export function categoryColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return PALETTE[Math.abs(hash) % PALETTE.length];
+  return toneForKey(hashCategoryKey(name));
 }
 
 export default function Badge({

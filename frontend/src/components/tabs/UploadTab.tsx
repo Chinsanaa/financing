@@ -106,7 +106,7 @@ export default function UploadTab() {
   };
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-6">
       <SectionHeader label="Transactions" title="Upload a statement" />
       <p className="-mt-4 text-sm text-muted">
         CSV or Excel exports from Alipay or WeChat. Both formats are detected automatically.

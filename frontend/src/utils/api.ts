@@ -89,6 +89,8 @@ export const api = {
   categories: {
     list: () => apiClient.get('/categories/'),
     create: (name: string) => apiClient.post('/categories/', { name }),
+    update: (id: string, data: { name?: string; color?: string | null }) =>
+      apiClient.put(`/categories/${id}`, data),
     delete: (id: string) => apiClient.delete(`/categories/${id}`),
   },
 

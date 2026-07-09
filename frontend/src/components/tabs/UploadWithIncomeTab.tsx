@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { Alert } from '@/components/ui';
 import UploadTab from './UploadTab';
+import { CURRENCY_SYMBOL } from '@/utils/format';
 
 export default function UploadWithIncomeTab() {
   const [income, setIncome] = useState<string>('');
@@ -54,7 +55,8 @@ export default function UploadWithIncomeTab() {
   };
 
   return (
-    <div className="space-y-6">
+    // Same width as the nested UploadTab so the income card and upload panel align.
+    <div className="mx-auto w-full max-w-2xl space-y-6">
       {/* Income Input Card */}
       <Card className="border border-accent-strong/20 bg-accent-strong/5 p-6">
         <div className="flex items-center gap-3 mb-4">
@@ -68,7 +70,7 @@ export default function UploadWithIncomeTab() {
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <label className="block text-sm font-medium text-ink mb-2">
-              Income Amount (¥)
+              Income Amount ({CURRENCY_SYMBOL})
             </label>
             <input
               type="number"

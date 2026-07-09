@@ -31,14 +31,14 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
 
   if (loading) {
     return (
-      <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
         <SkeletonRows rows={4} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <SectionHeader label="Planning" title="Action plan" />
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -54,7 +54,7 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 xl:grid-cols-2">
           {actions.map((action, idx) => {
             if (action.type === 'over_budget') {
               return (

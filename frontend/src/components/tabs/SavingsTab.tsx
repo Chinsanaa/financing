@@ -48,7 +48,7 @@ export default function SavingsTab() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-3">
           <SkeletonCard />
           <SkeletonCard />
@@ -60,7 +60,7 @@ export default function SavingsTab() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <SectionHeader label="Planning" title="Savings and anomalies" />
 
       {error && <Alert kind="error">{error}</Alert>}

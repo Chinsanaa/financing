@@ -7,11 +7,12 @@ import { useApi, invalidate } from '@/utils/useApi';
 import { Alert, ProgressBar } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Badge, { categoryColor } from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge';
+import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
-import { formatCurrencyWhole, formatNumber, CURRENCY_SYMBOL } from '@/utils/format';
+import { formatCurrencyWhole, formatNumber, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
 
 interface BudgetInfo {
   budget_config: {
@@ -26,13 +27,6 @@ interface BudgetInfo {
   }>;
   month: string; // resolved "YYYY-MM"
   available_months: string[]; // months with transactions, newest first
-}
-
-/* "YYYY-MM" -> e.g. "June 2026". */
-function monthLabel(ym: string): string {
-  const d = new Date(ym + '-01');
-  if (isNaN(d.getTime())) return ym;
-  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 interface Category {
@@ -54,6 +48,7 @@ export default function BudgetTab() {
     month ? `/dashboard/budget?month=${month}` : '/dashboard/budget'
   );
   const { data: categoriesData } = useApi<{ categories: Category[] }>('/categories/');
+  const { toneFor } = useCategoryColors();
 
   // Options for the selector: the resolved current month is always first, then
   // any other months that have transactions.
@@ -115,7 +110,7 @@ export default function BudgetTab() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
         <SkeletonCard />
         <SkeletonRows rows={5} />
       </div>
@@ -123,7 +118,7 @@ export default function BudgetTab() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <SectionHeader label="Planning" title="Budget and forecast" />
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -144,7 +139,7 @@ export default function BudgetTab() {
       <Card className="p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="section-label">
-            Budget by category — {selectedMonth ? monthLabel(selectedMonth) : 'this month'}
+            Budget by category — {selectedMonth ? formatMonthLong(selectedMonth) : 'this month'}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {!editing && monthOptions.length > 1 && (
@@ -155,7 +150,7 @@ export default function BudgetTab() {
               >
                 {monthOptions.map((m) => (
                   <option key={m} value={m}>
-                    {monthLabel(m)}
+                    {formatMonthLong(m)}
                   </option>
                 ))}
               </select>
@@ -185,7 +180,7 @@ export default function BudgetTab() {
             {categories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-3">
                 <div className="w-36 shrink-0">
-                  <Badge tone={categoryColor(cat.name)}>{cat.name}</Badge>
+                  <Badge tone={toneFor(cat.name)}>{cat.name}</Badge>
                 </div>
                 <input
                   type="number"
@@ -232,7 +227,7 @@ export default function BudgetTab() {
             description="Set monthly limits per category to see how you're tracking."
           />
         ) : (
-          <div className="space-y-5">
+          <div className="grid gap-x-10 gap-y-5 xl:grid-cols-2">
             {budget.category_budgets.map((cat) => {
               const percentage = cat.monthly_budget > 0
                 ? Math.round((cat.current_spend / cat.monthly_budget) * 100)
@@ -247,7 +242,7 @@ export default function BudgetTab() {
               return (
                 <div key={cat.category}>
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <Badge tone={categoryColor(cat.category)}>{cat.category}</Badge>
+                    <Badge tone={toneFor(cat.category)}>{cat.category}</Badge>
                     <p className={`text-sm font-semibold tabular-nums ${isOverBudget ? 'text-danger' : ''}`}>
                       {formatCurrencyWhole(cat.current_spend)} / {formatCurrencyWhole(cat.monthly_budget)}
                     </p>

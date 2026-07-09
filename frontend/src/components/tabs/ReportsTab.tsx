@@ -7,7 +7,8 @@ import { api } from '@/utils/api';
 import { Alert } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Badge, { categoryColor } from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge';
+import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole } from '@/utils/format';
@@ -71,6 +72,7 @@ export default function ReportsTab() {
   }`;
   const { data: reports, loading, error, setData, reload } = useApi<ReportsData>(query);
   const { data: cats } = useApi<{ categories: Category[] }>('/categories/');
+  const { toneFor } = useCategoryColors();
   const categories = cats?.categories || [];
 
   const totalPages = reports ? Math.max(1, Math.ceil(reports.total_count / PER_PAGE)) : 1;
@@ -277,7 +279,7 @@ export default function ReportsTab() {
                               Uncategorized
                             </span>
                           ) : (
-                            <Badge tone={categoryColor(txn.category)}>{txn.category}</Badge>
+                            <Badge tone={toneFor(txn.category)}>{txn.category}</Badge>
                           )}
                           {savingId === txn.id && (
                             <Check className="h-3 w-3 animate-pulse text-muted" />

@@ -40,3 +40,29 @@ export function formatCurrency(value: number, decimals = 2): string {
 export function formatCurrencyWhole(value: number): string {
   return formatCurrency(value, 0);
 }
+
+/**
+ * Parse a "YYYY-MM" month string as a LOCAL date. Never feed these to
+ * `new Date("YYYY-MM-01")`: date-only ISO strings parse as UTC midnight, so
+ * any viewer west of UTC sees the previous day — shifting every month label
+ * back by one month.
+ */
+export function parseYearMonth(ym: string): Date | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, 1);
+}
+
+/** "2026-06" -> "Jun" — for chart axis ticks. Month only: a 2-digit year
+ *  next to a month reads as a day-of-month ("Jun 26"). */
+export function formatMonthShort(ym: string): string {
+  const d = parseYearMonth(ym);
+  return d ? d.toLocaleDateString(undefined, { month: 'short' }) : ym;
+}
+
+/** "2026-06" -> "June 2026" — for tooltips and month selectors, where the
+ *  full year disambiguates month-only axis ticks. */
+export function formatMonthLong(ym: string): string {
+  const d = parseYearMonth(ym);
+  return d ? d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : ym;
+}

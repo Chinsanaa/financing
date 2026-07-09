@@ -90,7 +90,7 @@ export default function TrainingTab() {
     status === 'succeeded' ? 'success' : status === 'failed' ? 'danger' : 'accent';
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <SectionHeader label="Model" title="Training" />
       <p className="-mt-4 text-sm text-muted">
         Trains a fresh classifier on your labeled transactions, then re-classifies everything else.
