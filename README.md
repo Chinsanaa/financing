@@ -94,9 +94,12 @@ Guides: `docs/guides/START_LOCAL.md` (setup), `docs/guides/TEST_LOCAL.md`
 ```bash
 pip install -r requirements-dev.txt
 pytest tests/            # ML pipeline: parsing, routing, calibration, leakage guard
+
+cd backend && pip install -r requirements-dev.txt
+pytest tests/             # backend: JWT verification, cross-user isolation
 ```
 
-There is no automated backend/frontend test suite yet (open item); frontend is
+There is no automated frontend test suite yet (open item); frontend is
 verified with `npx tsc --noEmit && npm run build`.
 
 ## Repo layout
@@ -106,6 +109,8 @@ financing/
 ├── frontend/            # Next.js app (see frontend/README.md)
 ├── backend/             # FastAPI app (see backend/README.md)
 │   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings
+│   ├── auth_utils.py    # JWT verification against Supabase's JWKS
+│   ├── tests/           # JWT verification + cross-user isolation tests
 │   └── ml.py            # per-user model loading + bulk classification
 ├── src/                 # ML pipeline shared by backend + tests
 │   ├── parse.py         # Alipay/WeChat parsers → common schema
@@ -142,8 +147,10 @@ Full tree with explanations: `REPO_STRUCTURE.md`.
   commits); purging requires a `git filter-repo` rewrite + force-push.
 - Training runs in the backend threadpool — fine at small scale, should move
   to a real worker queue if user count grows.
-- No backend integration test suite (RLS violation / JWT tampering tests are
-  specified in `docs/SECURITY_AUDIT.md` but not implemented).
+- Real Postgres RLS policies are never exercised through the API (the backend
+  always uses the service-role key, which bypasses RLS) — only route-level
+  `user_id` scoping is tested today (`backend/tests/`). Testing RLS directly
+  would need a local/CLI Supabase stack hit with an anon key + real user JWT.
 
 ## License
 

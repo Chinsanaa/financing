@@ -63,23 +63,27 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 44): three UX changes shipped (see Session 44 log): clean month-only chart labels
-(the "Jun 26" 2-digit year read as a day-of-month), user-selectable category colors consistent
-site-wide (12-key design-system palette, picker in the Categories tab, migration applied live), and
-a responsive full-width layout (1280px cap → fluid max 1800px shell; left-stuck narrow tabs fixed).
-Session 43 features (inline editing, per-month budgets, monthly trend, retrain crash fix) are merged.
+Current (Session 45): resolved the "no backend integration test suite" open item, and along the way
+found and fixed a real JWT signature-verification gap (see Session 45 log). Session 44's three UX
+changes (month-only chart labels, user-chosen category colors, responsive layout) and Session 43's
+features remain merged/pending PR as before.
 
 Next:
-1. Push this branch and open a PR for the Session 44 changes; Vercel CI is the frontend
-   typecheck/build gate (no Node.js available on the local Windows machine this session).
-2. E2E on the live account at 1920×1080 + phone: chart ticks read "Jun" and tooltip "June 2026";
-   pick colors in Categories and confirm the pie/legend/badges recolor everywhere without reload;
-   confirm a taken color is disabled in the picker; confirm the dashboard fills the screen.
-3. Then: backend security test suite, monitoring, email rate limits, and git-history privacy scrub
-   (deferred to user decision). Still deferred: true per-month budget *history*, multi-currency,
-   `_available_months` → Postgres RPC.
+1. Push this branch (Session 45 + still-open Session 44 changes) and open a PR; Vercel CI is the
+   frontend typecheck/build gate, `pytest tests/ backend/tests/` is the Python gate.
+2. Manual smoke check of the JWT fix against a real Supabase project before deploy (log in via the
+   real frontend or curl, confirm a genuine token is still accepted) — a mistake in signature
+   verification would lock out every real user. Not done this session (no live credentials in this
+   environment).
+3. E2E on the live account at 1920×1080 + phone (still open from Session 44): chart ticks read "Jun"
+   and tooltip "June 2026"; pick colors in Categories and confirm recoloring; confirm the dashboard
+   fills the screen.
+4. Still deferred: git-history privacy scrub (user decision), real worker queue for training at scale
+   (user decision — not needed at current user count), true per-month budget *history*,
+   multi-currency, `_available_months` → Postgres RPC, real Postgres RLS-policy tests (would need a
+   local/CLI Supabase stack — out of scope for the API-level suite added this session).
 
-## Current State (Session 44, 2026-07-09)
+## Current State (Session 45, 2026-07-09)
 
 | Item | Status |
 |---|---|
@@ -107,10 +111,131 @@ Next:
 | Responsive layout | **FIXED** (Session 44): dashboard shell `max-w-7xl` (1280px) → fluid `max-w-[1800px]` with `2xl:px-12` gutters; left-aligned narrow caps removed from Budget/Savings/Action (now full width, Budget list `xl:grid-cols-2`); wizard steps (Upload/Label/Training) centered via `mx-auto`; Categories is a centered `max-w-4xl` card grid; Settings widened to `max-w-3xl`. No behavior change below `lg` — phone/tablet layouts untouched |
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
 | Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
-| Tests | 74 passing (`pytest tests/`) — src/ pipeline only; no backend/frontend suites yet. Session 43 added `tests/test_retrain_index.py` (3 tests) and verified frontend via `tsc --noEmit` + `next build` |
+| JWT verification | **FIXED** (Session 45): `AuthMiddleware` verified `sub`/`aud` claims but never the ES256 signature itself (`verify_signature: False`, a Session 40 leftover) — any self-crafted token with an arbitrary `sub` was accepted as a valid session. Now verifies against Supabase's real JWKS via `backend/auth_utils.py::decode_supabase_jwt` (`jwt.PyJWKClient`); unused `supabase_jwt_secret` config removed |
+| Tests | 74 (`pytest tests/`, src/ pipeline) + 17 new (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings via an in-memory fake Supabase client) = 91 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 
 ## Session Log
+
+### Session 45 (2026-07-09) — Real JWT signature verification + backend integration test suite
+
+**Scope**: Resolve the readme's "no backend integration test suite" open item
+(RLS-violation / JWT-tampering tests specified in `docs/SECURITY_AUDIT.md` §11
+but never implemented). Branch `claude/month-labels-category-colors-layout`.
+The other two open items (git-history privacy scrub, worker queue for
+training) were explicitly discussed with the user and left deferred — both
+are pre-existing, intentional decisions, not touched this session.
+
+**A real bug surfaced while investigating, not just a test gap.**
+`backend/main.py`'s `AuthMiddleware` decoded JWTs with
+`jwt.decode(token, options={"verify_signature": False}, algorithms=["ES256"])`
+— a Session 40 fix for a "100% of requests return 401" outage (the code was
+decoding ES256 tokens as HS256). That fix solved the outage but disabled
+signature verification entirely instead of switching to correct ES256
+verification, so it only ever checked the `sub`/`aud` claims. **Any
+self-crafted JWT with an arbitrary `sub` and `aud=authenticated` was accepted
+as a valid session for that user — full account impersonation, no real
+signature needed.** Flagged to the user explicitly (not silently fixed, per
+`CLAUDE.md`'s "ask before big decisions" — this touches production auth);
+user confirmed: fix it properly, then cover it with tests, since a test suite
+that only pins the broken behavior as "expected" would be worse than none.
+
+**The fix** (`backend/auth_utils.py`, new): Supabase signs tokens with ES256
+against a rotating key published via JWKS
+(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`). `decode_supabase_jwt()` uses
+PyJWT's built-in `jwt.PyJWKClient` (needs the `cryptography` package, added
+to `backend/requirements.txt` — a runtime dep, not test-only) to fetch the
+real signing key by the token's `kid` and verify the signature for real.
+Kept in its own module (not inlined in `main.py`) specifically so tests can
+monkeypatch the key-lookup step and verify against a local test keypair
+instead of hitting live Supabase. `main.py`'s except clause widened from
+`jwt.InvalidTokenError` to `jwt.PyJWTError` — `PyJWKClientError` (unrecognized
+`kid`) is a sibling, not a subclass, of `InvalidTokenError`, so the narrower
+except would have let a bad-`kid` token escape as an unhandled 500 instead of
+401. `config.py`'s `supabase_jwt_secret` field (already dead — a leftover
+from the earlier wrong HS256 assumption, never referenced anywhere) removed;
+same var scrubbed from `backend/.env.example`, `backend/README.md`,
+`docs/guides/DEPLOYMENT.md`, `docs/guides/TEST_LOCAL.md`.
+
+**The test suite** (`backend/tests/`, new — no backend test infra existed
+before this):
+- `fake_supabase.py`: an in-memory fake of the Supabase query-builder chain
+  that **actually filters** by the `.eq()`/`.neq()`/`.is_()` calls it
+  records, deliberately not a `MagicMock`. The whole point of an isolation
+  test is "did the route really filter by `user_id`?" — a mock returning
+  canned data regardless of the filter chain would make that untestable
+  (delete the real filter from a route and every test would still pass).
+  Each route module binds `supabase_client` by name at import
+  (`from config import supabase_client`), so the `fake_db` fixture in
+  `conftest.py` patches the attribute on each route module directly, not on
+  `config` — patching `config.supabase_client` alone would do nothing to
+  already-imported route modules.
+- `conftest.py`: mirrors `backend/Dockerfile`'s `PYTHONPATH=/app:/app/src`
+  sys.path setup; sets dummy `SUPABASE_*` env vars before anything imports
+  `config`/`main` (env vars safely shadow a real local `.env`, so no real
+  service-role key can leak into a test run); generates a local ES256
+  keypair (`ec_keypair`) and a `patch_jwks` fixture that makes
+  `auth_utils._get_jwk_client` trust it instead of the network; `make_token`
+  mints test JWTs (optionally signed by a *different*, "attacker" keypair).
+- `test_auth.py`: unit tests on `decode_supabase_jwt` (valid, expired,
+  tampered signature, wrong audience, forged HS256 token rejected by the
+  `algorithms=["ES256"]` allowlist) plus
+  `test_decode_token_signed_by_wrong_keypair_rejected` — the direct
+  regression test for the impersonation bug: a token signed by an
+  attacker-generated keypair with an arbitrary `sub`, which the pre-fix code
+  accepted outright. **Verified this test (and its middleware-level
+  counterpart) actually fails against the pre-fix code**: temporarily
+  reverted `auth_utils.py` to the old `verify_signature: False` behavior, 3
+  tests failed as expected, then restored the fix and reconfirmed all 17
+  backend tests pass — proof the tests catch the real bug, not just that
+  some verification code path exists. Also covers middleware-level 401s
+  (missing header, malformed bearer, expired/tampered/forged tokens) and that
+  `/health` still bypasses auth.
+- `test_isolation.py`: two-user isolation tests using `GET`/`PUT
+  /categories/` (not `/dashboard/reports` — that route pulls in a
+  translation pipeline that can call an external API, so the deterministic,
+  network-free tests target categories instead, which use the same
+  `.eq("user_id", ...)` pattern) and `DELETE /settings/account`. Confirms
+  User B never sees/edits User A's categories and account deletion only ever
+  touches the caller's own id.
+- Explicitly out of scope (flagged, not silently dropped): real Postgres RLS
+  policy testing — the backend's service-role key bypasses RLS entirely, so
+  testing RLS itself would need a local/CLI Supabase stack hit with an anon
+  key + real user JWT, separate infrastructure not built this session. Also
+  out of scope: the audit's rate-limit and upload-validation test specs (not
+  part of this open item).
+- New `backend/requirements-dev.txt` (`-r requirements.txt` + `pytest` +
+  `httpx` for `TestClient`), mirroring the existing root
+  `requirements-dev.txt` convention. Run with
+  `cd backend && pip install -r requirements-dev.txt && pytest tests/`.
+
+**Doc correction**: `docs/SECURITY_AUDIT.md` §11's original spec described
+routes that don't exist (`GET /transactions?user_id=`, `PATCH
+/categories/<id>`) and an expected result ("RLS blocks at Postgres") that's
+wrong given the service-role key point above. Corrected to match the real
+API and the tests actually written.
+
+**Environment note**: local Python is 3.14 (backend targets 3.11 in
+Docker/Railway); installing `backend/requirements.txt`'s exact pins failed
+(old pinned `numpy==1.26.2` has no prebuilt wheel for 3.14 and needs a C
+compiler this machine doesn't have). Installed the same packages unpinned
+instead — pip resolved compatible versions against the numpy/pandas already
+present from the root ML environment, no source builds needed. Genuinely new
+packages (`cryptography`, `PyJWT`, `fastapi`, `supabase`, `pytest`, etc.)
+installed cleanly. This is a known constraint of this Windows dev machine,
+not a code issue — Docker/Railway builds against the exact pins.
+
+**Verified**: `pytest tests/ backend/tests/` → 91 passing (74 pre-existing +
+17 new); `py_compile` clean on all changed backend files; impersonation
+regression test manually confirmed to fail pre-fix / pass post-fix (see
+above). **Not verified**: a real Supabase JWT round-trip against a live
+project (no credentials available in this environment) — flagged as a
+pre-deploy manual smoke check, since a mistake in signature verification
+would lock out every real user.
+
+**Still open**: manual live-Supabase smoke check before deploy (see Next
+Suggested Step); Session 44's live E2E test; git-history privacy scrub and
+training worker queue (both user-deferred); real Postgres RLS-policy tests.
 
 ### Session 44 (2026-07-09) — Month labels, user-chosen category colors, responsive layout
 

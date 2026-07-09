@@ -12,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 
 from config import settings
 from errors import logger
+from auth_utils import decode_supabase_jwt
 
 # Initialize routers (will be imported below)
 from routes import auth, categories, uploads, training, classify, dashboard, settings as settings_router
@@ -53,7 +54,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Extract and validate JWT from Authorization header.
 
     Populates request.state.user_id if valid, otherwise returns 401.
-    Uses Supabase JWT_SECRET to decode; every route handler additionally
+    Verifies the ES256 signature against Supabase's JWKS (see
+    auth_utils.decode_supabase_jwt); every route handler additionally
     scopes queries by user_id (the service-role client bypasses RLS).
     """
 
@@ -75,18 +77,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]
             try:
-                # Supabase JWTs are signed with ES256 (ECDSA), not HS256.
-                # Validate without verification (Railway/Supabase handles token security).
-                payload = jwt.decode(
-                    token,
-                    options={"verify_signature": False},
-                    algorithms=["ES256"],
-                )
+                # Supabase JWTs are signed with ES256 (ECDSA) against a
+                # rotating key published via JWKS. Verify the real
+                # signature (see auth_utils.py) rather than trusting the
+                # claims blindly.
+                payload = decode_supabase_jwt(token)
                 user_id = payload.get("sub")
                 # Verify the expected claims are present
                 if not user_id or payload.get("aud") != "authenticated":
                     raise jwt.InvalidTokenError("Missing required claims")
-            except (jwt.InvalidTokenError, KeyError) as e:
+            except (jwt.PyJWTError, KeyError) as e:
                 logger.warning(f"Token validation failed: {e}")
                 return JSONResponse(
                     {"detail": "Invalid or expired token"},

@@ -79,7 +79,6 @@ In Railway dashboard, go to **Variables**:
 SUPABASE_URL=https://[PROJECT_ID].supabase.co
 SUPABASE_ANON_KEY=[your_anon_key]
 SUPABASE_SERVICE_ROLE_KEY=[your_service_role_key_secret!]
-SUPABASE_JWT_SECRET=[your_jwt_secret]
 ENVIRONMENT=production
 ```
 
@@ -185,9 +184,10 @@ If error: check backend logs. Common issues:
 ## Troubleshooting
 
 ### "401 Unauthorized" on API calls
-- **Cause**: JWT token missing or invalid
+- **Cause**: JWT token missing, expired, or fails signature verification
 - **Fix**: Check `Authorization` header in API requests (DevTools → Network)
-- **Fix**: Verify `SUPABASE_JWT_SECRET` matches Supabase dashboard
+- **Fix**: Confirm `SUPABASE_URL` is correct — the backend verifies tokens against
+  that project's JWKS endpoint (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
 
 ### "Failed to upload artifacts to Supabase Storage"
 - **Cause**: Storage bucket doesn't exist or RLS policy incorrect
