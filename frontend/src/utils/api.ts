@@ -62,10 +62,10 @@ export const api = {
 
   // Typed helpers for the real backend routes
   uploads: {
-    upload: (file: File) => {
+    upload: (file: File, opts?: { onUploadProgress?: (e: any) => void }) => {
       const formData = new FormData();
       formData.append('file', file);
-      return apiClient.post('/uploads/', formData);
+      return apiClient.post('/uploads/', formData, opts);
     },
     delete: (uploadId: string) =>
       apiClient.delete(`/uploads/${uploadId}`),

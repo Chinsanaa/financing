@@ -41,7 +41,13 @@ require `Authorization: Bearer <supabase access token>`.
 - `POST /` — multipart CSV/XLSX (Alipay or WeChat), validates extension /
   10MB / 50k rows / header sniffing, stores the original in the `uploads`
   bucket under `{user_id}/…`, inserts parsed transactions, then classifies
-  them in the background
+  them in the background. Still one file per request — the frontend's
+  multi-file picker just calls this endpoint once per file, sequentially
+  (not in parallel: `dedup_new_rows`' overlapping-date-range check depends on
+  each file's transactions being committed before the next one's dedup query
+  runs). Background classification is coalesced per user
+  (`ml.request_classification`) so an N-file batch runs at most two
+  classification passes, not N.
 - `GET /{upload_id}` · `GET /`
 
 **Training** (`/training`)

@@ -1,7 +1,9 @@
 # Financing — Multi-Tenant Transaction Classifier
 
 A full-stack app that categorizes personal spending from Alipay/WeChat exports:
-upload a CSV/Excel export → transactions are auto-categorized (trusted merchant
+drop up to 10 CSV/Excel statements at once (they upload one at a time, each
+reporting its own result — a re-upload of a file you already imported is
+skipped, not failed) → transactions are auto-categorized (trusted merchant
 rules first, ML suggestions for the rest) → review the leftovers → dashboards
 show where the money went.
 

@@ -28,6 +28,8 @@ class UploadResponse(BaseModel):
     file_type: str
     status: str
     message: str
+    rows_imported: int
+    rows_skipped: int
 
 
 @router.post("/")
@@ -134,6 +136,8 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
             "file_type": file_type,
             "status": "parsed",
             "message": message,
+            "rows_imported": len(df_new),
+            "rows_skipped": skipped,
         }
 
     except ValueError as e:
@@ -157,17 +161,15 @@ def schedule_classification(request: Request, user_id: str) -> None:
     """Kick off background classification for a user's unlabeled rows.
 
     Imported lazily so uploads keep working even if the ML layer has an
-    import-time problem; classification then simply doesn't run.
+    import-time problem; classification then simply doesn't run. Delegates
+    to `ml.request_classification`, which runs at most one worker thread per
+    user — a multi-file upload batch calls this once per file, and without
+    coalescing that would mean N threads each rescanning the user's entire
+    needs_review set.
     """
     try:
-        from ml import classify_user_transactions
-        import threading
-        # A daemon thread (not BackgroundTasks) because this runs after the
-        # response and may take seconds on large uploads; the sync supabase
-        # client would otherwise occupy the request threadpool slot.
-        threading.Thread(
-            target=classify_user_transactions, args=(user_id,), daemon=True
-        ).start()
+        from ml import request_classification
+        request_classification(user_id)
     except Exception as e:
         logger.warning("Could not schedule classification for %s: %s", user_id, e)
 

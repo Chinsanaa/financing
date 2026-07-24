@@ -19,8 +19,11 @@ for _p in (str(BACKEND_DIR), str(REPO_ROOT), str(REPO_ROOT / "src")):
         sys.path.insert(0, _p)
 
 os.environ.setdefault("SUPABASE_URL", "https://test-project.supabase.co")
-os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
-os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+# supabase-py's create_client validates the key looks JWT-shaped
+# (dot-separated segments) before ever making a network call, so the dummy
+# values need three segments even though nothing here is a real credential.
+os.environ.setdefault("SUPABASE_ANON_KEY", "test.anon.key")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test.service.role.key")
 os.environ.setdefault("ENVIRONMENT", "test")
 
 import jwt
@@ -113,9 +116,11 @@ def fake_db(monkeypatch):
     import routes.categories as categories_module
     import routes.dashboard as dashboard_module
     import routes.settings as settings_module
+    import routes.uploads as uploads_module
 
     monkeypatch.setattr(categories_module, "supabase_client", fake)
     monkeypatch.setattr(dashboard_module, "supabase_client", fake)
     monkeypatch.setattr(settings_module, "supabase_client", fake)
+    monkeypatch.setattr(uploads_module, "supabase_client", fake)
 
     return fake
