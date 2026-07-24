@@ -63,27 +63,36 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 45): resolved the "no backend integration test suite" open item, and along the way
-found and fixed a real JWT signature-verification gap (see Session 45 log). Session 44's three UX
-changes (month-only chart labels, user-chosen category colors, responsive layout) and Session 43's
-features remain merged/pending PR as before.
+Current (Session 46): multi-file simultaneous upload, built on branch
+`claude/multi-file-simultaneous-uploads-6a59q7` (see Session 46 log). Session
+45's JWT fix + backend test suite, and Session 44's three UX changes, remain
+merged/pending PR as before.
 
 Next:
-1. Push this branch (Session 45 + still-open Session 44 changes) and open a PR; Vercel CI is the
-   frontend typecheck/build gate, `pytest tests/ backend/tests/` is the Python gate.
-2. Manual smoke check of the JWT fix against a real Supabase project before deploy (log in via the
-   real frontend or curl, confirm a genuine token is still accepted) — a mistake in signature
-   verification would lock out every real user. Not done this session (no live credentials in this
-   environment).
-3. E2E on the live account at 1920×1080 + phone (still open from Session 44): chart ticks read "Jun"
-   and tooltip "June 2026"; pick colors in Categories and confirm recoloring; confirm the dashboard
-   fills the screen.
-4. Still deferred: git-history privacy scrub (user decision), real worker queue for training at scale
-   (user decision — not needed at current user count), true per-month budget *history*,
-   multi-currency, `_available_months` → Postgres RPC, real Postgres RLS-policy tests (would need a
-   local/CLI Supabase stack — out of scope for the API-level suite added this session).
+1. Push this branch and open a PR; Vercel CI is the frontend typecheck/build
+   gate, `pytest tests/ backend/tests/` is the Python gate (101 passing).
+2. Manual E2E of the upload queue against a live account (no live credentials
+   in this environment, so not done this session) — the checklist is in the
+   plan file this session worked from: drop several files at once, re-upload
+   one to see the neutral "Skipped" state, drop an oversized/wrong-extension
+   file to confirm client-side rejection, upload two files with overlapping
+   dates and confirm no double-counted transactions, hit the 10-file cap,
+   use "Stop after this file" mid-batch.
+3. Still open from Session 45: manual smoke check of the JWT fix against a
+   real Supabase project before deploy.
+4. E2E on the live account at 1920×1080 + phone (still open from Session
+   44): chart ticks read "Jun" and tooltip "June 2026"; pick colors in
+   Categories and confirm recoloring; confirm the dashboard fills the
+   screen.
+5. Still deferred: git-history privacy scrub (user decision), real worker
+   queue for training at scale (user decision — not needed at current user
+   count), true per-month budget *history*, multi-currency,
+   `_available_months` → Postgres RPC, real Postgres RLS-policy tests (would
+   need a local/CLI Supabase stack), the `detect_source` ragged-CSV
+   fragility found this session (Session 46 log), no ESLint config in
+   `frontend/`.
 
-## Current State (Session 45, 2026-07-09)
+## Current State (Session 46, 2026-07-24)
 
 | Item | Status |
 |---|---|
@@ -91,10 +100,10 @@ Next:
 | Personal transaction data in repo | Removed from working tree (Session 19); **still in git history** — open item |
 | Merchant rules | 554 global seeds in `merchant_rules` (user_id NULL) + per-user rows; source patterns in `src/merchant_categories.py`; `src/merchant_display.py` restored with 450-line curated map + translator fallback |
 | Category taxonomy | **FIXED** (Session 42): signup trigger + live account now create exactly `ML_CATEGORIES` (Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Other) — matches what all 554 merchant rules target and what the classifier is trained on |
-| File upload (Alipay/WeChat) | **FIXED** (Session 40 + 41): JWT validation, session persistence, file format detection, Chinese column mapping, early-insert, row-level dedup, 409 duplicate blocking — **RELEASE-READY** |
+| File upload (Alipay/WeChat) | **FIXED** (Session 40 + 41): JWT validation, session persistence, file format detection, Chinese column mapping, early-insert, row-level dedup, 409 duplicate blocking — **RELEASE-READY**. **NEW** (Session 46): multi-file — `UploadTab` queues up to 10 files and uploads them one after another to the unchanged `POST /uploads/`; each file shows its own outcome (imported / skipped as duplicate / failed) and a mid-batch failure never stops the rest. Sequential by design, not just UX: `dedup_new_rows` reads-then-writes with no unique index backing it, so file N's dedup query only sees file N−1's rows because it waits for that request to commit — running uploads concurrently would let overlapping date ranges double-import |
 | Schema | **FIXED** (Session 41 + 42): 3 migrations repair live divergence (file_type enum→text, per-user file_hash unique, ON DELETE CASCADE); Session 42 adds the category-taxonomy trigger fix — all idempotent against both live and fresh apply |
 | Dashboard aggregates | **FIXED** (Session 41): 1000-row silent cap → `fetch_all()` pagination (applied to 7 call sites); month boundaries → `_now_cn()` China-clock timezone |
-| Classification | **FIXED** (Session 41 + 42): `backend/ml.py` Path import restored; runs automatically after upload (rules-only until a model exists) and after training. Session 42 fixed rules silently mapping to "Other" (taxonomy mismatch — see below) |
+| Classification | **FIXED** (Session 41 + 42): `backend/ml.py` Path import restored; runs automatically after upload (rules-only until a model exists) and after training. Session 42 fixed rules silently mapping to "Other" (taxonomy mismatch — see below). **FIXED** (Session 46): a multi-file batch used to spawn one untracked daemon thread per upload, each rescanning the user's entire `needs_review` set — N files meant N racing full-table passes. `ml.request_classification` now runs at most one worker thread per user (a request that arrives mid-pass just flags a rerun instead of starting a second thread); `routes/uploads.py` and the post-training re-classify in `routes/training.py` both delegate to it |
 | ML models | TF-IDF + semantic per-user via `POST /training/retrain` → `src/retrain.py`; artifacts in Storage at `{user_id}/models/{run_id}/` |
 | Graduated trust | Unchanged (Session 31 design): auto-apply only on calibrated two-model agreement above a data-derived threshold |
 | Income/Budget/Savings | **FIXED** (Session 41): unified to single source `profiles.monthly_income`; new PATCH /settings/budget + PUT /dashboard/budget/categories endpoints |
@@ -112,10 +121,124 @@ Next:
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
 | Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
 | JWT verification | **FIXED** (Session 45): `AuthMiddleware` verified `sub`/`aud` claims but never the ES256 signature itself (`verify_signature: False`, a Session 40 leftover) — any self-crafted token with an arbitrary `sub` was accepted as a valid session. Now verifies against Supabase's real JWKS via `backend/auth_utils.py::decode_supabase_jwt` (`jwt.PyJWKClient`); unused `supabase_jwt_secret` config removed |
-| Tests | 74 (`pytest tests/`, src/ pipeline) + 17 new (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings via an in-memory fake Supabase client) = 91 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
+| Tests | 74 (`pytest tests/`, src/ pipeline) + 27 (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings, classification-coalescer threading tests, and — new this session — `routes/uploads.py` coverage: extension rejection, duplicate-hash 409, a failing file not blocking its neighbors, and sequential overlapping-date-range dedup) = 101 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 
 ## Session Log
+
+### Session 46 (2026-07-24) — Multi-file simultaneous upload
+
+**Scope**: user asked to upload multiple statement files at once instead of
+one-at-a-time. Explored the existing single-file flow first
+(`UploadTab.tsx` held a scalar `file: File | null`; `POST /uploads/` takes
+exactly one `UploadFile`), then confirmed three design decisions with the
+user before building: files upload **sequentially** (not in parallel, no new
+batch endpoint), a failing file **does not stop the queue** (each file gets
+its own outcome; a 409 duplicate renders as a neutral "skipped" state, not an
+error), and the queue is **capped at 10 files**.
+
+**Why sequential, not parallel — this drove the whole design.**
+`dedup_new_rows` (`backend/routes/uploads.py`) is a read-then-write: it
+queries existing transactions in the new file's `[min, max]` timestamp
+window, then inserts what's new. There is no unique index on `transactions`
+backing this up. Two files with overlapping date ranges uploaded
+*concurrently* would both read the same "before" state and both insert the
+overlap — silent duplicate transactions. Sequential uploads make this
+correct for free: file N's request only starts after file N−1's rows are
+committed, so file N's dedup query sees them. This is why the plan added
+**no migration, no unique index, and no new batch endpoint** — every existing
+per-file validation/hash/dedup/insert step in `POST /uploads/` already works
+correctly under this design.
+
+**Backend change (the one thing that did need fixing):** every upload used
+to fire its own untracked daemon thread (`schedule_classification`) running
+`classify_user_transactions`, which rescans the user's *entire*
+`needs_review` set. A 10-file batch meant 10 threads racing over nearly
+identical row sets. Added `ml.request_classification` / `_classification_worker`:
+a per-user coalescing guard (module-level `_running_users`/`_rerun_users`
+sets + a lock) so at most one worker thread runs per user — a request that
+arrives while a worker is already running just sets a rerun flag instead of
+spawning a second thread, and the worker loops once more before exiting.
+`routes/uploads.py::schedule_classification` and the post-training
+re-classify call in `routes/training.py` both now delegate to it. Also added
+two additive response fields, `rows_imported`/`rows_skipped`, so the frontend
+can build an honest aggregate summary without parsing English out of the
+`message` string.
+
+**Frontend (`UploadTab.tsx`, rewritten; new `UploadQueueItem.tsx`):** state
+changed from a single `file` to a `queue: QueuedFile[]`. `addFiles()` (shared
+by both the drop handler and the file input, which now has `multiple`)
+validates extension/size client-side, dedupes by name+size+lastModified, and
+enforces the 10-file cap, reporting every rejection in one message. `runQueue()`
+uploads one file at a time via a sequential loop, patching each item's status
+by id (same by-id-patch pattern as `TrainingTab`'s polling) — never breaking
+the loop on a failure. A 409 is detected by `status === 409`, never by
+string-matching the error text, and renders as a gray "Skipped" badge, not
+red. A "Stop after this file" control sets a ref the loop checks between
+files (the current upload always finishes — no `AbortController`: the
+server has no rollback path, so aborting mid-request would leave transactions
+landed while the UI claimed "cancelled", which is worse than waiting).
+
+**Progress UI is deliberately two-phase, not a single byte-progress bar.**
+`onUploadProgress` drives a real percentage while bytes are in flight, but
+that finishes long before the server's parse/dedup/insert work does — a bar
+pinned at 100% while the request is still open would be a worse signal than
+none. Once bytes finish, the item flips to a "Processing" spinner state
+instead.
+
+**Tests** (`backend/tests/test_classification_coalescer.py`,
+`backend/tests/test_uploads.py` — the upload endpoint had zero test coverage
+before this session): the coalescer suite uses a blocking-counter stub to
+prove concurrent `request_classification` calls collapse to at most one
+rerun, that a crash doesn't wedge a user out permanently, and that distinct
+users don't interfere. The uploads suite hits the real endpoint through
+`TestClient`: rejects bad extensions, 409s on duplicate content without a
+second `uploads` row, proves a 409 in the middle of a batch doesn't block the
+file after it, marks unparseable files `failed` with `file_hash` cleared, and
+— the test that pins the sequential-ordering guarantee — uploads two files
+with an overlapping transaction and confirms the second only imports what's
+new.
+
+**Three test-infrastructure bugs found and fixed along the way** (all
+pre-existing, none touched by prior sessions since `backend/tests/` never
+exercised these paths before): (1) the dummy `SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY`
+values in `conftest.py` weren't JWT-shaped, so a current `supabase-py`'s
+`create_client` rejected them before any test could even collect — fixed by
+making the dummies dot-separated. (2) `fake_supabase.py`'s `FakeBucket`
+defines a method literally named `list`, which shadowed the builtin `list`
+during class-body evaluation of the next method's `paths: list[str]`
+annotation, raising `TypeError: 'function' object is not subscriptable` the
+moment the module was imported — dropped the redundant annotation. (3) the
+fake's `insert()` didn't default `created_at`, unlike the real Postgres
+schema's `DEFAULT now()`, so `check_duplicate_upload`'s "already uploaded on
+{date}" message crashed reading a missing key — the fake now defaults it the
+same way it already defaults `id`. Extended `fake_db` (`conftest.py`) to also
+patch `routes.uploads`, and added `gte`/`lte` filter support plus list-insert
+support to the fake query builder, both required by `dedup_new_rows`/`insert_transactions`.
+
+**Also found, flagged, not fixed (out of scope for this feature):**
+`routes/uploads.py::detect_source` → `_read_headers` reads a CSV with
+`pd.read_csv(header=None)` to sniff column headers; a genuine Alipay export's
+two-line title/separator preamble (1 field each) ahead of the real 7-column
+header row makes this raise a `ParserError` (ragged CSV), silently swallowed,
+falling back to treating just the first line as "the header" — which would
+never detect as Alipay. Test fixtures in `test_uploads.py` sidestep this by
+omitting the preamble rather than fixing it; noted in a code comment there.
+
+**Verified**: `pytest tests/ backend/tests/` → 101 passing (91 prior + 10
+new). Frontend: `npx tsc --noEmit` clean, `npm run build` succeeds. `next
+lint` couldn't run (no ESLint config exists in this repo — a pre-existing
+gap, prompts interactively for setup; not something this session's scope
+covers). Not verified: a real end-to-end multi-file drag-and-drop against a
+live Supabase project (no live credentials in this environment) — the
+scenarios worth checking manually are listed as a checklist in the plan file
+this session worked from.
+
+**Open**: no ESLint config in `frontend/` (pre-existing, unrelated to this
+feature); the `detect_source` ragged-CSV fragility above; wizard Next/Back
+isn't disabled during an active upload batch (noted as a nice-to-have,
+skipped to avoid prop-plumbing through `UploadWithIncomeTab`/`TransactionsModelTab`
+for a small UX gain).
 
 ### Session 45 (2026-07-09) — Real JWT signature verification + backend integration test suite
 

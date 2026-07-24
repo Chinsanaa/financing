@@ -215,9 +215,9 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
         # A fresh model exists: re-classify this user's still-unlabeled rows
         # so suggestions show up without another upload.
         try:
-            from ml import invalidate_user_bundle, classify_user_transactions
+            from ml import invalidate_user_bundle, request_classification
             invalidate_user_bundle(user_id)
-            classify_user_transactions(user_id)
+            request_classification(user_id)
         except Exception as e:
             logger.warning("[Training %s] Post-training classification failed: %s",
                            model_run_id, e)

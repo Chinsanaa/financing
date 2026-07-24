@@ -55,6 +55,71 @@ def invalidate_user_bundle(user_id: str) -> None:
         _bundle_cache.pop(user_id, None)
 
 
+# --- Classification scheduling: at most one worker thread per user ---
+#
+# A multi-file upload batch fires one schedule request per file. Each one
+# used to spawn its own daemon thread rescanning the user's *entire*
+# needs_review set, so N files meant N redundant full-table passes racing
+# each other. Instead: if a worker is already running for this user, just
+# flag that it should run once more when it finishes, rather than starting
+# a second thread. This coalesces per *process* — if the backend ever runs
+# multiple worker processes, each could hold one thread — but it's still
+# strictly better than one thread per file, and the underlying updates are
+# idempotent (same input always produces the same label), so an occasional
+# extra concurrent pass is wasteful, not corrupting.
+_classify_lock = threading.Lock()
+_running_users: set = set()   # users with a live classification worker
+_rerun_users: set = set()     # users who asked again while that worker ran
+
+
+def request_classification(user_id: str) -> bool:
+    """Ask for `user_id`'s pending rows to be classified in the background.
+
+    Returns True if this call started a new worker thread, False if a
+    worker was already running (in which case it will simply loop once
+    more before exiting, and will see this request's rows because uploads
+    commit their transactions before calling this).
+    """
+    with _classify_lock:
+        if user_id in _running_users:
+            _rerun_users.add(user_id)
+            return False
+        _running_users.add(user_id)
+
+    try:
+        threading.Thread(
+            target=_classification_worker, args=(user_id,),
+            name=f"classify-{user_id[:8]}", daemon=True,
+        ).start()
+    except Exception:
+        # Thread failed to start — don't leave the user permanently
+        # locked out of classification.
+        with _classify_lock:
+            _running_users.discard(user_id)
+            _rerun_users.discard(user_id)
+        raise
+    return True
+
+
+def _classification_worker(user_id: str) -> None:
+    try:
+        while True:
+            classify_user_transactions(user_id)  # never raises; catches internally
+            with _classify_lock:
+                if user_id in _rerun_users:
+                    _rerun_users.discard(user_id)
+                    continue
+                _running_users.discard(user_id)
+                return
+    except BaseException:
+        # Defensive: a crash here must not wedge this user out of
+        # classification forever.
+        with _classify_lock:
+            _running_users.discard(user_id)
+            _rerun_users.discard(user_id)
+        raise
+
+
 def _latest_succeeded_run(user_id: str) -> Optional[dict]:
     resp = (
         supabase_client.table("model_runs")

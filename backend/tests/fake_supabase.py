@@ -12,6 +12,7 @@ Only supports the operations exercised by backend/tests/*.py. Extend as
 more routes get covered.
 """
 import itertools
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 
@@ -47,6 +48,14 @@ class FakeQueryBuilder:
         self._filters.append(("is", col, val))
         return self
 
+    def gte(self, col: str, val: Any):
+        self._filters.append(("gte", col, val))
+        return self
+
+    def lte(self, col: str, val: Any):
+        self._filters.append(("lte", col, val))
+        return self
+
     def order(self, col: str, desc: bool = False):
         return self
 
@@ -57,7 +66,8 @@ class FakeQueryBuilder:
         return self
 
     # --- mutations ---
-    def insert(self, row: dict):
+    def insert(self, row):
+        """`row` is a single dict, or a list of dicts (bulk insert)."""
         self._op = "insert"
         self._payload = row
         return self
@@ -89,6 +99,10 @@ class FakeQueryBuilder:
                 return False
             if kind == "is" and val == "null" and row.get(col) is not None:
                 return False
+            if kind == "gte" and not (row.get(col) is not None and row.get(col) >= val):
+                return False
+            if kind == "lte" and not (row.get(col) is not None and row.get(col) <= val):
+                return False
         return True
 
 
@@ -109,10 +123,18 @@ class FakeTable:
             return FakeResponse(data=matched, count=count)
 
         if qb._op == "insert":
-            row = dict(qb._payload)
-            row.setdefault("id", f"{self.name}-{next(self._id_counter)}")
-            self.rows.append(row)
-            return FakeResponse(data=[row])
+            payload = qb._payload if isinstance(qb._payload, list) else [qb._payload]
+            inserted = []
+            for item in payload:
+                row = dict(item)
+                row.setdefault("id", f"{self.name}-{next(self._id_counter)}")
+                # Real Postgres tables default created_at to now() — mirror
+                # that here since some routes read it back (e.g. the
+                # duplicate-upload message quotes the earlier upload's date).
+                row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                self.rows.append(row)
+                inserted.append(row)
+            return FakeResponse(data=inserted)
 
         if qb._op == "update":
             matched = [r for r in self.rows if qb._matches(r)]
@@ -146,13 +168,25 @@ class FakeBucket:
     def __init__(self, name: str):
         self.name = name
         self.removed_paths: list[str] = []
+        self.objects: dict[str, bytes] = {}
 
     def list(self, prefix: str = ""):
         return []
 
-    def remove(self, paths: list[str]):
+    # No `list[str]` annotation here on purpose: the `list` method defined
+    # just above shadows the builtin `list` in this class body, so a
+    # `paths: list[str]` signature annotation would raise
+    # "'function' object is not subscriptable" the moment this class is
+    # defined.
+    def remove(self, paths):
         self.removed_paths.extend(paths)
+        for p in paths:
+            self.objects.pop(p, None)
         return paths
+
+    def upload(self, path: str, content: bytes):
+        self.objects[path] = content
+        return {"path": path}
 
 
 class FakeStorage:
