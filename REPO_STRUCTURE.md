@@ -1,6 +1,6 @@
 # Repository Structure
 
-**Last updated**: 2026-07-06 (post-cleanup: legacy Flask/PWA and Streamlit
+**Last updated**: 2026-08-11 (post-cleanup: legacy Flask/PWA and Streamlit
 stacks removed; the Next.js + FastAPI + Supabase product is the only UI).
 
 ```
@@ -13,8 +13,8 @@ financing/
 │
 ├── frontend/                  # Next.js 14 app → Vercel (see frontend/README.md)
 │   ├── src/middleware.ts      # server-side auth gating
-│   ├── src/app/               # auth, dashboard (10 tabs), settings pages
-│   ├── src/components/        # ui.tsx atoms + tabs/*.tsx
+│   ├── src/app/               # auth, dashboard (5 sections, tabs code-split), settings pages
+│   ├── src/components/        # ui-feedback.tsx atoms + ui/*.tsx + tabs/*.tsx
 │   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (cache)
 │
 ├── backend/                   # FastAPI app → Railway (see backend/README.md)
@@ -47,15 +47,24 @@ financing/
 ├── supabase/
 │   ├── config.toml
 │   ├── generate_seed_migration.py   # regenerates the rules-seed SQL
-│   └── migrations/            # 6 migrations:
+│   └── migrations/            # 15 migrations:
 │       ├── 20260703000000_initial_schema.sql          # 9 tables + RLS + triggers
 │       ├── 20260703000001_seed_rules_and_categories.sql
 │       ├── 20260704000000_create_storage_buckets.sql  # model_artifacts, uploads
 │       ├── 20260705194314_fix_search_path_in_trigger_functions.sql
 │       ├── 20260705194600_fix_reassign_category_trigger_missing_column.sql
-│       └── 20260706080000_fix_uploads_schema_mismatch.sql
+│       ├── 20260706080000_fix_uploads_schema_mismatch.sql
+│       ├── 20260707000000_security_performance_indexing_fixes.sql
+│       ├── 20260707000001_fix_numeric_precision_overflow.sql
+│       ├── 20260707000002_add_file_hash_for_deduplication.sql
+│       ├── 20260707000003_fix_file_hash_constraint.sql
+│       ├── 20260707092722_fix_file_hash_constraint.sql
+│       ├── 20260708000000_release_readiness_schema_repair.sql
+│       ├── 20260709000000_align_default_categories_to_ml_taxonomy.sql
+│       ├── 20260709120000_add_category_color.sql
+│       └── 20260811090000_transaction_sum_rpcs.sql     # Postgres-side sum/monthly-spend RPCs
 │
-├── tests/                     # pytest suite for src/ (71 tests)
+├── tests/                     # pytest suite for src/ (74 tests)
 │   ├── test_parse.py, test_validate.py, test_semantic.py, test_calibration.py
 │   ├── test_classify_routing.py, test_agreement_routing.py
 │   ├── test_leakage_guard.py, test_reproducibility.py

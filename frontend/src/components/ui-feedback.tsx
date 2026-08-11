@@ -23,6 +23,8 @@ export function Alert({
   const { classes, Icon } = ALERT_STYLES[kind];
   return (
     <div
+      role={kind === 'error' ? 'alert' : 'status'}
+      aria-live={kind === 'error' ? 'assertive' : 'polite'}
       className={`flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm animate-fade-up ${classes}`}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />

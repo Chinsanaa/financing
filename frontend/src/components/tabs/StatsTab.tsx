@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Alert } from '@/components/ui';
+import { Alert } from '@/components/ui-feedback';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard, SkeletonChart } from '@/components/ui/Skeleton';

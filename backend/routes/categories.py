@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 from config import supabase_client
+from db import run_query
 from errors import internal_error
 
 router = APIRouter()
@@ -31,21 +32,25 @@ class CategoryUpdate(BaseModel):
     color: Optional[str] = None
 
 
-def _validate_color(user_id: str, color: str, exclude_id: Optional[str] = None):
+async def _validate_color(user_id: str, color: str, exclude_id: Optional[str] = None):
     """Reject unknown palette keys and colors already used by another of the
     user's categories (the picker disables taken swatches; this is defense in
     depth — a partial unique index enforces it at the DB level too)."""
     if color not in ALLOWED_COLORS:
         raise HTTPException(status_code=400, detail="Invalid color")
-    q = (
-        supabase_client.table("categories")
-        .select("id, name")
-        .eq("user_id", user_id)
-        .eq("color", color)
-    )
-    if exclude_id:
-        q = q.neq("id", exclude_id)
-    taken = q.execute().data
+
+    def build_query():
+        q = (
+            supabase_client.table("categories")
+            .select("id, name")
+            .eq("user_id", user_id)
+            .eq("color", color)
+        )
+        if exclude_id:
+            q = q.neq("id", exclude_id)
+        return q.execute()
+
+    taken = (await run_query(build_query)).data
     if taken:
         raise HTTPException(
             status_code=400,
@@ -58,8 +63,8 @@ async def list_categories(request: Request):
     """List all categories for the authenticated user."""
     user_id = request.state.user_id
     try:
-        response = (
-            supabase_client.table("categories")
+        response = await run_query(
+            lambda: supabase_client.table("categories")
             .select("*")
             .eq("user_id", user_id)
             .order("name")
@@ -81,9 +86,9 @@ async def create_category(request: Request, cat: CategoryCreate):
         if cat.sort_order is not None:
             row["sort_order"] = cat.sort_order
         if cat.color is not None:
-            _validate_color(user_id, cat.color)
+            await _validate_color(user_id, cat.color)
             row["color"] = cat.color
-        response = supabase_client.table("categories").insert(row).execute()
+        response = await run_query(lambda: supabase_client.table("categories").insert(row).execute())
         return {"category": response.data[0] if response.data else None}
     except HTTPException:
         raise
@@ -102,8 +107,10 @@ async def update_category(request: Request, category_id: str, cat: CategoryUpdat
             raise HTTPException(status_code=400, detail="No fields to update")
         # `color: null` passes exclude_unset and clears the column ("Auto").
         if update_data.get("color") is not None:
-            _validate_color(user_id, update_data["color"], exclude_id=category_id)
-        response = supabase_client.table("categories").update(update_data).eq("id", category_id).eq("user_id", user_id).execute()
+            await _validate_color(user_id, update_data["color"], exclude_id=category_id)
+        response = await run_query(
+            lambda: supabase_client.table("categories").update(update_data).eq("id", category_id).eq("user_id", user_id).execute()
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Category not found or not authorized")
         return {"category": response.data[0]}
@@ -124,7 +131,9 @@ async def delete_category(request: Request, category_id: str):
     """
     user_id = request.state.user_id
     try:
-        response = supabase_client.table("categories").delete().eq("id", category_id).eq("user_id", user_id).execute()
+        response = await run_query(
+            lambda: supabase_client.table("categories").delete().eq("id", category_id).eq("user_id", user_id).execute()
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Category not found or not authorized")
         return {"message": "Category deleted"}

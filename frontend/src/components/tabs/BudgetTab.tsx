@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pencil, Wallet } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
-import { Alert, ProgressBar } from '@/components/ui';
+import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
@@ -146,7 +146,7 @@ export default function BudgetTab() {
               <select
                 value={selectedMonth}
                 onChange={(e) => setMonth(e.target.value)}
-                className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none"
+                className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
               >
                 {monthOptions.map((m) => (
                   <option key={m} value={m}>
@@ -193,7 +193,7 @@ export default function BudgetTab() {
                     }))
                   }
                   placeholder={`${CURRENCY_SYMBOL} per month`}
-                  className="w-36 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none"
+                  className="w-36 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
                 />
                 <select
                   value={drafts[cat.id]?.type ?? 'Need'}
@@ -203,7 +203,7 @@ export default function BudgetTab() {
                       [cat.id]: { ...prev[cat.id], type: e.target.value as 'Need' | 'Want' },
                     }))
                   }
-                  className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none"
+                  className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
                 >
                   <option value="Need">Need</option>
                   <option value="Want">Want</option>

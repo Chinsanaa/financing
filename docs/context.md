@@ -1584,3 +1584,64 @@ FastAPI Backend (Railway)
 
 **Decided**: dark/electric-lime visual direction; both themes; framer-motion + recharts + lucide-react added.
 **Open**: dashboard screenshots with a real session (verified only via skeletons locally); category budgets editing UI; light-theme fine-tuning if user wants.
+
+### Session 21 (2026-08-11) — Performance audit + fix: sync Supabase calls blocking the event loop
+**Audit**: full repo pass (frontend, backend, ML, docs, hygiene). Findings ranked; user picked the backend concurrency issue as highest priority to fix now. Other findings recorded below as open items.
+
+**What was built**: every FastAPI route was `async def` but called the synchronous `supabase-py` client's `.execute()` directly — under the app's single uvicorn worker, one slow Supabase call blocked the entire API for every other user. Fixed by:
+- `backend/db.py`: added `run_query()` (wraps a query-builder callable in `run_in_threadpool`) and `fetch_all_async()` (async counterpart of `fetch_all`, for use in routes). The original sync `fetch_all` is kept as-is — `ml.py`'s background-thread classification path calls it with no event loop present, so it must stay sync.
+- Converted every route-path Supabase call in `backend/routes/classify.py`, `categories.py`, `settings.py`, `training.py` (routes only — `run_training` stays sync, runs via `BackgroundTasks`), `uploads.py` (route handlers + the sync helpers `upload_file` calls inline: `check_duplicate_upload`, `create_upload_record`, `store_original`, `dedup_new_rows`, `insert_transactions`, `finalize_upload_record`, `update_upload_error` — all now `async def` + awaited), and `dashboard.py` (all endpoints plus the private `_monthly_income`/`_budget_config`/`_spend_by_category`/`_available_months` helpers, now `async def`).
+- Left untouched: `backend/ml.py` (runs in a `threading.Thread`, no event loop) and `routes/training.py:run_training` (runs via `BackgroundTasks.add_task`, already off the loop).
+
+**Verified**: `backend/tests/` (27 passed) and root `tests/` (74 passed) both green after the change, no regressions.
+
+**Decided**: only the sync-Supabase fix was implemented this session; other audit findings below are documented but not yet worked on.
+
+**Open — remaining audit findings, not yet actioned**:
+- Backend: `src/translate.py`'s Google Translate calls run synchronously per-row inside `/dashboard/export` (unbounded rows), `/reports`, `/review-queue` — worst single latency/reliability risk found, not fixed yet.
+- Backend: `/dashboard/summary` and `/dashboard/savings` pull every transaction row and sum in Python instead of `SELECT sum(amount)` in Postgres.
+- Backend: no caching layer for dashboard aggregation endpoints; `backend/Dockerfile` runs uvicorn with `--log-level debug` in prod; `CORSMiddleware` has no `max_age`.
+- Backend: `src/parse.py` has ~150 lines of near-duplicate logic across its 4 Alipay/WeChat parser functions.
+- Frontend: dashboard ships all 11 tab components + `recharts` + `framer-motion` in one JS bundle — no `next/dynamic` code-splitting anywhere in the app. Biggest frontend lever found.
+- Frontend: `next.config.js` missing `experimental.optimizePackageImports`; `package.json` deps all `^`-unpinned (including pre-1.0 `@supabase/ssr`); stale `HomeClient.tsx` reference in `frontend/README.md`; naming collision between `src/components/ui.tsx` and `src/components/ui/`.
+- Docs: `REPO_STRUCTURE.md` is stale (missing 8 migrations, contradicts `README.md` on dashboard tab structure).
+
+**Next suggested step**: ask the user which of the remaining findings to tackle next — the Google Translate blocking calls are the highest-impact remaining backend item; the dashboard code-splitting is the highest-impact frontend item.
+
+### Session 22 (2026-08-11) — Follow-up audit fixes: translate batching, Postgres sums, dashboard code-splitting, quick wins, parse.py dedup
+**What was built** (user picked all of these to do in this session):
+- `backend/routes/dashboard.py`: `get_reports`, `export_transactions`, `get_review_queue` now build their per-row `merchant_label_english`/`description_label_english` output (which can hit a live Google Translate call per untranslated string, `src/translate.py`) inside a single `run_in_threadpool` batch instead of inline on the event loop. Also dropped a redundant local `from src.translate import ...` in `get_review_queue` that was fragmenting `translate_to_english`'s `lru_cache` across two `sys.modules` entries (bare `translate` vs `src.translate`, both resolvable via `PYTHONPATH=/app:/app/src`).
+- New migration `supabase/migrations/20260811090000_transaction_sum_rpcs.sql`: `sum_user_transactions(p_user_id, p_start, p_end)` and `monthly_spend_by_user(p_user_id, p_start, p_end)` — applied directly to the live "financing" Supabase project (user approved). `get_summary` and `get_savings` now call these via `supabase_client.rpc(...)` instead of pulling every transaction row and summing in Python/pandas.
+- Frontend: `DashboardClient.tsx` and `TransactionsModelTab.tsx` now load all 11 dashboard tabs via `next/dynamic` (`ssr: false`, `SkeletonRows` loading fallback) instead of static imports — confirmed via `npm run build` that the dashboard route now pulls multiple separate on-demand chunks instead of one bundle. Also removed a dead `section` variable in `DashboardClient.tsx`.
+- Quick wins: `backend/Dockerfile` no longer runs uvicorn with `--log-level debug` in prod; `CORSMiddleware` in `backend/main.py` now sets `max_age=600`; `REPO_STRUCTURE.md` migrations list and dashboard description updated to match reality; `frontend/README.md` stale `HomeClient.tsx` reference fixed; `frontend/src/components/ui.tsx` renamed to `ui-feedback.tsx` (no more collision with the `ui/` directory) with all 14 import sites updated; `frontend/package.json` deps pinned to their currently-resolved exact versions (no more `^` ranges).
+- `src/parse.py`: extracted `_finalize_expense_rows()` — the shared filter/negate-refund/print-diagnostics/build-schema tail that `parse_alipay_english`, `parse_alipay_native`, `parse_wechat_excel`, `parse_wechat_csv` each repeated (~90 lines collapsed to one ~30-line helper). Format-specific column detection/status matching was left untouched per-parser.
+
+**Verified**: root `pytest tests/ -q` (74 passed, includes `test_parse.py` after the refactor) and `backend/pytest tests/ -q` (27 passed) both green; the two new RPCs were smoke-tested directly against the live Supabase project before wiring routes to them; `frontend && npm run build` succeeds (compiles, typechecks, generates all routes) and shows the dashboard route split into multiple chunks.
+
+**Decided**: applied the new migration directly to the live Supabase project (user explicitly approved after being asked, since it's a shared/production system) rather than leaving it only as a committed file.
+
+**Open**: same remaining items as Session 21 that weren't in this session's scope — none; this session closed out every item the user picked from the original audit list. No new open items identified.
+
+**Next suggested step**: none pending from the audit — ask the user if there's a new area they want reviewed, or let this settle as the audit's closing session.
+
+### Session 23 (2026-08-11) — Frontend responsive + accessibility fixes
+**Prompted by**: user feedback that the app "looks too centered... made for an iPad, not Windows," specifically the signin/signup screen where the brand-panel text looked "too small and very empty." Used the bundled `ui-ux-pro-max` skill as the accessibility/responsive checklist reference (the user's suggested external `npx skills` tool couldn't run — no Node.js in this environment).
+
+**Root cause found**: `AuthClient.tsx`'s split brand/form layout had no breakpoints past `lg` (1024px) — identical layout from 1024px to a 4K monitor — with brand-panel text capped at `max-w-sm`/`max-w-md` and a fixed `text-5xl` headline (no responsive scale), unlike `Landing.tsx` which already does this correctly. Same "no xl/2xl step" pattern found more broadly across `DashboardClient.tsx`, `SettingsClient.tsx`, `not-found.tsx`, tab components — but those are intentionally narrow centered-card/form layouts (readability feature, not a bug), so only auth got a structural rework; the rest got a consistency-only `xl:` padding step added.
+
+**What was built**:
+- `AuthClient.tsx`: brand panel now scales padding/type at `xl`/`2xl`, widened text caps, added 3 reused trust-point bullets (from Landing's feature copy) so the panel has real content instead of just bigger margins; form panel widened slightly (`max-w-sm lg:max-w-md`); mode toggle got proper `role="tablist"`/`role="tab"`/`aria-selected` (matching the existing correct pattern in `ui/Tabs.tsx`) plus a focus-visible ring.
+- Accessibility, fixed centrally so every consumer benefits: `ui-feedback.tsx`'s `Alert` now has `role="alert"`/`aria-live`; `ui/Input.tsx`'s error span now has `role="alert"` + `aria-invalid`/`aria-describedby` wiring; `ui/Button.tsx` and `ui/Tabs.tsx` got `focus-visible:ring` (previously relied on browser default only); `ThemeToggle.tsx` and `DashboardClient.tsx`'s Settings/Sign-out icon buttons bumped from 36px to 44px touch targets, both also got focus-visible rings.
+- `dashboard/loading.tsx`: added `aria-busy` + `sr-only` "Loading dashboard…" text (was silent for screen readers); kept its `xl:` padding step in sync with `DashboardClient.tsx`'s to avoid layout shift between skeleton and loaded states.
+- `SettingsClient.tsx`: delete-account confirm panel now gets `role="alert"` and moves focus into itself when it appears (was previously silent/undiscoverable for screen-reader/keyboard users); added the `xl:` padding step.
+- `BudgetTab.tsx`/`SavingsTab.tsx`/`ReportsTab.tsx`: their hand-rolled `<select>`/`<input>` elements (not using the shared `Input`/`Select`) got a `focus:ring` added to match.
+- `not-found.tsx`: added an `lg:` step to its 404 display type and heading (previously stopped at `sm:`).
+- **Verified, not changed**: color contrast (`--muted` vs `--bg`/`--surface`) computed to ~6:1 light / ~7.1:1 dark — both pass WCAG AA comfortably, no fix needed. Icon-only buttons elsewhere in the app (dismiss ✕, remove file, delete category, color swatch) already had correct `aria-label`s.
+
+**Verified**: `cd frontend && npm run build` — compiles, typechecks, generates all routes cleanly with the new ARIA attributes/refs/classes.
+
+**Decided**: widening `SettingsClient.tsx`'s `max-w-3xl` and other conventional narrow-card layouts was explicitly ruled out — that's an intentional readability pattern (60-75 char line length), not a layout bug; only `AuthClient.tsx` needed the structural rework.
+
+**Open**: none from this pass. If further design work is wanted, the natural next steps would be a visual QA pass across real breakpoints (this session verified via build success + code review, not a live browser screenshot pass) or extending the same treatment to any pages added later.
+
+**Next suggested step**: none pending — ask the user what to look at next.

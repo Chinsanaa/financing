@@ -115,6 +115,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=600,  # let browsers cache preflight OPTIONS responses for 10 min
 )
 
 

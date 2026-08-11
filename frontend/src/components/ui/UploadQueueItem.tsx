@@ -2,7 +2,7 @@
 
 import { Check, FileSpreadsheet, Loader2, TriangleAlert, X } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
-import { ProgressBar } from '@/components/ui';
+import { ProgressBar } from '@/components/ui-feedback';
 
 export type QueueStatus = 'pending' | 'uploading' | 'processing' | 'done' | 'duplicate' | 'error';
 

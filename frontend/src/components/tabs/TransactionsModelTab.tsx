@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronLeft,
@@ -13,11 +14,14 @@ import {
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import UploadWithIncomeTab from './UploadWithIncomeTab';
-import CategoriesTab from './CategoriesTab';
-import LabelTab from './LabelTab';
-import ReviewTab from './ReviewTab';
-import TrainingTab from './TrainingTab';
+import { SkeletonRows } from '@/components/ui/Skeleton';
+
+const stepLoading = () => <SkeletonRows rows={5} />;
+const UploadWithIncomeTab = dynamic(() => import('./UploadWithIncomeTab'), { loading: stepLoading, ssr: false });
+const CategoriesTab = dynamic(() => import('./CategoriesTab'), { loading: stepLoading, ssr: false });
+const LabelTab = dynamic(() => import('./LabelTab'), { loading: stepLoading, ssr: false });
+const ReviewTab = dynamic(() => import('./ReviewTab'), { loading: stepLoading, ssr: false });
+const TrainingTab = dynamic(() => import('./TrainingTab'), { loading: stepLoading, ssr: false });
 
 const STEPS = [
   {

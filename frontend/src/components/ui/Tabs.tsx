@@ -29,7 +29,7 @@ export function TabBar({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
-            className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-sm whitespace-nowrap transition-colors ${
+            className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
               isActive ? 'text-ink font-medium' : 'text-muted hover:text-ink'
             }`}
           >
@@ -71,7 +71,7 @@ export function PillTabs({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
-            className={`relative rounded-pill px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors ${
+            className={`relative rounded-pill px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
               isActive ? 'text-ink font-medium' : 'text-muted hover:text-ink'
             }`}
           >

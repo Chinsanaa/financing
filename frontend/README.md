@@ -22,12 +22,12 @@ npx tsc --noEmit   # typecheck
 src/
 ├── middleware.ts              # server-side auth gating (no client redirect flash)
 ├── app/
-│   ├── layout.tsx, page.tsx, HomeClient.tsx
+│   ├── layout.tsx, page.tsx    # page.tsx renders the Landing marketing page
 │   ├── auth/                  # AuthClient (login/signup), verify/ (email confirmation)
-│   ├── dashboard/             # DashboardClient — the 10-tab shell
+│   ├── dashboard/             # DashboardClient — 5 sections, tabs code-split via next/dynamic
 │   └── settings/              # SettingsClient — income, account deletion
 ├── components/
-│   ├── ui.tsx                 # shared Alert / Loading / ProgressBar
+│   ├── ui-feedback.tsx        # shared Alert / Loading / ProgressBar
 │   └── tabs/                  # one component per dashboard tab
 └── utils/
     ├── supabase.ts            # browser client factory
@@ -37,11 +37,13 @@ src/
                                #   invalidate(prefix) for mutations
 ```
 
-## Dashboard tabs (10)
+## Dashboard sections (5)
 
-Onboarding: **Upload** (default) → **Categories** → **Label** → **Training**.
-Analytics: **Overview**, **Budget**, **Savings**, **Action Plan**, **Reports**
-(CSV export + pagination), **Review Queue** (accept/relabel suggestions).
+The ten original tabs are grouped into five compact sections with sub-tabs:
+**Overview**, **Transactions & Model** (Upload / Categories / Label / Review /
+Training), **Planning** (Budget / Savings / Action plan), and **Reports**
+(CSV export + pagination). Each tab's component is code-split via
+`next/dynamic` so only the active tab's JS loads.
 
 ## Data-fetching conventions
 
