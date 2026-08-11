@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 from config import supabase_client
+from db import run_query
 from errors import internal_error, logger
 
 router = APIRouter()
@@ -23,7 +24,7 @@ async def get_profile(request: Request):
     user_id = request.state.user_id
 
     try:
-        response = supabase_client.table("profiles").select("*").eq("id", user_id).execute()
+        response = await run_query(lambda: supabase_client.table("profiles").select("*").eq("id", user_id).execute())
         if not response.data:
             raise HTTPException(status_code=404, detail="Profile not found")
 
@@ -43,7 +44,9 @@ async def update_profile(request: Request, data: ProfileUpdate):
         update_data = data.dict(exclude_unset=True)
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
-        response = supabase_client.table("profiles").update(update_data).eq("id", user_id).execute()
+        response = await run_query(
+            lambda: supabase_client.table("profiles").update(update_data).eq("id", user_id).execute()
+        )
 
         if not response.data:
             raise HTTPException(status_code=404, detail="Profile not found")
@@ -69,8 +72,8 @@ async def update_budget_settings(request: Request, data: BudgetSettingsUpdate):
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
         update_data["user_id"] = user_id
-        response = (
-            supabase_client.table("budget_config")
+        response = await run_query(
+            lambda: supabase_client.table("budget_config")
             .upsert(update_data, on_conflict="user_id")
             .execute()
         )

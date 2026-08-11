@@ -6,6 +6,7 @@ backend/ml.py and runs automatically after uploads and training runs.
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from config import supabase_client
+from db import run_query
 from errors import internal_error
 
 router = APIRouter()
@@ -24,17 +25,21 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
 
     try:
         # Verify category belongs to this user
-        cat_response = supabase_client.table("categories").select("id").eq("id", req.category_id).eq("user_id", user_id).execute()
+        cat_response = await run_query(
+            lambda: supabase_client.table("categories").select("id").eq("id", req.category_id).eq("user_id", user_id).execute()
+        )
         if not cat_response.data:
             raise HTTPException(status_code=404, detail="Category not found")
 
         # Update transaction
-        response = supabase_client.table("transactions").update({
-            "category_id": req.category_id,
-            "label_source": req.label_source,
-            "needs_review": False,
-            "is_manually_labeled": True,
-        }).eq("id", transaction_id).eq("user_id", user_id).execute()
+        response = await run_query(
+            lambda: supabase_client.table("transactions").update({
+                "category_id": req.category_id,
+                "label_source": req.label_source,
+                "needs_review": False,
+                "is_manually_labeled": True,
+            }).eq("id", transaction_id).eq("user_id", user_id).execute()
+        )
 
         if not response.data:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -52,11 +57,13 @@ async def accept_model_suggestion(request: Request, transaction_id: str):
     user_id = request.state.user_id
 
     try:
-        response = supabase_client.table("transactions").update({
-            "needs_review": False,
-            "is_manually_labeled": True,
-            "label_source": "model_agreed",
-        }).eq("id", transaction_id).eq("user_id", user_id).execute()
+        response = await run_query(
+            lambda: supabase_client.table("transactions").update({
+                "needs_review": False,
+                "is_manually_labeled": True,
+                "label_source": "model_agreed",
+            }).eq("id", transaction_id).eq("user_id", user_id).execute()
+        )
 
         if not response.data:
             raise HTTPException(status_code=404, detail="Transaction not found")

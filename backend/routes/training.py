@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from pathlib import Path
 from config import supabase_client
+from db import run_query
 from errors import internal_error, logger
 from datetime import datetime
 import pandas as pd
@@ -42,8 +43,8 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
         # Fetch user's labeled transactions, joining categories for the
         # category *name* (retrain_model works on category names, but
         # transactions only store category_id)
-        response = (
-            supabase_client.table("transactions")
+        response = await run_query(
+            lambda: supabase_client.table("transactions")
             .select("*, categories(name)")
             .eq("user_id", user_id)
             .eq("is_manually_labeled", True)
@@ -58,19 +59,23 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
         )
 
         # Fetch user's categories
-        categories_response = supabase_client.table("categories").select("name").eq("user_id", user_id).execute()
+        categories_response = await run_query(
+            lambda: supabase_client.table("categories").select("name").eq("user_id", user_id).execute()
+        )
         user_categories = [cat['name'] for cat in categories_response.data] if categories_response.data else ['Other']
 
         # Create model_run record
         model_run_id = str(uuid4())
-        supabase_client.table("model_runs").insert({
-            "id": model_run_id,
-            "user_id": user_id,
-            "status": "running",
-            "trigger": "manual",
-            "n_labeled_samples": len(df_labeled),
-            "started_at": datetime.utcnow().isoformat(),
-        }).execute()
+        await run_query(
+            lambda: supabase_client.table("model_runs").insert({
+                "id": model_run_id,
+                "user_id": user_id,
+                "status": "running",
+                "trigger": "manual",
+                "n_labeled_samples": len(df_labeled),
+                "started_at": datetime.utcnow().isoformat(),
+            }).execute()
+        )
 
         # Queue background task to train
         background_tasks.add_task(
@@ -97,7 +102,9 @@ async def get_training_status(request: Request, model_run_id: str):
     """Poll training status."""
     user_id = request.state.user_id
     try:
-        response = supabase_client.table("model_runs").select("*").eq("id", model_run_id).eq("user_id", user_id).execute()
+        response = await run_query(
+            lambda: supabase_client.table("model_runs").select("*").eq("id", model_run_id).eq("user_id", user_id).execute()
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Training run not found")
         return response.data[0]
@@ -112,8 +119,8 @@ async def list_training_runs(request: Request):
     """List all training runs for the user."""
     user_id = request.state.user_id
     try:
-        response = (
-            supabase_client.table("model_runs")
+        response = await run_query(
+            lambda: supabase_client.table("model_runs")
             .select("*")
             .eq("user_id", user_id)
             .order("created_at", desc=True)

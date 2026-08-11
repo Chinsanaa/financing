@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
 from config import supabase_client
-from db import fetch_all
+from db import fetch_all_async, run_query
 from errors import internal_error
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -37,12 +37,14 @@ async def get_summary(request: Request):
 
     try:
         # Total transactions
-        total = supabase_client.table("transactions").select("id", count="exact").eq("user_id", user_id).execute()
+        total = await run_query(
+            lambda: supabase_client.table("transactions").select("id", count="exact").eq("user_id", user_id).execute()
+        )
         total_count = total.count if total.count is not None else len(total.data)
 
         # Labeled = has a trusted category (not still pending review)
-        labeled = (
-            supabase_client.table("transactions")
+        labeled = await run_query(
+            lambda: supabase_client.table("transactions")
             .select("id", count="exact")
             .eq("user_id", user_id)
             .eq("needs_review", False)
@@ -53,7 +55,7 @@ async def get_summary(request: Request):
 
         # Total spend (fetch_all pages past PostgREST's 1000-row cap, which
         # silently truncated — and understated — every sum here before)
-        all_transactions = fetch_all(
+        all_transactions = await fetch_all_async(
             lambda: supabase_client.table("transactions").select("amount").eq("user_id", user_id)
         )
         total_spend = sum(float(t["amount"]) for t in all_transactions)
@@ -76,7 +78,7 @@ async def get_by_category(request: Request):
     user_id = request.state.user_id
 
     try:
-        rows = fetch_all(
+        rows = await fetch_all_async(
             lambda: supabase_client.table("transactions")
             .select("amount, category_id, categories(name)")
             .eq("user_id", user_id)
@@ -134,7 +136,7 @@ async def get_trends(request: Request, days: int = 30, granularity: str = "day",
             cutoff = _now_cn() - timedelta(days=days)
 
         # Filter server-side; never pull the full transaction history.
-        rows = fetch_all(
+        rows = await fetch_all_async(
             lambda: supabase_client.table("transactions")
             .select("timestamp, amount")
             .eq("user_id", user_id)
@@ -167,26 +169,26 @@ async def get_trends(request: Request, days: int = 30, granularity: str = "day",
         raise internal_error(e, "dashboard/trends")
 
 
-def _monthly_income(user_id: str) -> float:
+async def _monthly_income(user_id: str) -> float:
     """Monthly income from profiles.monthly_income (the only written source)."""
-    resp = supabase_client.table("profiles").select("monthly_income").eq("id", user_id).execute()
+    resp = await run_query(lambda: supabase_client.table("profiles").select("monthly_income").eq("id", user_id).execute())
     if resp.data and resp.data[0].get("monthly_income") is not None:
         return float(resp.data[0]["monthly_income"])
     return 0.0
 
 
-def _budget_config(user_id: str):
-    resp = supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute()
+async def _budget_config(user_id: str):
+    resp = await run_query(lambda: supabase_client.table("budget_config").select("*").eq("user_id", user_id).execute())
     return resp.data[0] if resp.data else None
 
 
-def _spend_by_category(user_id: str, start: datetime, end: datetime) -> dict:
+async def _spend_by_category(user_id: str, start: datetime, end: datetime) -> dict:
     """Spend per category name within [start, end) — a single month window.
 
     Monthly budgets compare against one month's spend, so callers pass that
     month's bounds. The `.lt(end)` upper bound matters for past months (the old
     current-month-only version had only a lower bound)."""
-    rows = fetch_all(
+    rows = await fetch_all_async(
         lambda: supabase_client.table("transactions")
         .select("amount, category_id, categories(name)")
         .eq("user_id", user_id)
@@ -218,10 +220,10 @@ def _month_bounds(month: Optional[str] = None) -> tuple:
     return start, end
 
 
-def _available_months(user_id: str) -> list:
+async def _available_months(user_id: str) -> list:
     """Distinct 'YYYY-MM' values that actually have transactions, newest first,
     so the frontend can populate a month selector."""
-    rows = fetch_all(
+    rows = await fetch_all_async(
         lambda: supabase_client.table("transactions")
         .select("timestamp")
         .eq("user_id", user_id)
@@ -247,22 +249,22 @@ async def get_budget(request: Request, month: Optional[str] = None):
     try:
         start, end = _month_bounds(month)
         resolved_month = f"{start.year:04d}-{start.month:02d}"
-        available_months = _available_months(user_id)
+        available_months = await _available_months(user_id)
 
         # Monthly income's single source of truth is profiles.monthly_income
         # (written by PATCH /settings/profile). budget_config.income is legacy
         # and was never written by anything.
-        budget_config = _budget_config(user_id)
+        budget_config = await _budget_config(user_id)
 
-        cat_budget_resp = (
-            supabase_client.table("budget_category_config")
+        cat_budget_resp = await run_query(
+            lambda: supabase_client.table("budget_category_config")
             .select("*, categories(name)")
             .eq("user_id", user_id)
             .execute()
         )
 
         budget_config_out = {
-            "monthly_income": _monthly_income(user_id),
+            "monthly_income": await _monthly_income(user_id),
             "currency": budget_config["currency"] if budget_config else "CNY",
         }
 
@@ -274,7 +276,7 @@ async def get_budget(request: Request, month: Optional[str] = None):
                 "available_months": available_months,
             }
 
-        spending_by_cat = _spend_by_category(user_id, start, end)
+        spending_by_cat = await _spend_by_category(user_id, start, end)
 
         category_budgets = []
         for row in cat_budget_resp.data:
@@ -322,7 +324,7 @@ async def put_category_budgets(request: Request, data: CategoryBudgetsUpdate):
             raise HTTPException(status_code=400, detail="No budgets provided")
 
         # Only allow the user's own categories
-        cat_resp = supabase_client.table("categories").select("id").eq("user_id", user_id).execute()
+        cat_resp = await run_query(lambda: supabase_client.table("categories").select("id").eq("user_id", user_id).execute())
         own_ids = {c["id"] for c in (cat_resp.data or [])}
 
         rows = []
@@ -338,8 +340,8 @@ async def put_category_budgets(request: Request, data: CategoryBudgetsUpdate):
                 "monthly_budget": item.monthly_budget,
             })
 
-        response = (
-            supabase_client.table("budget_category_config")
+        response = await run_query(
+            lambda: supabase_client.table("budget_category_config")
             .upsert(rows, on_conflict="user_id,category_id")
             .execute()
         )
@@ -356,12 +358,12 @@ async def get_savings(request: Request):
     user_id = request.state.user_id
 
     try:
-        budget_config = _budget_config(user_id)
+        budget_config = await _budget_config(user_id)
 
         now = _now_cn()
         month_start = _month_start(now)
 
-        spending_rows = fetch_all(
+        spending_rows = await fetch_all_async(
             lambda: supabase_client.table("transactions")
             .select("amount")
             .eq("user_id", user_id)
@@ -373,7 +375,7 @@ async def get_savings(request: Request):
         three_months_ago = datetime(now.year if now.month >= 4 else now.year - 1,
                                     now.month - 3 if now.month >= 4 else now.month + 9, 1)
 
-        historical_rows = fetch_all(
+        historical_rows = await fetch_all_async(
             lambda: supabase_client.table("transactions")
             .select("timestamp, amount")
             .eq("user_id", user_id)
@@ -389,7 +391,7 @@ async def get_savings(request: Request):
             avg_monthly = float(monthly_totals.mean()) if len(monthly_totals) > 0 else 0
 
         savings_goal = float(budget_config["saving_goal_monthly"]) if budget_config and budget_config["saving_goal_monthly"] else 0
-        income = _monthly_income(user_id)
+        income = await _monthly_income(user_id)
 
         return {
             "savings_goal_monthly": savings_goal,
@@ -413,8 +415,8 @@ async def get_action(request: Request):
     try:
         actions = []
 
-        cat_budget_resp = (
-            supabase_client.table("budget_category_config")
+        cat_budget_resp = await run_query(
+            lambda: supabase_client.table("budget_category_config")
             .select("*, categories(name)")
             .eq("user_id", user_id)
             .execute()
@@ -423,7 +425,7 @@ async def get_action(request: Request):
         if cat_budget_resp.data:
             # Action items are always about the current month.
             start, end = _month_bounds(None)
-            spending_by_cat = _spend_by_category(user_id, start, end)
+            spending_by_cat = await _spend_by_category(user_id, start, end)
 
             for budget_row in cat_budget_resp.data:
                 cat_name = budget_row["categories"]["name"] if budget_row["categories"] else "Unknown"
@@ -440,8 +442,8 @@ async def get_action(request: Request):
                     })
 
         # Review queue count
-        review_resp = (
-            supabase_client.table("transactions")
+        review_resp = await run_query(
+            lambda: supabase_client.table("transactions")
             .select("id", count="exact")
             .eq("user_id", user_id)
             .eq("needs_review", True)
@@ -494,8 +496,8 @@ async def get_reports(
         elif category_id:
             query = query.eq("category_id", category_id)
 
-        response = (
-            query
+        response = await run_query(
+            lambda: query
             .order("timestamp", desc=True)
             .range(start, start + per_page - 1)
             .execute()
@@ -552,7 +554,7 @@ async def export_transactions(request: Request):
                 .order("timestamp", desc=True)
             )
 
-        all_txns = fetch_all(make_query)
+        all_txns = await fetch_all_async(make_query)
 
         # Create workbook
         wb = Workbook()
@@ -631,8 +633,8 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
 
         if show_labeled:
             # Show manually labeled transactions for user review/correction
-            response = (
-                supabase_client.table("transactions")
+            response = await run_query(
+                lambda: supabase_client.table("transactions")
                 .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
                 .eq("user_id", user_id)
                 .eq("is_manually_labeled", True)
@@ -647,8 +649,8 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
             # need, then dedupe by merchant in Python (PostgREST has no
             # DISTINCT ON) so a handful of high-volume merchants don't flood
             # the queue — unique merchants make better labeling coverage.
-            pool = (
-                supabase_client.table("transactions")
+            pool = await run_query(
+                lambda: supabase_client.table("transactions")
                 .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
                 .eq("user_id", user_id)
                 .eq("needs_review", True)
@@ -706,7 +708,9 @@ async def get_onboarding_status(request: Request):
 
     try:
         # profiles.id IS the auth user id (PK referencing auth.users)
-        response = supabase_client.table("profiles").select("onboarding_phase").eq("id", user_id).execute()
+        response = await run_query(
+            lambda: supabase_client.table("profiles").select("onboarding_phase").eq("id", user_id).execute()
+        )
         if not response.data:
             # 'upload' is the enum's first phase; 'signup' is not a valid value
             return {"onboarding_phase": "upload"}
@@ -724,9 +728,11 @@ async def complete_onboarding(request: Request):
     user_id = request.state.user_id
 
     try:
-        supabase_client.table("profiles").update({
-            "onboarding_phase": "complete"
-        }).eq("id", user_id).execute()
+        await run_query(
+            lambda: supabase_client.table("profiles").update({
+                "onboarding_phase": "complete"
+            }).eq("id", user_id).execute()
+        )
 
         return {"message": "Onboarding complete"}
     except HTTPException:

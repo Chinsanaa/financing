@@ -1584,3 +1584,26 @@ FastAPI Backend (Railway)
 
 **Decided**: dark/electric-lime visual direction; both themes; framer-motion + recharts + lucide-react added.
 **Open**: dashboard screenshots with a real session (verified only via skeletons locally); category budgets editing UI; light-theme fine-tuning if user wants.
+
+### Session 21 (2026-08-11) — Performance audit + fix: sync Supabase calls blocking the event loop
+**Audit**: full repo pass (frontend, backend, ML, docs, hygiene). Findings ranked; user picked the backend concurrency issue as highest priority to fix now. Other findings recorded below as open items.
+
+**What was built**: every FastAPI route was `async def` but called the synchronous `supabase-py` client's `.execute()` directly — under the app's single uvicorn worker, one slow Supabase call blocked the entire API for every other user. Fixed by:
+- `backend/db.py`: added `run_query()` (wraps a query-builder callable in `run_in_threadpool`) and `fetch_all_async()` (async counterpart of `fetch_all`, for use in routes). The original sync `fetch_all` is kept as-is — `ml.py`'s background-thread classification path calls it with no event loop present, so it must stay sync.
+- Converted every route-path Supabase call in `backend/routes/classify.py`, `categories.py`, `settings.py`, `training.py` (routes only — `run_training` stays sync, runs via `BackgroundTasks`), `uploads.py` (route handlers + the sync helpers `upload_file` calls inline: `check_duplicate_upload`, `create_upload_record`, `store_original`, `dedup_new_rows`, `insert_transactions`, `finalize_upload_record`, `update_upload_error` — all now `async def` + awaited), and `dashboard.py` (all endpoints plus the private `_monthly_income`/`_budget_config`/`_spend_by_category`/`_available_months` helpers, now `async def`).
+- Left untouched: `backend/ml.py` (runs in a `threading.Thread`, no event loop) and `routes/training.py:run_training` (runs via `BackgroundTasks.add_task`, already off the loop).
+
+**Verified**: `backend/tests/` (27 passed) and root `tests/` (74 passed) both green after the change, no regressions.
+
+**Decided**: only the sync-Supabase fix was implemented this session; other audit findings below are documented but not yet worked on.
+
+**Open — remaining audit findings, not yet actioned**:
+- Backend: `src/translate.py`'s Google Translate calls run synchronously per-row inside `/dashboard/export` (unbounded rows), `/reports`, `/review-queue` — worst single latency/reliability risk found, not fixed yet.
+- Backend: `/dashboard/summary` and `/dashboard/savings` pull every transaction row and sum in Python instead of `SELECT sum(amount)` in Postgres.
+- Backend: no caching layer for dashboard aggregation endpoints; `backend/Dockerfile` runs uvicorn with `--log-level debug` in prod; `CORSMiddleware` has no `max_age`.
+- Backend: `src/parse.py` has ~150 lines of near-duplicate logic across its 4 Alipay/WeChat parser functions.
+- Frontend: dashboard ships all 11 tab components + `recharts` + `framer-motion` in one JS bundle — no `next/dynamic` code-splitting anywhere in the app. Biggest frontend lever found.
+- Frontend: `next.config.js` missing `experimental.optimizePackageImports`; `package.json` deps all `^`-unpinned (including pre-1.0 `@supabase/ssr`); stale `HomeClient.tsx` reference in `frontend/README.md`; naming collision between `src/components/ui.tsx` and `src/components/ui/`.
+- Docs: `REPO_STRUCTURE.md` is stale (missing 8 migrations, contradicts `README.md` on dashboard tab structure).
+
+**Next suggested step**: ask the user which of the remaining findings to tackle next — the Google Translate blocking calls are the highest-impact remaining backend item; the dashboard code-splitting is the highest-impact frontend item.

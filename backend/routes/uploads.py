@@ -3,7 +3,9 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
+from starlette.concurrency import run_in_threadpool
 from config import supabase_client
+from db import run_query
 from errors import internal_error, logger
 import pandas as pd
 from datetime import datetime
@@ -65,7 +67,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
         # Validation 3: Duplicate file check (per user, by content hash)
         file_hash = calculate_file_hash(content)
-        existing = check_duplicate_upload(user_id, file_hash)
+        existing = await check_duplicate_upload(user_id, file_hash)
         if existing:
             raise HTTPException(
                 status_code=409,
@@ -80,7 +82,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         # detection/parsing fails below, the row survives with status='failed'.
         # If this insert fails, the whole upload fails loudly: transactions
         # must never exist without a history row to manage them by.
-        upload_id = create_upload_record(
+        upload_id = await create_upload_record(
             user_id, file.filename, file_type=None,
             size_bytes=len(content), file_hash=file_hash, status='uploaded',
         )
@@ -109,16 +111,16 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         # Store the original file in the private 'uploads' bucket, under the
         # user's folder (first path segment = user_id, required by the
         # bucket's RLS policies and by account-deletion cleanup).
-        storage_path = store_original(user_id, file.filename, content)
+        storage_path = await store_original(user_id, file.filename, content)
 
         # Row-level dedup: skip transactions that already exist for this user
         # (handles overlapping export date ranges, not just identical files).
-        df_new, skipped = dedup_new_rows(user_id, df_normalized, file_type)
+        df_new, skipped = await dedup_new_rows(user_id, df_normalized, file_type)
 
         if len(df_new) > 0:
-            insert_transactions(user_id, df_new, upload_id, file_type)
+            await insert_transactions(user_id, df_new, upload_id, file_type)
 
-        finalize_upload_record(upload_id, file_type, storage_path, len(df_new))
+        await finalize_upload_record(upload_id, file_type, storage_path, len(df_new))
 
         # Classify the new rows in the background (rules first, then the
         # user's trained model if one exists) so the review queue fills up
@@ -144,13 +146,13 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         # Validation failed - keep the history row, marked failed
         error_msg = str(e)
         if upload_id:
-            update_upload_error(upload_id, error_msg)
+            await update_upload_error(upload_id, error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
     except HTTPException:
         raise
     except Exception as e:
         if upload_id:
-            update_upload_error(upload_id, "Upload failed due to an internal error")
+            await update_upload_error(upload_id, "Upload failed due to an internal error")
         raise internal_error(e, "uploads/upload_file")
     finally:
         if tmp_path:
@@ -179,7 +181,9 @@ async def get_upload_status(request: Request, upload_id: str):
     """Poll upload status."""
     user_id = request.state.user_id
     try:
-        response = supabase_client.table("uploads").select("*").eq("id", upload_id).eq("user_id", user_id).execute()
+        response = await run_query(
+            lambda: supabase_client.table("uploads").select("*").eq("id", upload_id).eq("user_id", user_id).execute()
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Upload not found")
         return response.data[0]
@@ -194,8 +198,8 @@ async def list_uploads(request: Request):
     """List uploads for the user, newest first."""
     user_id = request.state.user_id
     try:
-        response = (
-            supabase_client.table("uploads")
+        response = await run_query(
+            lambda: supabase_client.table("uploads")
             .select("*")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
@@ -221,7 +225,9 @@ async def delete_upload(request: Request, upload_id: str):
     user_id = request.state.user_id
     try:
         # Verify the upload exists and belongs to the user
-        upload_resp = supabase_client.table("uploads").select("*").eq("id", upload_id).eq("user_id", user_id).execute()
+        upload_resp = await run_query(
+            lambda: supabase_client.table("uploads").select("*").eq("id", upload_id).eq("user_id", user_id).execute()
+        )
         if not upload_resp.data:
             raise HTTPException(status_code=404, detail="Upload not found")
 
@@ -230,15 +236,19 @@ async def delete_upload(request: Request, upload_id: str):
         # Delete the transactions explicitly (the FK is also ON DELETE CASCADE
         # since 20260708000000, but being explicit keeps the behavior correct
         # even on a database where that migration hasn't been applied yet).
-        supabase_client.table("transactions").delete().eq("user_id", user_id).eq("upload_id", upload_id).execute()
+        await run_query(
+            lambda: supabase_client.table("transactions").delete().eq("user_id", user_id).eq("upload_id", upload_id).execute()
+        )
 
         # Delete the upload record
-        supabase_client.table("uploads").delete().eq("id", upload_id).eq("user_id", user_id).execute()
+        await run_query(
+            lambda: supabase_client.table("uploads").delete().eq("id", upload_id).eq("user_id", user_id).execute()
+        )
 
         # Delete the original file from storage if it was stored
         if upload.get("storage_path"):
             try:
-                supabase_client.storage.from_("uploads").remove([upload["storage_path"]])
+                await run_in_threadpool(lambda: supabase_client.storage.from_("uploads").remove([upload["storage_path"]]))
             except Exception as e:
                 logger.warning("Failed to delete upload file from storage: %s", e)
                 # Don't fail the whole operation if storage deletion fails
@@ -353,7 +363,7 @@ def normalize_schema(df: pd.DataFrame, file_type: str = None) -> pd.DataFrame:
     return df[['timestamp', 'merchant', 'description', 'amount']]
 
 
-def store_original(user_id: str, file_name: str, content: bytes) -> Optional[str]:
+async def store_original(user_id: str, file_name: str, content: bytes) -> Optional[str]:
     """Upload the original file bytes to the 'uploads' bucket.
 
     Best-effort: a storage failure must not block the transactions import.
@@ -363,14 +373,14 @@ def store_original(user_id: str, file_name: str, content: bytes) -> Optional[str
     safe_name = re.sub(r'[^A-Za-z0-9._-]', '_', file_name)[-80:]
     storage_path = f"{user_id}/{uuid4().hex}_{safe_name}"
     try:
-        supabase_client.storage.from_("uploads").upload(storage_path, content)
+        await run_in_threadpool(lambda: supabase_client.storage.from_("uploads").upload(storage_path, content))
         return storage_path
     except Exception as e:
         logger.warning("Failed to store original upload for %s: %s", user_id, e)
         return None
 
 
-def create_upload_record(user_id: str, file_name: str, file_type: Optional[str],
+async def create_upload_record(user_id: str, file_name: str, file_type: Optional[str],
                          storage_path: Optional[str] = None, size_bytes: int = 0,
                          row_count: int = 0, file_hash: str = None,
                          status: str = 'uploaded') -> str:
@@ -380,44 +390,50 @@ def create_upload_record(user_id: str, file_name: str, file_type: Optional[str],
     (the user can't see or delete it), so a broken insert must abort the whole
     upload rather than being logged and ignored.
     """
-    response = supabase_client.table("uploads").insert({
-        "user_id": user_id,
-        "original_filename": file_name,
-        "file_type": file_type,
-        "storage_path": storage_path,
-        "size_bytes": size_bytes,
-        "status": status,
-        "row_count": row_count,
-        "file_hash": file_hash,
-    }).execute()
+    response = await run_query(
+        lambda: supabase_client.table("uploads").insert({
+            "user_id": user_id,
+            "original_filename": file_name,
+            "file_type": file_type,
+            "storage_path": storage_path,
+            "size_bytes": size_bytes,
+            "status": status,
+            "row_count": row_count,
+            "file_hash": file_hash,
+        }).execute()
+    )
     if not response.data:
         raise RuntimeError("uploads insert returned no row")
     return response.data[0]['id']
 
 
-def finalize_upload_record(upload_id: str, file_type: str,
+async def finalize_upload_record(upload_id: str, file_type: str,
                            storage_path: Optional[str], row_count: int) -> None:
     """Mark an upload as successfully parsed and fill in detected metadata."""
-    supabase_client.table("uploads").update({
-        "status": "parsed",
-        "file_type": file_type,
-        "storage_path": storage_path,
-        "row_count": row_count,
-    }).eq("id", upload_id).execute()
+    await run_query(
+        lambda: supabase_client.table("uploads").update({
+            "status": "parsed",
+            "file_type": file_type,
+            "storage_path": storage_path,
+            "row_count": row_count,
+        }).eq("id", upload_id).execute()
+    )
 
 
-def update_upload_error(upload_id: str, error_msg: str) -> None:
+async def update_upload_error(upload_id: str, error_msg: str) -> None:
     """Update upload record with error status.
 
     Clears file_hash so the per-user unique index doesn't block re-uploading
     the same file after the user fixes whatever failed.
     """
     try:
-        supabase_client.table("uploads").update({
-            "status": "failed",
-            "error_message": error_msg,
-            "file_hash": None,
-        }).eq("id", upload_id).execute()
+        await run_query(
+            lambda: supabase_client.table("uploads").update({
+                "status": "failed",
+                "error_message": error_msg,
+                "file_hash": None,
+            }).eq("id", upload_id).execute()
+        )
     except Exception as e:
         logger.warning("Error updating upload record: %s", e)
 
@@ -436,7 +452,7 @@ def _dedup_key(ts, merchant, description, amount, source) -> tuple:
     )
 
 
-def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
+async def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
     """Drop rows that already exist for this user (and intra-file duplicates).
 
     Compares against existing transactions in the new file's timestamp window,
@@ -445,7 +461,7 @@ def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
 
     Returns (df_new, skipped_count).
     """
-    from db import fetch_all
+    from db import fetch_all_async
 
     keys = [
         _dedup_key(row.timestamp, row.merchant, row.description, row.amount, file_type)
@@ -454,7 +470,7 @@ def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
 
     t_min = pd.to_datetime(df['timestamp'].min(), utc=True).tz_convert(None)
     t_max = pd.to_datetime(df['timestamp'].max(), utc=True).tz_convert(None)
-    existing = fetch_all(
+    existing = await fetch_all_async(
         lambda: supabase_client.table("transactions")
         .select("timestamp, merchant, description, amount, source")
         .eq("user_id", user_id)
@@ -479,7 +495,7 @@ def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
 INSERT_CHUNK = 500  # rows per insert request (keeps request bodies small)
 
 
-def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str, file_type: str):
+async def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str, file_type: str):
     """Insert normalized transactions into transactions table.
 
     file_type ('alipay'/'wechat') maps directly to the transaction_source
@@ -497,7 +513,8 @@ def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str, file_typ
 
     rows = df.to_dict('records')
     for i in range(0, len(rows), INSERT_CHUNK):
-        supabase_client.table("transactions").insert(rows[i:i + INSERT_CHUNK]).execute()
+        chunk = rows[i:i + INSERT_CHUNK]
+        await run_query(lambda chunk=chunk: supabase_client.table("transactions").insert(chunk).execute())
 
 
 def calculate_file_hash(content: bytes) -> str:
@@ -505,14 +522,14 @@ def calculate_file_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def check_duplicate_upload(user_id: str, file_hash: str) -> Optional[dict]:
+async def check_duplicate_upload(user_id: str, file_hash: str) -> Optional[dict]:
     """Check if a file with this hash was already uploaded by the user.
 
     Returns the existing upload record if found, None otherwise.
     """
     try:
-        response = (
-            supabase_client.table("uploads")
+        response = await run_query(
+            lambda: supabase_client.table("uploads")
             .select("id, created_at, original_filename, file_hash")
             .eq("user_id", user_id)
             .eq("file_hash", file_hash)
