@@ -60,6 +60,43 @@ def _find_column(df: pd.DataFrame, field: str, override: Optional[str] = None) -
     return None
 
 
+def _finalize_expense_rows(
+    df: pd.DataFrame,
+    is_expense: pd.Series,
+    is_refund: pd.Series,
+    amount: pd.Series,
+    ts_col: str,
+    merchant_col: str,
+    desc_col: str,
+    source: str,
+    is_transfer: Optional[pd.Series] = None,
+) -> pd.DataFrame:
+    """Shared tail for the Alipay/WeChat parsers: filter to expense-or-refund
+    rows, negate refunded amounts, print diagnostics, build the common schema.
+
+    `amount` must already be numeric and aligned to `df`'s original
+    (pre-filter) index — it gets re-aligned to the filtered rows below.
+    """
+    keep = is_expense | is_refund
+    df = df[keep].copy()
+    is_refund = is_refund.loc[df.index]
+    amount = amount.loc[df.index]
+    amount = amount.mask(is_refund.values, -amount)
+
+    if is_refund.sum():
+        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
+    if is_transfer is not None and is_transfer.sum():
+        print(f"  Excluded {is_transfer.sum()} internal transfer(s) (credit card repayment, withdrawal, etc.)")
+
+    return pd.DataFrame({
+        'timestamp': pd.to_datetime(df[ts_col]),
+        'merchant': df[merchant_col].fillna('').astype(str).str.strip(),
+        'description': df[desc_col].fillna('').astype(str).str.strip(),
+        'amount': amount,
+        'source': source,
+    })
+
+
 def _parse_amount_series(series: pd.Series) -> pd.Series:
     cleaned = (
         series.astype(str)
@@ -178,24 +215,14 @@ def parse_alipay_english(csv_path: str, encoding: str = 'utf-8', skiprows: int =
     status = df['Transaction Status'].astype(str)
     is_settled = status.str.contains('Successful|Closed', case=False, na=False)
     is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS_EN), case=False, na=False)
-
     is_expense = (df['Type'] == 'Expense') & is_settled
-    df = df[is_expense | is_refund].copy()
-    is_refund = is_refund.loc[df.index]
-
     amount = df['Amount'].astype(float)
-    amount = amount.mask(is_refund.values, -amount)
 
-    if is_refund.sum():
-        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
-
-    return pd.DataFrame({
-        'timestamp': pd.to_datetime(df['Transaction Time']),
-        'merchant': df['Transaction Counterparty'].fillna('').str.strip(),
-        'description': df['Product Description'].fillna('').str.strip(),
-        'amount': amount,
-        'source': 'alipay',
-    })
+    return _finalize_expense_rows(
+        df, is_expense, is_refund, amount,
+        ts_col='Transaction Time', merchant_col='Transaction Counterparty',
+        desc_col='Product Description', source='alipay',
+    )
 
 
 def parse_alipay_native(csv_path: str, encoding: str = 'gbk', skiprows: int = 0) -> pd.DataFrame:
@@ -213,24 +240,13 @@ def parse_alipay_native(csv_path: str, encoding: str = 'gbk', skiprows: int = 0)
     )
 
     is_expense = (df['收/支'] == '支出') & is_settled & ~is_transfer
-    df = df[is_expense | is_refund].copy()
-    is_refund = is_refund.loc[df.index]
-
     amount = df['金额'].astype(str).str.replace(',', '', regex=False).astype(float)
-    amount = amount.mask(is_refund.values, -amount)
 
-    if is_refund.sum():
-        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
-    if is_transfer.sum():
-        print(f"  Excluded {is_transfer.sum()} internal transfer(s) (credit card repayment, withdrawal, etc.)")
-
-    return pd.DataFrame({
-        'timestamp': pd.to_datetime(df['交易时间']),
-        'merchant': df['交易对方'].fillna('').astype(str).str.strip(),
-        'description': df['商品说明'].fillna('').astype(str).str.strip(),
-        'amount': amount,
-        'source': 'alipay',
-    })
+    return _finalize_expense_rows(
+        df, is_expense, is_refund, amount,
+        ts_col='交易时间', merchant_col='交易对方', desc_col='商品说明',
+        source='alipay', is_transfer=is_transfer,
+    )
 
 
 def parse_alipay(csv_path: str) -> pd.DataFrame:
@@ -260,28 +276,15 @@ def parse_wechat_excel(xlsx_path: str) -> pd.DataFrame:
     status = df['当前状态'].astype(str)
     is_settled = status.isin(['支付成功', '已转账'])
     is_refund = status.str.contains('|'.join(_REFUND_KEYWORDS), na=False)
-
     is_transfer = df['交易类型'].astype(str).str.contains('|'.join(_TRANSFER_KEYWORDS), na=False)
-
     is_expense = (df['收/支'] == '支出') & is_settled & ~is_transfer
-    df = df[is_expense | is_refund].copy()
-    is_refund = is_refund.loc[df.index]
+    amount = df['金额(元)'].astype(str).str.replace(',', '').astype(float)
 
-    amount_clean = df['金额(元)'].astype(str).str.replace(',', '').astype(float)
-    amount_clean = amount_clean.mask(is_refund.values, -amount_clean)
-
-    if is_refund.sum():
-        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
-    if is_transfer.sum():
-        print(f"  Excluded {is_transfer.sum()} internal transfer(s) (credit card repayment, withdrawal, etc.)")
-
-    return pd.DataFrame({
-        'timestamp': pd.to_datetime(df['交易时间']),
-        'merchant': df['交易对方'].fillna('').str.strip(),
-        'description': df['商品'].fillna('').str.strip(),
-        'amount': amount_clean,
-        'source': 'wechat',
-    })
+    return _finalize_expense_rows(
+        df, is_expense, is_refund, amount,
+        ts_col='交易时间', merchant_col='交易对方', desc_col='商品',
+        source='wechat', is_transfer=is_transfer,
+    )
 
 
 def parse_wechat_csv(csv_path: str) -> pd.DataFrame:
@@ -327,29 +330,21 @@ def parse_wechat_csv(csv_path: str) -> pd.DataFrame:
     # Income/Expense column
     ie_col = 'Income/Expense' if 'Income/Expense' in df.columns else '收/支'
     is_expense = ((df[ie_col] == 'Expense') | (df[ie_col] == '支出')) & is_settled
-    df = df[is_expense | is_refund].copy()
-    is_refund = is_refund.loc[df.index]
 
     # Amount column
     amount_col = 'Amount (CNY)' if 'Amount (CNY)' in df.columns else '金额(元)'
     amount = df[amount_col].astype(float)
-    amount = amount.mask(is_refund.values, -amount)
 
-    if is_refund.sum():
-        print(f"  Netted {is_refund.sum()} refund(s) as negative spend")
-
-    # Get merchant/description columns
+    # Merchant/description/time columns
     merchant_col = 'Counterparty' if 'Counterparty' in df.columns else '交易对方'
     desc_col = 'Product' if 'Product' in df.columns else '商品'
     time_col = 'Transaction Time' if 'Transaction Time' in df.columns else '交易时间'
 
-    return pd.DataFrame({
-        'timestamp': pd.to_datetime(df[time_col]),
-        'merchant': df[merchant_col].fillna('').str.strip(),
-        'description': df[desc_col].fillna('').str.strip(),
-        'amount': amount,
-        'source': 'wechat',
-    })
+    return _finalize_expense_rows(
+        df, is_expense, is_refund, amount,
+        ts_col=time_col, merchant_col=merchant_col, desc_col=desc_col,
+        source='wechat',
+    )
 
 
 def resolve_raw_paths(base_path: Optional[Path] = None) -> Tuple[Optional[Path], Optional[Path], List[dict]]:

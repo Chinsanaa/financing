@@ -28,5 +28,4 @@ EXPOSE 8000
 # default health checks via HTTP status codes.
 
 # Cache bust: 2026-07-07T06:00:00Z
-# Run the application with verbose logging to debug startup issues
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level debug
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info

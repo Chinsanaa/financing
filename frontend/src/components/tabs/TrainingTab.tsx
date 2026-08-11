@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, Play } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
-import { Alert } from '@/components/ui';
+import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';

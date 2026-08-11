@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, FileText, Check } from 'lucide-react';
 import { useApi, invalidate } from '@/utils/useApi';
 import { api } from '@/utils/api';
-import { Alert } from '@/components/ui';
+import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';

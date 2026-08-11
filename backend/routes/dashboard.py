@@ -7,6 +7,7 @@ TypeError — it is not a method.
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
+from starlette.concurrency import run_in_threadpool
 from config import supabase_client
 from db import fetch_all_async, run_query
 from errors import internal_error
@@ -53,12 +54,13 @@ async def get_summary(request: Request):
         )
         labeled_count = labeled.count if labeled.count is not None else len(labeled.data)
 
-        # Total spend (fetch_all pages past PostgREST's 1000-row cap, which
-        # silently truncated — and understated — every sum here before)
-        all_transactions = await fetch_all_async(
-            lambda: supabase_client.table("transactions").select("amount").eq("user_id", user_id)
+        # Total spend, summed in Postgres (see migration
+        # 20260811090000_transaction_sum_rpcs.sql) instead of pulling every
+        # row and summing in Python.
+        spend_resp = await run_query(
+            lambda: supabase_client.rpc("sum_user_transactions", {"p_user_id": user_id}).execute()
         )
-        total_spend = sum(float(t["amount"]) for t in all_transactions)
+        total_spend = float(spend_resp.data or 0)
 
         return {
             "total_transactions": total_count,
@@ -363,32 +365,34 @@ async def get_savings(request: Request):
         now = _now_cn()
         month_start = _month_start(now)
 
-        spending_rows = await fetch_all_async(
-            lambda: supabase_client.table("transactions")
-            .select("amount")
-            .eq("user_id", user_id)
-            .gte("timestamp", month_start.isoformat())
+        # Current month spend, summed in Postgres (see migration
+        # 20260811090000_transaction_sum_rpcs.sql) instead of pulling every
+        # row and summing in Python.
+        spend_resp = await run_query(
+            lambda: supabase_client.rpc(
+                "sum_user_transactions", {"p_user_id": user_id, "p_start": month_start.isoformat()}
+            ).execute()
         )
-        current_spend = sum(float(t["amount"]) for t in spending_rows)
+        current_spend = float(spend_resp.data or 0)
 
         # Simple anomaly detection: compare to average of last 3 months
         three_months_ago = datetime(now.year if now.month >= 4 else now.year - 1,
                                     now.month - 3 if now.month >= 4 else now.month + 9, 1)
 
-        historical_rows = await fetch_all_async(
-            lambda: supabase_client.table("transactions")
-            .select("timestamp, amount")
-            .eq("user_id", user_id)
-            .gte("timestamp", three_months_ago.isoformat())
-            .lt("timestamp", month_start.isoformat())
+        # Per-month totals computed in Postgres — a handful of rows (one per
+        # month) instead of every raw transaction in the window.
+        monthly_resp = await run_query(
+            lambda: supabase_client.rpc(
+                "monthly_spend_by_user",
+                {
+                    "p_user_id": user_id,
+                    "p_start": three_months_ago.isoformat(),
+                    "p_end": month_start.isoformat(),
+                },
+            ).execute()
         )
-
-        historical_df = pd.DataFrame(historical_rows) if historical_rows else pd.DataFrame()
-        avg_monthly = 0
-        if not historical_df.empty:
-            historical_df["month"] = pd.to_datetime(historical_df["timestamp"]).dt.to_period("M")
-            monthly_totals = historical_df.groupby("month")["amount"].sum()
-            avg_monthly = float(monthly_totals.mean()) if len(monthly_totals) > 0 else 0
+        monthly_totals = [float(row["total"]) for row in (monthly_resp.data or [])]
+        avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
 
         savings_goal = float(budget_config["saving_goal_monthly"]) if budget_config and budget_config["saving_goal_monthly"] else 0
         income = await _monthly_income(user_id)
@@ -504,19 +508,26 @@ async def get_reports(
         )
 
         total_count = response.count if response.count is not None else len(response.data or [])
-        transactions = [
-            {
-                "id": txn["id"],
-                "date": txn["timestamp"],
-                "merchant": merchant_label_english(txn["merchant"]),
-                "description": description_label_english(txn["description"]),
-                "amount": float(txn["amount"]),
-                "category": txn["categories"]["name"] if txn["categories"] else "Uncategorized",
-                "category_id": txn["category_id"],
-                "label_source": txn["label_source"],
-            }
-            for txn in (response.data or [])
-        ]
+
+        def build_rows():
+            return [
+                {
+                    "id": txn["id"],
+                    "date": txn["timestamp"],
+                    "merchant": merchant_label_english(txn["merchant"]),
+                    "description": description_label_english(txn["description"]),
+                    "amount": float(txn["amount"]),
+                    "category": txn["categories"]["name"] if txn["categories"] else "Uncategorized",
+                    "category_id": txn["category_id"],
+                    "label_source": txn["label_source"],
+                }
+                for txn in (response.data or [])
+            ]
+
+        # merchant/description labeling can hit a live Google Translate call
+        # per untranslated string (see src/translate.py) — run the whole
+        # batch off the event loop so it doesn't block other requests.
+        transactions = await run_in_threadpool(build_rows)
 
         return {
             "transactions": transactions,
@@ -575,16 +586,26 @@ async def export_transactions(request: Request):
         # Freeze header
         ws.freeze_panes = "A2"
 
-        # Add data rows
-        for txn in all_txns:
-            ws.append([
-                txn["timestamp"],
-                merchant_label_english(txn["merchant"]),
-                description_label_english(txn["description"]),
-                txn["categories"]["name"] if txn["categories"] else "Uncategorized",
-                float(txn["amount"]),
-                txn["label_source"] or "",
-            ])
+        # Add data rows. Building the rows can hit a live Google Translate
+        # call per untranslated merchant/description (see src/translate.py)
+        # over the user's ENTIRE transaction history — run the whole batch
+        # off the event loop so it doesn't block other requests, then append
+        # to the workbook (cheap, no network calls) back on the loop.
+        def build_rows():
+            return [
+                [
+                    txn["timestamp"],
+                    merchant_label_english(txn["merchant"]),
+                    description_label_english(txn["description"]),
+                    txn["categories"]["name"] if txn["categories"] else "Uncategorized",
+                    float(txn["amount"]),
+                    txn["label_source"] or "",
+                ]
+                for txn in all_txns
+            ]
+
+        for row in await run_in_threadpool(build_rows):
+            ws.append(row)
 
         # Format amount column
         for row in ws.iter_rows(min_row=2, max_row=len(all_txns) + 1, min_col=5, max_col=5):
@@ -629,8 +650,6 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
     user_id = request.state.user_id
 
     try:
-        from src.translate import merchant_label_english, description_label_english
-
         if show_labeled:
             # Show manually labeled transactions for user review/correction
             response = await run_query(
@@ -676,19 +695,24 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
         # In suggestion mode the row's category_id IS the model's suggestion —
         # report it only as suggested_category so the UI can distinguish
         # "this is what it's labeled" from "this is what the model proposes".
-        transactions = [
-            {
-                "id": txn["id"],
-                "date": txn["timestamp"],
-                "merchant": merchant_label_english(txn["merchant"]),
-                "description": description_label_english(txn["description"]),
-                "amount": float(txn["amount"]),
-                "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
-                "category": (txn["categories"]["name"] if txn["categories"] else None) if show_labeled else None,
-                "suggested_category": txn["categories"]["name"] if txn["categories"] else None,
-            }
-            for txn in rows
-        ]
+        def build_rows():
+            return [
+                {
+                    "id": txn["id"],
+                    "date": txn["timestamp"],
+                    "merchant": merchant_label_english(txn["merchant"]),
+                    "description": description_label_english(txn["description"]),
+                    "amount": float(txn["amount"]),
+                    "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
+                    "category": (txn["categories"]["name"] if txn["categories"] else None) if show_labeled else None,
+                    "suggested_category": txn["categories"]["name"] if txn["categories"] else None,
+                }
+                for txn in rows
+            ]
+
+        # merchant/description labeling can hit a live Google Translate call
+        # per untranslated string — run the batch off the event loop.
+        transactions = await run_in_threadpool(build_rows)
 
         return {
             "transactions": transactions,

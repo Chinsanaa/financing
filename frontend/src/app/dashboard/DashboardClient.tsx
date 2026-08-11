@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ChartPie,
@@ -13,15 +14,20 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import { TabBar, TabPanel, TabItem } from '@/components/ui/Tabs';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import DashboardLoading from './loading';
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
-import StatsTab from '@/components/tabs/StatsTab';
-import BudgetTab from '@/components/tabs/BudgetTab';
-import SavingsTab from '@/components/tabs/SavingsTab';
-import ActionTab from '@/components/tabs/ActionTab';
-import ReportsTab from '@/components/tabs/ReportsTab';
-import TransactionsModelTab from '@/components/tabs/TransactionsModelTab';
+
+// Each dashboard tab is code-split: only the active tab's JS (and its deps,
+// e.g. StatsTab's recharts) loads, instead of shipping all of them upfront.
+const tabLoading = () => <SkeletonRows rows={6} />;
+const StatsTab = dynamic(() => import('@/components/tabs/StatsTab'), { loading: tabLoading, ssr: false });
+const BudgetTab = dynamic(() => import('@/components/tabs/BudgetTab'), { loading: tabLoading, ssr: false });
+const SavingsTab = dynamic(() => import('@/components/tabs/SavingsTab'), { loading: tabLoading, ssr: false });
+const ActionTab = dynamic(() => import('@/components/tabs/ActionTab'), { loading: tabLoading, ssr: false });
+const ReportsTab = dynamic(() => import('@/components/tabs/ReportsTab'), { loading: tabLoading, ssr: false });
+const TransactionsModelTab = dynamic(() => import('@/components/tabs/TransactionsModelTab'), { loading: tabLoading, ssr: false });
 
 /** Four sections with sub-tabs. Transactions & Model merged into one workflow. */
 const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
@@ -78,7 +84,6 @@ export default function DashboardClient() {
   const isWizardStep = resolvedTab && wizardSteps.includes(resolvedTab);
   const activeTab = isWizardStep ? 'transactions-model' : (resolvedTab || 'overview');
   const activeSection = TAB_SECTION[activeTab];
-  const section = SECTIONS.find((s) => s.id === activeSection)!;
 
   const goToTab = useCallback(
     (tab: string) => {

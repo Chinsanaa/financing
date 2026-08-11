@@ -1607,3 +1607,19 @@ FastAPI Backend (Railway)
 - Docs: `REPO_STRUCTURE.md` is stale (missing 8 migrations, contradicts `README.md` on dashboard tab structure).
 
 **Next suggested step**: ask the user which of the remaining findings to tackle next — the Google Translate blocking calls are the highest-impact remaining backend item; the dashboard code-splitting is the highest-impact frontend item.
+
+### Session 22 (2026-08-11) — Follow-up audit fixes: translate batching, Postgres sums, dashboard code-splitting, quick wins, parse.py dedup
+**What was built** (user picked all of these to do in this session):
+- `backend/routes/dashboard.py`: `get_reports`, `export_transactions`, `get_review_queue` now build their per-row `merchant_label_english`/`description_label_english` output (which can hit a live Google Translate call per untranslated string, `src/translate.py`) inside a single `run_in_threadpool` batch instead of inline on the event loop. Also dropped a redundant local `from src.translate import ...` in `get_review_queue` that was fragmenting `translate_to_english`'s `lru_cache` across two `sys.modules` entries (bare `translate` vs `src.translate`, both resolvable via `PYTHONPATH=/app:/app/src`).
+- New migration `supabase/migrations/20260811090000_transaction_sum_rpcs.sql`: `sum_user_transactions(p_user_id, p_start, p_end)` and `monthly_spend_by_user(p_user_id, p_start, p_end)` — applied directly to the live "financing" Supabase project (user approved). `get_summary` and `get_savings` now call these via `supabase_client.rpc(...)` instead of pulling every transaction row and summing in Python/pandas.
+- Frontend: `DashboardClient.tsx` and `TransactionsModelTab.tsx` now load all 11 dashboard tabs via `next/dynamic` (`ssr: false`, `SkeletonRows` loading fallback) instead of static imports — confirmed via `npm run build` that the dashboard route now pulls multiple separate on-demand chunks instead of one bundle. Also removed a dead `section` variable in `DashboardClient.tsx`.
+- Quick wins: `backend/Dockerfile` no longer runs uvicorn with `--log-level debug` in prod; `CORSMiddleware` in `backend/main.py` now sets `max_age=600`; `REPO_STRUCTURE.md` migrations list and dashboard description updated to match reality; `frontend/README.md` stale `HomeClient.tsx` reference fixed; `frontend/src/components/ui.tsx` renamed to `ui-feedback.tsx` (no more collision with the `ui/` directory) with all 14 import sites updated; `frontend/package.json` deps pinned to their currently-resolved exact versions (no more `^` ranges).
+- `src/parse.py`: extracted `_finalize_expense_rows()` — the shared filter/negate-refund/print-diagnostics/build-schema tail that `parse_alipay_english`, `parse_alipay_native`, `parse_wechat_excel`, `parse_wechat_csv` each repeated (~90 lines collapsed to one ~30-line helper). Format-specific column detection/status matching was left untouched per-parser.
+
+**Verified**: root `pytest tests/ -q` (74 passed, includes `test_parse.py` after the refactor) and `backend/pytest tests/ -q` (27 passed) both green; the two new RPCs were smoke-tested directly against the live Supabase project before wiring routes to them; `frontend && npm run build` succeeds (compiles, typechecks, generates all routes) and shows the dashboard route split into multiple chunks.
+
+**Decided**: applied the new migration directly to the live Supabase project (user explicitly approved after being asked, since it's a shared/production system) rather than leaving it only as a committed file.
+
+**Open**: same remaining items as Session 21 that weren't in this session's scope — none; this session closed out every item the user picked from the original audit list. No new open items identified.
+
+**Next suggested step**: none pending from the audit — ask the user if there's a new area they want reviewed, or let this settle as the audit's closing session.

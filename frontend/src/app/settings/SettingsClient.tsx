@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import { api } from '@/utils/api';
-import { Alert } from '@/components/ui';
+import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Input from '@/components/ui/Input';

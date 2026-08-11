@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, PartyPopper } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
-import { Alert, ProgressBar } from '@/components/ui';
+import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';

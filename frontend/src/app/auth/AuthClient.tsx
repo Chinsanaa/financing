@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { createClient } from '@/utils/supabase';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { Alert } from '@/components/ui';
+import { Alert } from '@/components/ui-feedback';
 
 export default function AuthClient() {
   const router = useRouter();

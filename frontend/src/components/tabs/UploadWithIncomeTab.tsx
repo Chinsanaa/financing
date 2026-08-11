@@ -5,7 +5,7 @@ import { DollarSign } from 'lucide-react';
 import { api } from '@/utils/api';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import { Alert } from '@/components/ui';
+import { Alert } from '@/components/ui-feedback';
 import UploadTab from './UploadTab';
 import { CURRENCY_SYMBOL } from '@/utils/format';
 

@@ -2,7 +2,7 @@
 
 import { ArrowRight, CheckCircle2, ClipboardList, TriangleAlert } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
-import { Alert } from '@/components/ui';
+import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { SkeletonRows } from '@/components/ui/Skeleton';
