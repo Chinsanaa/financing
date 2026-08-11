@@ -4,9 +4,9 @@ import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase';
 import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
 import { Alert } from '@/components/ui-feedback';
 import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 /**
  * Handles every redirect shape Supabase email links actually use:
@@ -95,6 +95,8 @@ function VerifyContent() {
     return () => subscription.unsubscribe();
   }, [searchParams, supabase, router]);
 
+  const confirmPasswordMismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+
   const handleSetNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -129,9 +131,8 @@ function VerifyContent() {
 
         <form onSubmit={handleSetNewPassword} className="space-y-4">
           <div>
-            <Input
+            <PasswordInput
               label="New password"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -142,14 +143,14 @@ function VerifyContent() {
               <PasswordChecklist password={newPassword} />
             </div>
           </div>
-          <Input
+          <PasswordInput
             label="Confirm new password"
-            type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
             placeholder="Repeat your new password"
             autoComplete="new-password"
+            error={confirmPasswordMismatch ? 'Passwords do not match' : undefined}
           />
 
           {error && <Alert kind="error">{error}</Alert>}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -10,7 +10,16 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { Alert } from '@/components/ui-feedback';
 import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
+import PasswordInput from '@/components/auth/PasswordInput';
 import UsernameField from '@/components/auth/UsernameField';
+
+// Soft, client-side throttle on repeated failed sign-ins. This is a UX-layer
+// deterrent, not the real security boundary — Supabase Auth applies its own
+// project-level rate limits server-side regardless of this. It just avoids
+// letting someone hammer the submit button in a tight loop from this tab.
+const MAX_ATTEMPTS_BEFORE_LOCKOUT = 5;
+const BASE_LOCKOUT_SECONDS = 30;
+const MAX_LOCKOUT_SECONDS = 300;
 
 const TRUST_POINTS = [
   { icon: BrainCircuit, text: 'A model that is yours — trained on your own labels.' },
@@ -37,6 +46,11 @@ export default function AuthClient() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutCount, setLockoutCount] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
   const isSignup = mode === 'signup';
   const confirmMismatch = isSignup && confirmPassword.length > 0 && password !== confirmPassword;
   const canSubmitSignup =
@@ -46,19 +60,47 @@ export default function AuthClient() {
     password === confirmPassword &&
     agreedToTerms;
 
+  const lockRemainingSeconds = lockedUntil ? Math.max(0, Math.ceil((lockedUntil - now) / 1000)) : 0;
+  const isLocked = lockRemainingSeconds > 0;
+
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
+
+  useEffect(() => {
+    if (lockedUntil && now >= lockedUntil) setLockedUntil(null);
+  }, [now, lockedUntil]);
+
+  const recordFailedSignin = () => {
+    const attempts = failedAttempts + 1;
+    if (attempts >= MAX_ATTEMPTS_BEFORE_LOCKOUT) {
+      const seconds = Math.min(BASE_LOCKOUT_SECONDS * 2 ** lockoutCount, MAX_LOCKOUT_SECONDS);
+      setLockedUntil(Date.now() + seconds * 1000);
+      setLockoutCount((c) => c + 1);
+      setFailedAttempts(0);
+    } else {
+      setFailedAttempts(attempts);
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setMessage('');
+
+    if (!isSignup && isLocked) return;
+
     setLoading(true);
 
     try {
       if (isSignup) {
         const { error: signupError } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
-            data: { username },
+            data: { username: username.trim() },
             emailRedirectTo: `${window.location.origin}/auth/verify`,
           },
         });
@@ -70,12 +112,13 @@ export default function AuthClient() {
           setTimeout(() => router.push('/auth/verify'), 2000);
         }
       } else {
-        let resolvedEmail = identifier;
-        if (!identifier.includes('@')) {
+        const trimmedIdentifier = identifier.trim();
+        let resolvedEmail = trimmedIdentifier;
+        if (!trimmedIdentifier.includes('@')) {
           const { data } = await supabase.rpc('get_email_for_username', {
-            check_username: identifier,
+            check_username: trimmedIdentifier,
           });
-          resolvedEmail = data || identifier;
+          resolvedEmail = data || trimmedIdentifier;
         }
 
         const { data, error: loginError } = await supabase.auth.signInWithPassword({
@@ -85,7 +128,11 @@ export default function AuthClient() {
 
         if (loginError) {
           setError(loginError.message);
+          recordFailedSignin();
         } else if (data.user) {
+          setFailedAttempts(0);
+          setLockoutCount(0);
+          setLockedUntil(null);
           router.push('/dashboard');
         }
       }
@@ -103,7 +150,7 @@ export default function AuthClient() {
     setLoading(true);
 
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/auth/verify`,
       });
       if (resetError) {
@@ -280,9 +327,8 @@ export default function AuthClient() {
               )}
 
               <div>
-                <Input
+                <PasswordInput
                   label="Password"
-                  type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -303,6 +349,13 @@ export default function AuthClient() {
                     <PasswordChecklist password={password} />
                   </div>
                 )}
+                {!isSignup && failedAttempts > 0 && !isLocked && (
+                  <p className="mt-1.5 text-xs text-danger">
+                    {MAX_ATTEMPTS_BEFORE_LOCKOUT - failedAttempts} attempt
+                    {MAX_ATTEMPTS_BEFORE_LOCKOUT - failedAttempts === 1 ? '' : 's'} remaining
+                    before a temporary lockout.
+                  </p>
+                )}
               </div>
 
               <AnimatePresence initial={false}>
@@ -314,9 +367,8 @@ export default function AuthClient() {
                     transition={{ duration: 0.25, ease: 'easeOut' }}
                     className="overflow-hidden"
                   >
-                    <Input
+                    <PasswordInput
                       label="Confirm password"
-                      type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required={isSignup}
@@ -350,17 +402,22 @@ export default function AuthClient() {
                 </label>
               )}
 
+              {!isSignup && isLocked && (
+                <Alert kind="error">
+                  Too many failed attempts. Try again in {lockRemainingSeconds}s.
+                </Alert>
+              )}
               {error && <Alert kind="error">{error}</Alert>}
               {message && <Alert kind="success">{message}</Alert>}
 
               <Button
                 type="submit"
                 loading={loading}
-                disabled={isSignup && !canSubmitSignup}
+                disabled={isSignup ? !canSubmitSignup : isLocked}
                 className="w-full"
                 size="lg"
               >
-                {isSignup ? 'Create account' : 'Sign in'}
+                {isSignup ? 'Create account' : isLocked ? `Try again in ${lockRemainingSeconds}s` : 'Sign in'}
               </Button>
             </form>
           )}

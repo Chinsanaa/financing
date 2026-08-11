@@ -61,7 +61,7 @@ export default function UsernameField({
         label="Username"
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value.trim())}
         required
         placeholder="yourusername"
         autoComplete="username"

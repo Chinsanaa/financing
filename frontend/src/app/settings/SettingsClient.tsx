@@ -9,9 +9,9 @@ import { api } from '@/utils/api';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Input from '@/components/ui/Input';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 interface Profile {
   id: string;
@@ -40,6 +40,7 @@ export default function SettingsClient() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const confirmPasswordMismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
 
   useEffect(() => {
     if (deleteConfirm) deleteConfirmRef.current?.focus();
@@ -205,9 +206,8 @@ export default function SettingsClient() {
           <SectionHeader label="Data & Security" title="Change password" />
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
-              <Input
+              <PasswordInput
                 label="New password"
-                type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Create a new password"
@@ -217,13 +217,13 @@ export default function SettingsClient() {
                 <PasswordChecklist password={newPassword} />
               </div>
             </div>
-            <Input
+            <PasswordInput
               label="Confirm new password"
-              type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Re-enter new password"
               autoComplete="new-password"
+              error={confirmPasswordMismatch ? 'Passwords do not match' : undefined}
             />
 
             {passwordError && <Alert kind="error">{passwordError}</Alert>}

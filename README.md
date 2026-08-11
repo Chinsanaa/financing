@@ -66,7 +66,11 @@ the database as you type) alongside email, a password meeting a live
 checklist (9+ chars, upper/lower/digit/special), and agreeing to the Terms &
 Conditions / Privacy Policy. Sign-in accepts either email or username. A
 "Forgot password?" link sends a reset email; the link lands on `/auth/verify`
-with a "set a new password" form instead of the usual auto-redirect.
+with a "set a new password" form instead of the usual auto-redirect. Every
+password field has a show/hide toggle and confirm-password fields show a
+live "passwords do not match" message. Sign-in has a client-side soft
+lockout (escalating cooldown) after 5 failed attempts in a row, on top of
+Supabase Auth's own project-level rate limits.
 
 **Correcting categories**: the **Reports → All transactions** table is editable —
 click any category (including uncategorized rows) to reassign it; the change is

@@ -63,31 +63,38 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 48): username system (unique, live-checked, case-insensitive),
-sign-in with username OR email, forgot-password flow, a live password-
-requirements checklist (signup + Settings change-password), and a required
-Terms/Privacy consent checkbox at signup — see Session 48 log. Same branch,
+Current (Session 49): full audit of the auth flow built in Session 48, plus
+fixes — password show/hide toggle, live confirm-password mismatch on the two
+forms that lacked it (Settings change-password, recovery set-password), input
+trimming, a client-side soft lockout after repeated failed sign-ins, and two
+Supabase security-advisor findings addressed (trigger-only functions no
+longer directly RPC-callable; leaked-password-protection flagged for the user
+to enable manually — see Session 49 log). Same branch,
 `claude/privacy-terms-settings-pages-rfpqcx`.
 
 Next:
-1. Push and let CI run; `npm run build` is clean and the signup/signin pages
-   were smoke-tested against the real dev server + live Supabase project
-   (see Session 48 log), but no live signup/login/reset was actually
-   completed end-to-end (would create a real account) — do that manually
-   before considering this done: sign up with a new username, confirm
-   `profiles.username` is set, sign in using that username instead of email,
-   run the forgot-password flow through a real inbox.
-2. Have the `/privacy` and `/terms` copy reviewed — still a working draft,
+1. **User action needed, not code**: enable Supabase's "Leaked Password
+   Protection" (Dashboard → Authentication → Policies → Password Security) —
+   flagged by the security advisor, not togglable via any available tool.
+   Consider hCaptcha/Turnstile on signup/signin too (also dashboard-only,
+   needs site keys the user would have to obtain) for stronger bot/brute-force
+   defense than the client-side lockout added this session.
+2. Push and let CI run; `npm run build` is clean and signup/signin/settings
+   were smoke-tested against the real dev server + live Supabase project, but
+   no live signup/login/reset was actually completed end-to-end (would create
+   a real account) — do that manually before considering this done, same
+   checklist as Session 48's open item (still not done).
+3. Have the `/privacy` and `/terms` copy reviewed — still a working draft,
    not legal-reviewed (Session 47 open item, unchanged).
-3. Still open from Session 46: manual E2E of the multi-file upload queue
+4. Still open from Session 46: manual E2E of the multi-file upload queue
    against a live account (checklist in that session's plan file).
-4. Still open from Session 45: manual smoke check of the JWT fix against a
+5. Still open from Session 45: manual smoke check of the JWT fix against a
    real Supabase project before deploy.
-5. E2E on the live account at 1920×1080 + phone (still open from Session
+6. E2E on the live account at 1920×1080 + phone (still open from Session
    44): chart ticks read "Jun" and tooltip "June 2026"; pick colors in
    Categories and confirm recoloring; confirm the dashboard fills the
    screen.
-6. Still deferred: git-history privacy scrub (user decision), real worker
+7. Still deferred: git-history privacy scrub (user decision), real worker
    queue for training at scale (user decision — not needed at current user
    count), true per-month budget *history*, multi-currency,
    `_available_months` → Postgres RPC, real Postgres RLS-policy tests (would
@@ -96,9 +103,11 @@ Next:
    username backfill for pre-existing accounts (they keep showing email
    until a rename/claim flow is built), the `routes/auth.py` non-browser
    `/auth/signup` endpoint still doesn't accept a username (frontend never
-   calls it, so low priority).
+   calls it, so low priority), real server-side per-account login rate
+   limiting (Session 49's lockout is client-side only — see that session's
+   log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 48, 2026-08-11)
+## Current State (Session 49, 2026-08-11)
 
 | Item | Status |
 |---|---|
@@ -134,8 +143,93 @@ Next:
 | Username system | **NEW** (Session 48): `profiles.username` (unique case-insensitive, `[a-zA-Z0-9_]{3,20}`), set at signup via `signUp({ options: { data: { username } } })` → `handle_new_user()` trigger. Two `SECURITY DEFINER` RPCs (`is_username_available`, `get_email_for_username`, both `GRANT`ed to `anon`) support live availability checking and username-or-email sign-in without a backend route. Shown instead of email in the dashboard header (via `user_metadata.username`, no extra query) |
 | Password rules + consent | **NEW** (Session 48): shared `PasswordChecklist` component (9+ chars/A-Z/a-z/0-9/special) gates both signup and Settings change-password; signup requires a checked "I agree to Terms & Conditions and Privacy Policy" box (links to Session 47's pages) |
 | Forgot password | **NEW** (Session 48): `AuthClient` gained a third `'forgot'` mode calling `resetPasswordForEmail`; `/auth/verify` now branches on `type=recovery` to show a "set new password" form (`supabase.auth.updateUser`) instead of auto-redirecting to the dashboard |
+| Auth flow polish | **NEW** (Session 49): shared `PasswordInput` (show/hide eye toggle) used on all 6 password fields across signup/signin/Settings/recovery; live confirm-password mismatch text added to the two forms that lacked it (Settings change-password, recovery set-password — signup already had it); email/username/identifier trimmed before use; client-side soft lockout on sign-in after 5 failed attempts (escalating 30s→300s cooldown, resets on success). Two Supabase security-advisor findings fixed: `handle_new_user()`/`initialize_default_categories()`/`reassign_deleted_category_transactions()` (trigger-only functions) had EXECUTE revoked from `anon`/`authenticated` (harmless as direct RPC calls today, but needlessly public); "Leaked Password Protection" is disabled project-wide — flagged for the user, not fixable via any available tool (Dashboard-only setting) |
 
 ## Session Log
+
+### Session 49 (2026-08-11) — Auth flow audit: password UX, live validation, soft rate limiting, advisor fixes
+
+**Scope**: user asked for a full audit of the authentication flow built in Session 48 —
+"does the UI/UX integrate well, are there good validations, is there rate limiting for wrong
+passwords, implement anything missing (e.g. confirm-password mismatch should show red text)."
+Read every auth-related file end to end (`AuthClient.tsx`, `SettingsClient.tsx`,
+`auth/verify/page.tsx`, `backend/routes/auth.py`) plus ran the Supabase security advisor
+against the live project.
+
+**Findings and fixes**:
+1. **Confirm-password mismatch text was missing in two of three places.** Signup already had
+   it (`confirmMismatch` → `Input`'s `error` prop); Settings' change-password and the recovery
+   set-password form on `/auth/verify` only checked on submit, with no live inline text. Added
+   the same `x.length > 0 && a !== b` pattern to both, wired to the new `PasswordInput`'s
+   `error` prop — this was the most literal item in the user's ask and is fixed everywhere now.
+2. **No password visibility toggle anywhere.** New shared `components/auth/PasswordInput.tsx`
+   (duplicates `Input`'s field styling rather than wrapping it, to keep the eye-icon
+   positioning simple and avoid fragile absolute-position math against a component that wasn't
+   built with a right-side slot) — swapped in for all 6 password fields: signup
+   password/confirm, Settings new/confirm, recovery new/confirm.
+3. **No rate limiting on the client's actual login path.** `backend/routes/auth.py` has real
+   IP-based rate limiting (`5/hour` signup, `10/15min` login via `slowapi`), but the frontend
+   has never called those routes — `AuthClient.tsx` calls `supabase.auth.signInWithPassword`
+   directly (an intentional Session 40 architecture choice, confirmed still true by reading
+   `routes/auth.py`'s own docstring). That backend rate limiting is effectively dead code from
+   the browser's perspective; the real server-side protection is Supabase Auth's own
+   project-level rate limits, which apply automatically regardless of app code and aren't
+   configurable through any available tool. Added a **client-side soft lockout** as UX-layer
+   defense-in-depth on top of that (explicitly commented as such, not a security boundary): 5
+   failed sign-in attempts trigger an escalating cooldown (30s, 60s, 120s, capped at 300s,
+   doubling per lockout, resetting on a successful login), with a live countdown, a disabled
+   submit button, and a warning once 3+ attempts have been used. **Did not** silently reroute
+   login through the backend to get its rate limiting for real — that reverses an established,
+   deliberate architecture decision (client-side Supabase auth, consistent with the RPC-based
+   username design from Session 48) and is exactly the kind of "big decision" CLAUDE.md says to
+   surface rather than just make; flagged in Next Suggested Step instead.
+4. **Inputs weren't trimmed.** A pasted email/username/identifier with leading/trailing
+   whitespace would silently fail (format regex, RPC lookup, or Supabase's own validation).
+   Now trimmed at the point of use in `AuthClient.tsx` (email, username, sign-in identifier)
+   and continuously in `UsernameField` (strips whitespace on every keystroke, since usernames
+   can never legitimately contain spaces — friendlier than surfacing a format error for it).
+5. **Supabase security advisor** (`get_advisors(type=security)`, run against project
+   `pxxqqffwummhkohnrvtz`): flagged `handle_new_user()`, `initialize_default_categories()`, and
+   `reassign_deleted_category_transactions()` — all `SECURITY DEFINER` trigger functions — as
+   directly callable via PostgREST RPC by `anon`/`authenticated` (e.g.
+   `POST /rest/v1/rpc/handle_new_user`). All three only reference `NEW`/`OLD`, which don't
+   exist outside trigger context, so a direct call errors out harmlessly today — but there's no
+   reason to leave them in the public API surface. New migration
+   (`20260811140000_revoke_trigger_only_function_execute.sql`, applied live via Supabase MCP)
+   revokes `EXECUTE` from `PUBLIC`/`anon`/`authenticated` on all three; confirmed this doesn't
+   break their triggers (Postgres fires triggers regardless of the caller's EXECUTE grant on
+   the function — that grant only gates direct/RPC calls). `is_username_available` and
+   `get_email_for_username` were flagged too, but that's the two RPCs from Session 48 working
+   as designed (they must be `anon`-callable to support pre-login username checks) — left as
+   intended, noted in the report rather than "fixed." The advisor's other findings (missing
+   `search_path` on `sum_user_transactions`/`monthly_spend_by_user`) are pre-existing and
+   unrelated to auth — out of scope, not touched.
+6. **"Leaked Password Protection" is disabled** on the live project (checks new passwords
+   against HaveIBeenPwned). This is a GoTrue/Auth-service setting, not something reachable via
+   SQL or any Supabase MCP tool available in this session (only DB-level tools exist:
+   `apply_migration`, `execute_sql`, `list_tables`, etc.) — flagged for the user to enable
+   manually at Dashboard → Authentication → Policies → Password Security. Same for
+   hCaptcha/Turnstile bot protection on signup/signin, suggested as a stronger alternative to
+   the client-side lockout, also dashboard-only and needs the user to obtain site keys.
+
+**Reviewed, found adequate, not changed**: loading-state disabling (the shared `Button`
+already disables while `loading`), ARIA on `Alert` (`role="alert"`/`aria-live` already
+correct), password manager hints (`autoComplete="new-password"`/`"current-password"` already
+correct throughout), generic "Invalid login credentials" messaging on sign-in (doesn't leak
+whether a username/email exists — the `get_email_for_username` RPC already returns `NULL` on
+no match rather than an error, so a bad username and a bad password look identical to the
+attacker). **Known, unfixed limitation, flagged not silently accepted**: Supabase's default
+`signUp` response for an already-registered email can reveal that the account exists (message
+text varies by project's email-confirmation settings) — this is Supabase Auth's own behavior,
+not something the app's code controls.
+
+**Verified**: `npm run build` clean (typecheck + prerender, all 8 routes). Smoke-tested
+against a real `next dev` server wired to the live project's anon key (temporary `.env.local`,
+deleted after, confirmed gitignored before and after) — confirmed the show/hide toggle and
+checklist render on `/auth?mode=signup`. The `REVOKE` statements were confirmed `{"success":true}` by `apply_migration`, which is
+sufficient signal the DDL applied — a follow-up advisor re-run to confirm the warnings cleared
+would be a cheap sanity check next session. No live signup/login/reset completed (see Next
+Suggested Step — same open item carried from Session 48, still not done).
 
 ### Session 48 (2026-08-11) — Username system, forgot password, password rules, ToS/Privacy consent
 
