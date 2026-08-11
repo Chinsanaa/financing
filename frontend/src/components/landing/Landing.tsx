@@ -94,7 +94,7 @@ export default function Landing() {
           scrolled ? 'glass py-2.5' : 'bg-transparent py-4'
         }`}
       >
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="mx-auto flex max-w-7xl 2xl:max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="font-display text-lg font-bold tracking-tight">
             Financing<span className="text-accent-strong">.</span>
           </Link>
@@ -123,7 +123,7 @@ export default function Landing() {
         />
         <div className="pointer-events-none absolute bottom-0 -left-32 h-80 w-80 rounded-full bg-violet/15 blur-3xl" />
 
-        <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="relative mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <div className="grid items-center gap-14 lg:grid-cols-[1.1fr,1fr]">
             <div>
               <Reveal>
@@ -175,7 +175,7 @@ export default function Landing() {
 
       {/* How it works */}
       <section id="how" className="py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <Reveal>
             <p className="section-label mb-2">How it works</p>
             <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
@@ -203,7 +203,7 @@ export default function Landing() {
 
       {/* Live demo strip */}
       <section className="py-10">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <Reveal>
             <DemoStrip />
           </Reveal>
@@ -212,7 +212,7 @@ export default function Landing() {
 
       {/* Features */}
       <section id="features" className="py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <Reveal>
             <p className="section-label mb-2">Features</p>
             <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
@@ -237,7 +237,7 @@ export default function Landing() {
 
       {/* Final CTA */}
       <section className="py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <Reveal>
             <Card glass className="relative overflow-hidden px-8 py-16 text-center">
               <div className="pointer-events-none absolute -top-24 left-1/2 h-64 w-96 -translate-x-1/2 rounded-full bg-accent/15 blur-3xl animate-glow-pulse" />
@@ -261,7 +261,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-edge/8 py-10">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted sm:flex-row sm:px-6">
+        <div className="mx-auto flex max-w-7xl 2xl:max-w-[1440px] flex-col items-center justify-between gap-4 px-4 text-sm text-muted sm:flex-row sm:px-6 lg:px-8">
           <span className="font-display font-semibold text-ink">
             Financing<span className="text-accent-strong">.</span>
           </span>
