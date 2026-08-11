@@ -11,7 +11,7 @@ show where the money went.
 
 ```
 User Browser (Next.js on Vercel)
-    ↓ Supabase Auth (email/password) → JWT in Authorization header
+    ↓ Supabase Auth (email/password, sign-in via email or username) → JWT in Authorization header
 FastAPI Backend (Railway)
     ↓ service-role key + explicit user_id scoping on every query
 Supabase PostgreSQL + Auth + Storage
@@ -60,6 +60,13 @@ separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
 skeleton loading states, and a marketing landing page at `/` for signed-out
 visitors, with `/privacy` and `/terms` legal pages linked from its footer.
+
+**Sign-up/sign-in**: signup requires a unique username (checked live against
+the database as you type) alongside email, a password meeting a live
+checklist (9+ chars, upper/lower/digit/special), and agreeing to the Terms &
+Conditions / Privacy Policy. Sign-in accepts either email or username. A
+"Forgot password?" link sends a reset email; the link lands on `/auth/verify`
+with a "set a new password" form instead of the usual auto-redirect.
 
 **Correcting categories**: the **Reports → All transactions** table is editable —
 click any category (including uncategorized rows) to reassign it; the change is

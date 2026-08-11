@@ -141,7 +141,9 @@ export default function DashboardClient() {
             Financing<span className="text-accent-strong">.</span>
           </Link>
           <div className="flex items-center gap-2">
-            <p className="mr-2 hidden text-sm text-muted sm:block">{user?.email}</p>
+            <p className="mr-2 hidden text-sm text-muted sm:block">
+              {user?.user_metadata?.username || user?.email}
+            </p>
             <ThemeToggle />
             <Link
               href="/settings"

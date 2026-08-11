@@ -63,21 +63,22 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 47): Privacy Policy + Terms & Conditions pages, footer
-links, and Settings page rework (dropped the duplicate Monthly income form,
-added data export + change password + legal links) — see Session 47 log.
-Branch `claude/privacy-terms-settings-pages-rfpqcx`.
+Current (Session 48): username system (unique, live-checked, case-insensitive),
+sign-in with username OR email, forgot-password flow, a live password-
+requirements checklist (signup + Settings change-password), and a required
+Terms/Privacy consent checkbox at signup — see Session 48 log. Same branch,
+`claude/privacy-terms-settings-pages-rfpqcx`.
 
 Next:
-1. Push this branch and open a PR; `npm run build` is clean (see Session 47
-   log) but there's no live E2E check yet — log in, hit Settings, confirm
-   export downloads an .xlsx and password change actually updates Supabase
-   auth.
-2. Have the `/privacy` and `/terms` copy reviewed — it's a working draft
-   inferred from the real data model (Supabase auth, Alipay/WeChat uploads,
-   per-user model artifacts, RLS), not legal-reviewed text. Two placeholders
-   need filling in before this is real: hosting region confirmation and
-   governing-law jurisdiction (both marked inline on the pages).
+1. Push and let CI run; `npm run build` is clean and the signup/signin pages
+   were smoke-tested against the real dev server + live Supabase project
+   (see Session 48 log), but no live signup/login/reset was actually
+   completed end-to-end (would create a real account) — do that manually
+   before considering this done: sign up with a new username, confirm
+   `profiles.username` is set, sign in using that username instead of email,
+   run the forgot-password flow through a real inbox.
+2. Have the `/privacy` and `/terms` copy reviewed — still a working draft,
+   not legal-reviewed (Session 47 open item, unchanged).
 3. Still open from Session 46: manual E2E of the multi-file upload queue
    against a live account (checklist in that session's plan file).
 4. Still open from Session 45: manual smoke check of the JWT fix against a
@@ -91,9 +92,13 @@ Next:
    count), true per-month budget *history*, multi-currency,
    `_available_months` → Postgres RPC, real Postgres RLS-policy tests (would
    need a local/CLI Supabase stack), the `detect_source` ragged-CSV
-   fragility found in Session 46, no ESLint config in `frontend/`.
+   fragility found in Session 46, no ESLint config in `frontend/`, no
+   username backfill for pre-existing accounts (they keep showing email
+   until a rename/claim flow is built), the `routes/auth.py` non-browser
+   `/auth/signup` endpoint still doesn't accept a username (frontend never
+   calls it, so low priority).
 
-## Current State (Session 46, 2026-07-24)
+## Current State (Session 48, 2026-08-11)
 
 | Item | Status |
 |---|---|
@@ -125,9 +130,93 @@ Next:
 | Tests | 74 (`pytest tests/`, src/ pipeline) + 27 (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings, classification-coalescer threading tests, and — new this session — `routes/uploads.py` coverage: extension rejection, duplicate-hash 409, a failing file not blocking its neighbors, and sequential overlapping-date-range dedup) = 101 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 | Legal pages | **NEW** (Session 47): `/privacy` and `/terms`, static public App Router pages, drafted from the real data model; linked from the landing page footer and Settings |
-| Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections |
+| Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections. **CHANGED** (Session 48): change-password form now gated by the shared `PasswordChecklist`; Account card shows `username` |
+| Username system | **NEW** (Session 48): `profiles.username` (unique case-insensitive, `[a-zA-Z0-9_]{3,20}`), set at signup via `signUp({ options: { data: { username } } })` → `handle_new_user()` trigger. Two `SECURITY DEFINER` RPCs (`is_username_available`, `get_email_for_username`, both `GRANT`ed to `anon`) support live availability checking and username-or-email sign-in without a backend route. Shown instead of email in the dashboard header (via `user_metadata.username`, no extra query) |
+| Password rules + consent | **NEW** (Session 48): shared `PasswordChecklist` component (9+ chars/A-Z/a-z/0-9/special) gates both signup and Settings change-password; signup requires a checked "I agree to Terms & Conditions and Privacy Policy" box (links to Session 47's pages) |
+| Forgot password | **NEW** (Session 48): `AuthClient` gained a third `'forgot'` mode calling `resetPasswordForEmail`; `/auth/verify` now branches on `type=recovery` to show a "set new password" form (`supabase.auth.updateUser`) instead of auto-redirecting to the dashboard |
 
 ## Session Log
+
+### Session 48 (2026-08-11) — Username system, forgot password, password rules, ToS/Privacy consent
+
+**Scope**: follow-up to Session 47's Privacy/Terms pages — user asked for a "Forgot password"
+path on sign-in, a live password-requirements checklist (screenshot reference: 9+ chars/A-Z/
+a-z/0-9/special char pill badges), a required Terms & Conditions / Privacy Policy consent
+checkbox at signup, and a unique username (live availability check, screenshot reference:
+green check + "Username is available") that displays instead of email and can be used to sign
+in alongside email. Explored the existing auth flow first via an Explore agent (`AuthClient.tsx`,
+`auth/verify/page.tsx`, `backend/routes/auth.py`, the `profiles` schema/triggers) before
+planning — confirmed none of this existed yet: no `username` column, no `resetPasswordForEmail`
+call anywhere, auth 100% client-side via `supabase-js`.
+
+**Decisions confirmed with the user up front** (AskUserQuestion, plan mode): username → email
+resolution for login is a Postgres `SECURITY DEFINER` RPC (not a new FastAPI route) — keeps
+auth entirely client-side, matching the existing architecture; the password checklist is a
+shared component used at signup **and** in Settings' change-password form; username uniqueness
+is case-insensitive.
+
+**Migration** (`supabase/migrations/20260811130000_add_username.sql`, applied live via
+Supabase MCP to project `pxxqqffwummhkohnrvtz`, verified by re-querying
+`information_schema.columns`/`pg_proc` afterward): `profiles.username text` with a format
+CHECK (`^[a-zA-Z0-9_]{3,20}$`) and a partial `lower(username)` unique index (NULLs excluded, so
+existing accounts without a username don't collide). `handle_new_user()` (the signup trigger)
+now also inserts `username` from `new.raw_user_meta_data->>'username'` — while touching it,
+added `SET search_path = public, pg_temp`, matching the hardening already applied to
+`initialize_default_categories()` after the Session 36 search-path incident (the original
+`handle_new_user()` predates that fix and never got it). Two new RPCs, both
+`GRANT EXECUTE ... TO anon, authenticated` since they must run pre-login:
+`is_username_available(check_username)` and `get_email_for_username(check_username)` (joins
+`auth.users` to `profiles`, returns `NULL` for no match — callers never learn whether a
+username exists beyond "login failed").
+
+**Frontend — new shared components**: `components/auth/PasswordChecklist.tsx` (5 regex-backed
+pill badges reusing `Badge`'s `success`/`neutral` tones, exports `passwordMeetsRequirements()`
+so callers can gate submit), `components/auth/UsernameField.tsx` (debounced — new
+`utils/useDebouncedValue.ts` hook — live `is_username_available` RPC call with a
+green-check/red-X availability message, plus client-side format validation before even
+querying), both used by `AuthClient.tsx` and (`PasswordChecklist` only) `SettingsClient.tsx`.
+
+**`AuthClient.tsx` rework**: the old boolean `isSignup` became a 3-way `mode: 'signin' |
+'signup' | 'forgot'`. Signup gained the username field + checklist + a required consent
+checkbox (`Link`s to `/terms`/`/privacy`, `target="_blank"`); submit is disabled until email +
+available username + all password requirements + matching confirm + checked box. Sign-in's
+email field became "Email or username" — on submit, a value without `@` is resolved through
+`get_email_for_username` first, then `signInWithPassword` proceeds with the resolved (or
+original) value as before, so a failed lookup just falls through to Supabase's normal
+"Invalid login credentials" rather than a distinct error. A new "Forgot password?" link (
+sign-in mode only) switches to the `'forgot'` mode: an email-only form calling
+`resetPasswordForEmail(email, { redirectTo: '${origin}/auth/verify' })`.
+
+**`auth/verify/page.tsx` rework**: previously every successful `exchangeCodeForSession`/
+`verifyOtp` redirected straight to `/dashboard`. Now captures `type=recovery` from the query
+string (present on Supabase's password-reset links) and, when set, skips the redirect and
+renders a "Set a new password" form (reusing `PasswordChecklist`) that calls
+`supabase.auth.updateUser({ password })` before redirecting — also listens for the
+`PASSWORD_RECOVERY` auth event as a second trigger path, since implicit-flow links surface the
+session via `onAuthStateChange` rather than the query string. Normal signup-confirmation links
+are unaffected.
+
+**Display + Settings**: dashboard header (`DashboardClient.tsx`) now reads
+`user?.user_metadata?.username || user?.email` — free (metadata is already mirrored at signup
+via `signUp`'s `options.data`), no extra query. `SettingsClient.tsx`'s Account card gained a
+Username row (from `GET /settings/profile`'s existing `select("*")`, no backend change needed);
+its change-password form now renders `PasswordChecklist` and disables submit until requirements
++ match are both satisfied.
+
+**Verified**: `npm run build` clean (typecheck + prerender). Smoke-tested against a real
+`next dev` server wired to the live Supabase project's anon key (temporary `.env.local`,
+deleted afterward, never committed — confirmed gitignored): curl'd the rendered HTML for
+`/auth?mode=signup` and `/auth` and confirmed the username field, password-checklist labels,
+Terms/Privacy links, "Email or username" field, and "Forgot password?" link all render.
+Playwright's browser wasn't available in this environment (`Chromium distribution 'chrome' is
+not found`), so this was HTML-level, not interactive — **no live signup/login/reset was
+actually completed** (would create a real account on the live project); that's the top item in
+Next Suggested Step.
+
+**Deferred, not done**: backfilling `username` for pre-existing accounts (they keep showing
+email until a rename/claim flow exists — out of scope, noted in the migration); the
+non-browser `POST /auth/signup` backend route still doesn't accept/forward a username (nothing
+calls it from the frontend, so low priority, flagged not fixed).
 
 ### Session 47 (2026-08-11) — Privacy Policy, Terms & Conditions, Settings rework
 

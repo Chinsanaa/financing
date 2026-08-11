@@ -11,9 +11,11 @@ import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
 
 interface Profile {
   id: string;
+  username: string | null;
   email_verified_at: string;
   onboarding_phase: string;
   created_at: string;
@@ -94,8 +96,8 @@ export default function SettingsClient() {
     setPasswordError('');
     setPasswordSuccess('');
 
-    if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+    if (!passwordMeetsRequirements(newPassword)) {
+      setPasswordError('Password does not meet the requirements below');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -165,6 +167,10 @@ export default function SettingsClient() {
           <SectionHeader label="Profile" title="Account" />
           <div className="space-y-4">
             <div>
+              <p className="section-label mb-0.5">Username</p>
+              <p className="text-sm font-medium">{profile?.username || '—'}</p>
+            </div>
+            <div>
               <p className="section-label mb-0.5">Email</p>
               <p className="text-sm font-medium">{user?.email}</p>
             </div>
@@ -198,14 +204,19 @@ export default function SettingsClient() {
         <Card className="p-6">
           <SectionHeader label="Data & Security" title="Change password" />
           <form onSubmit={handleChangePassword} className="space-y-4">
-            <Input
-              label="New password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 8 characters"
-              autoComplete="new-password"
-            />
+            <div>
+              <Input
+                label="New password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Create a new password"
+                autoComplete="new-password"
+              />
+              <div className="mt-2">
+                <PasswordChecklist password={newPassword} />
+              </div>
+            </div>
             <Input
               label="Confirm new password"
               type="password"
@@ -218,7 +229,11 @@ export default function SettingsClient() {
             {passwordError && <Alert kind="error">{passwordError}</Alert>}
             {passwordSuccess && <Alert kind="success">{passwordSuccess}</Alert>}
 
-            <Button type="submit" loading={passwordSaving}>
+            <Button
+              type="submit"
+              loading={passwordSaving}
+              disabled={!passwordMeetsRequirements(newPassword) || newPassword !== confirmPassword}
+            >
               {passwordSaving ? 'Saving' : 'Update password'}
             </Button>
           </form>

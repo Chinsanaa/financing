@@ -3,17 +3,22 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase';
+import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
+import { Alert } from '@/components/ui-feedback';
+import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
 
 /**
- * Handles every redirect shape Supabase email confirmation actually uses:
+ * Handles every redirect shape Supabase email links actually use:
  * - PKCE flow (default with @supabase/ssr): `?code=...` → exchangeCodeForSession
  * - Token-hash links: `?token_hash=...&type=...` → verifyOtp
  * - Legacy `?token=...&type=email` → verifyOtp
  * - Implicit flow: `#access_token=...` fragment → onAuthStateChange fires
  * - Error redirects: `?error_description=...` → surfaced to the user
  *
- * The old version only handled `?token=&type=email`, so most confirmation
- * links landed on a static "check your email" page and did nothing.
+ * `type=recovery` (password reset links) is handled specially: instead of
+ * redirecting straight to the dashboard once the session is established, we
+ * show a "set a new password" form — the whole point of a reset link.
  */
 function VerifyContent() {
   const router = useRouter();
@@ -23,19 +28,31 @@ function VerifyContent() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [recoveryReady, setRecoveryReady] = useState(false);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [settingPassword, setSettingPassword] = useState(false);
 
   useEffect(() => {
+    const isRecovery = searchParams.get('type') === 'recovery';
+
     const redirectSoon = () => {
       setMessage('Email verified! Redirecting...');
       setTimeout(() => router.push('/dashboard'), 1500);
     };
 
     // Implicit-flow links put the session in the URL hash; the client
-    // consumes it automatically and fires SIGNED_IN.
+    // consumes it automatically and fires SIGNED_IN (also fires for
+    // PASSWORD_RECOVERY on some Supabase versions, hence the extra check).
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') redirectSoon();
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && isRecovery)) {
+        setRecoveryReady(true);
+      } else if (event === 'SIGNED_IN') {
+        redirectSoon();
+      }
     });
 
     const handleVerification = async () => {
@@ -56,6 +73,7 @@ function VerifyContent() {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) setError(error.message);
+          else if (isRecovery) setRecoveryReady(true);
           else redirectSoon();
         } else if (tokenHash) {
           const { error } = await supabase.auth.verifyOtp({
@@ -63,6 +81,7 @@ function VerifyContent() {
             type: (type as any) || 'email',
           });
           if (error) setError(error.message);
+          else if (isRecovery) setRecoveryReady(true);
           else redirectSoon();
         }
       } catch (err: any) {
@@ -75,6 +94,79 @@ function VerifyContent() {
     handleVerification();
     return () => subscription.unsubscribe();
   }, [searchParams, supabase, router]);
+
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setSettingPassword(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) {
+        setError(updateError.message);
+      } else {
+        setMessage('Password updated! Redirecting...');
+        setRecoveryReady(false);
+        setTimeout(() => router.push('/dashboard'), 1500);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSettingPassword(false);
+    }
+  };
+
+  if (recoveryReady) {
+    return (
+      <div className="glass w-full max-w-md rounded-card p-8 shadow-card animate-fade-up">
+        <p className="section-label mb-2">Almost there</p>
+        <h1 className="font-display text-2xl font-bold tracking-tight mb-4">Set a new password</h1>
+
+        <form onSubmit={handleSetNewPassword} className="space-y-4">
+          <div>
+            <Input
+              label="New password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              placeholder="Create a new password"
+              autoComplete="new-password"
+            />
+            <div className="mt-2">
+              <PasswordChecklist password={newPassword} />
+            </div>
+          </div>
+          <Input
+            label="Confirm new password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            placeholder="Repeat your new password"
+            autoComplete="new-password"
+          />
+
+          {error && <Alert kind="error">{error}</Alert>}
+          {message && <Alert kind="success">{message}</Alert>}
+
+          <Button
+            type="submit"
+            loading={settingPassword}
+            disabled={!passwordMeetsRequirements(newPassword)}
+            className="w-full"
+          >
+            Update password
+          </Button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="glass w-full max-w-md rounded-card p-8 shadow-card animate-fade-up">
