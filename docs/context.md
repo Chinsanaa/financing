@@ -63,34 +63,35 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 46): multi-file simultaneous upload, built on branch
-`claude/multi-file-simultaneous-uploads-6a59q7` (see Session 46 log). Session
-45's JWT fix + backend test suite, and Session 44's three UX changes, remain
-merged/pending PR as before.
+Current (Session 47): Privacy Policy + Terms & Conditions pages, footer
+links, and Settings page rework (dropped the duplicate Monthly income form,
+added data export + change password + legal links) — see Session 47 log.
+Branch `claude/privacy-terms-settings-pages-rfpqcx`.
 
 Next:
-1. Push this branch and open a PR; Vercel CI is the frontend typecheck/build
-   gate, `pytest tests/ backend/tests/` is the Python gate (101 passing).
-2. Manual E2E of the upload queue against a live account (no live credentials
-   in this environment, so not done this session) — the checklist is in the
-   plan file this session worked from: drop several files at once, re-upload
-   one to see the neutral "Skipped" state, drop an oversized/wrong-extension
-   file to confirm client-side rejection, upload two files with overlapping
-   dates and confirm no double-counted transactions, hit the 10-file cap,
-   use "Stop after this file" mid-batch.
-3. Still open from Session 45: manual smoke check of the JWT fix against a
+1. Push this branch and open a PR; `npm run build` is clean (see Session 47
+   log) but there's no live E2E check yet — log in, hit Settings, confirm
+   export downloads an .xlsx and password change actually updates Supabase
+   auth.
+2. Have the `/privacy` and `/terms` copy reviewed — it's a working draft
+   inferred from the real data model (Supabase auth, Alipay/WeChat uploads,
+   per-user model artifacts, RLS), not legal-reviewed text. Two placeholders
+   need filling in before this is real: hosting region confirmation and
+   governing-law jurisdiction (both marked inline on the pages).
+3. Still open from Session 46: manual E2E of the multi-file upload queue
+   against a live account (checklist in that session's plan file).
+4. Still open from Session 45: manual smoke check of the JWT fix against a
    real Supabase project before deploy.
-4. E2E on the live account at 1920×1080 + phone (still open from Session
+5. E2E on the live account at 1920×1080 + phone (still open from Session
    44): chart ticks read "Jun" and tooltip "June 2026"; pick colors in
    Categories and confirm recoloring; confirm the dashboard fills the
    screen.
-5. Still deferred: git-history privacy scrub (user decision), real worker
+6. Still deferred: git-history privacy scrub (user decision), real worker
    queue for training at scale (user decision — not needed at current user
    count), true per-month budget *history*, multi-currency,
    `_available_months` → Postgres RPC, real Postgres RLS-policy tests (would
    need a local/CLI Supabase stack), the `detect_source` ragged-CSV
-   fragility found this session (Session 46 log), no ESLint config in
-   `frontend/`.
+   fragility found in Session 46, no ESLint config in `frontend/`.
 
 ## Current State (Session 46, 2026-07-24)
 
@@ -123,8 +124,64 @@ Next:
 | JWT verification | **FIXED** (Session 45): `AuthMiddleware` verified `sub`/`aud` claims but never the ES256 signature itself (`verify_signature: False`, a Session 40 leftover) — any self-crafted token with an arbitrary `sub` was accepted as a valid session. Now verifies against Supabase's real JWKS via `backend/auth_utils.py::decode_supabase_jwt` (`jwt.PyJWKClient`); unused `supabase_jwt_secret` config removed |
 | Tests | 74 (`pytest tests/`, src/ pipeline) + 27 (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings, classification-coalescer threading tests, and — new this session — `routes/uploads.py` coverage: extension rejection, duplicate-hash 409, a failing file not blocking its neighbors, and sequential overlapping-date-range dedup) = 101 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
+| Legal pages | **NEW** (Session 47): `/privacy` and `/terms`, static public App Router pages, drafted from the real data model; linked from the landing page footer and Settings |
+| Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections |
 
 ## Session Log
+
+### Session 47 (2026-08-11) — Privacy Policy, Terms & Conditions, Settings rework
+
+**Scope**: user asked for Privacy Policy + Terms & Conditions pages (each with their own
+URL), links in the landing page footer and in Settings, and further development of the
+Settings page. Explored the frontend (Next.js 14 App Router, custom Tailwind design
+system, no shadcn) and backend (`routes/settings.py`, `routes/dashboard.py`) first via two
+parallel Explore agents before planning.
+
+**Decisions confirmed with the user up front** (AskUserQuestion, plan mode): draft real
+policy content from the app's actual data handling (not placeholder text) — clearly
+labeled as a working draft needing legal review, not silently presented as final; routes
+at `/privacy` and `/terms` (not `/legal/...`); Settings scope for this pass limited to
+data export + account security (not notifications/appearance). Mid-plan, user also asked
+to remove the Budget/"Monthly income" section from Settings — confirmed via file read that
+income is already editable elsewhere (`BudgetTab.tsx`, `SavingsTab.tsx`,
+`UploadWithIncomeTab.tsx`, all hitting `/settings/profile` and `/settings/budget`), so this
+was a duplicate-control removal, not a feature removal.
+
+**Legal pages**: new `components/legal/LegalPageLayout.tsx` (shared chrome: home link,
+title, "Last updated", `LegalSection` wrapper), styled with the existing design tokens —
+no new dependency, modeled on `app/not-found.tsx` as the closest existing standalone-page
+pattern. `app/privacy/page.tsx` and `app/terms/page.tsx` are static (no `force-dynamic`,
+confirmed prerendered by `next build`). Content covers: what's collected (email, uploaded
+Alipay/WeChat statements, transactions, categories/labels, income/budget prefs, trained
+model artifacts), how it's used, storage/security (RLS, per-user storage buckets, JWT-
+gated backend), retention/deletion (points at Settings → Danger zone, matches what
+`DELETE /settings/account` actually cascades), user choices, and standard SaaS terms
+(acceptable use, "not financial advice" disclaimer since categorization is ML-assisted,
+liability limits, termination). Two facts couldn't be inferred from code and are left as
+inline placeholders on the pages themselves: hosting region and governing-law
+jurisdiction. Both pages end with a visible "working draft, not legal advice" note.
+
+**Footer links**: `components/landing/Landing.tsx` footer gained a `<nav>` with Privacy
+Policy / Terms & Conditions links next to the existing tagline, styled to match
+(`text-sm text-muted`, `hover:text-ink`).
+
+**Settings page** (`app/settings/SettingsClient.tsx`): removed the "Monthly income" card
+(`SectionHeader label="Budget"`) and its `income`/`handleUpdateIncome` state — no backend
+change needed since `PATCH /settings/profile` and `/settings/budget` are still used by the
+other call sites. Added three new cards before Danger zone: **Export your data** (reuses
+the already-existing `api.export.xlsx()` → `GET /dashboard/export`, same download pattern
+already used in `ReportsTab.tsx` — no new backend endpoint), **Change password** (backend
+has no password endpoint by design — confirmed auth is 100% client-side via `supabase-js`,
+same as `AuthClient.tsx` — so this calls `supabase.auth.updateUser({ password })` directly,
+with min-length + confirm-match validation), and **Legal** (links to `/privacy`/`/terms`).
+
+**Verified**: `npm run build` compiles clean, typechecks, and prerenders `/privacy` and
+`/terms` as static routes; `/settings` remains server-rendered on demand as before. Not yet
+verified: a live click-through (export download, password update against a real Supabase
+session) — no live credentials in this environment.
+
+**Still open**: legal review of the drafted policy text; the two inline placeholders
+(hosting region, jurisdiction); live E2E of export + password change described above.
 
 ### Session 46 (2026-07-24) — Multi-file simultaneous upload
 

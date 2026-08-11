@@ -56,9 +56,10 @@ The ten original tabs are grouped into five compact sections with sub-tabs:
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
 (Budget / Savings / Action plan), and **Reports**. A dismissible onboarding
 checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
-separate **Settings** page (income, account deletion). The UI is a dark-first
-design with a light theme toggle, skeleton loading states, and a marketing
-landing page at `/` for signed-out visitors.
+separate **Settings** page (data export, password change, legal links,
+account deletion). The UI is a dark-first design with a light theme toggle,
+skeleton loading states, and a marketing landing page at `/` for signed-out
+visitors, with `/privacy` and `/terms` legal pages linked from its footer.
 
 **Correcting categories**: the **Reports → All transactions** table is editable —
 click any category (including uncategorized rows) to reassign it; the change is
