@@ -53,3 +53,14 @@ export const toneForKey = (key: string) => `cat-${key}`;
 
 /** Theme-aware paint for charts/swatches (resolves via the CSS variable). */
 export const chartColorForKey = (key: string) => `rgb(var(--cat-${key}))`;
+
+/**
+ * Chart-FILL paint for a palette key — deliberately separate from
+ * `chartColorForKey`/`--cat-*`. Badges need ~4.5:1 TEXT contrast (why the
+ * light-theme `--cat-*` values above are darkened), but a pie/chart fill
+ * only needs ~3:1 mark contrast, so reusing the badge-text value there just
+ * reads as muddy on a light surface. `--chart-cat-<key>` (globals.css)
+ * reuses the already-vivid dark-theme hues for both themes — same identity,
+ * no color reassigned per theme, just a fill tuned for fills.
+ */
+export const chartFillColorForKey = (key: string) => `rgb(var(--chart-cat-${key}))`;
