@@ -176,7 +176,10 @@ export default function DashboardClient() {
       {/* Content */}
       {/* Fluid shell: fills large screens (1920 included), caps only on ultrawides. */}
       <main className="mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 2xl:px-12">
-        <OnboardingChecklist onNavigate={goToTab} activeTab={activeTab} />
+        <OnboardingChecklist
+          onNavigate={goToTab}
+          activeTab={isWizardStep ? resolvedTab! : activeTab}
+        />
 
         <TabPanel key={activeTab}>
           {activeTab === 'overview' && <StatsTab />}

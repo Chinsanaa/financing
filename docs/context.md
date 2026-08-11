@@ -63,7 +63,26 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 49): full audit of the auth flow built in Session 48, plus
+Current (Session 50): user reported the "Getting started" onboarding checklist
+stuck at "3 of 4 steps done" after actually reviewing categories. Root cause:
+`DashboardClient` passed `OnboardingChecklist` a collapsed section id
+(`'transactions-model'`) instead of the actual wizard step, so the
+`categories`-visited check never matched — bug affects every user, not just
+this one. Fixed in `frontend/src/app/dashboard/DashboardClient.tsx` by passing
+the resolved wizard step through when `isWizardStep` is true. Also removed the
+"Onboarding status" field from Settings (`frontend/src/app/settings/SettingsClient.tsx`)
+per user request — unnecessary internal state exposed to the user.
+
+Next:
+1. Manually verify in a live account: visit Categories via the wizard, confirm
+   the checklist card updates to "3 of 4" (well, now correctly to 4/4 progress
+   tracking) without a refresh, for both the "Go" button path and the wizard's
+   own step-pill navigation.
+2. `profiles.onboarding_phase` backend field is now unused by any UI — left
+   in place (harmless, other code may still read it) but worth confirming
+   nothing else depends on displaying it.
+
+Previous (Session 49): full audit of the auth flow built in Session 48, plus
 fixes — password show/hide toggle, live confirm-password mismatch on the two
 forms that lacked it (Settings change-password, recovery set-password), input
 trimming, a client-side soft lockout after repeated failed sign-ins, and two
@@ -125,7 +144,7 @@ Next:
 | Money formatting | **FIXED** (Session 41): centralized `formatCurrency`/`formatCurrencyWhole` with Intl.NumberFormat + minus before ¥; applied everywhere |
 | Text translation | **FIXED** (Session 41): all dashboards (reports, review-queue) use `merchant_display()` + translator pipeline; no raw Chinese leaves backend |
 | Wizard navigation | **FIXED** (Session 41): deep-links (upload|categories|label|review|train) work via URL params; onboarding checklist "Go" buttons navigate correctly |
-| Onboarding checklist live-update | **FIXED** (Session 42): `useApi` had no way to notify already-mounted consumers after `invalidate()` — checklist was stuck at initial snapshot forever. Fixed with a subscriber registry |
+| Onboarding checklist live-update | **FIXED** (Session 42): `useApi` had no way to notify already-mounted consumers after `invalidate()` — checklist was stuck at initial snapshot forever. Fixed with a subscriber registry. **FIXED** (Session 50): `DashboardClient` collapsed every wizard step (`upload`/`categories`/`label`/`review`/`train`) into one section id (`'transactions-model'`) before handing it to `OnboardingChecklist`, so its `activeTab === 'categories'` check could never fire — visiting Categories never marked step 2 done for any user, permanently. Now passes the resolved wizard step through when inside the wizard |
 | Label queue diversity | **FIXED** (Session 42): review-queue suggestion mode now dedupes by merchant (pool of 500 → first 50 unique merchants) instead of a raw confidence-ordered slice that could repeat one merchant dozens of times |
 | Retrain crash | **FIXED** (Session 43): `positional indexers are out-of-bounds` — `extract_numeric_features` returns a label index but `retrain.py`/`classify.py` sliced with `.iloc` (positional); a gappy index after the <2-samples/class filter overflowed. Fixed with `reset_index(drop=True)` before extraction (retrain) and `.loc` (classify). Regression test in `tests/test_retrain_index.py` |
 | Manual category correction | **NEW** (Session 43): All Transactions table (`ReportsTab`) is now editable — click a category to reassign via a dropdown (reuses `POST /classify/{id}/label`); `get_reports` returns `id`/`category_id`, includes uncategorized rows, and supports `uncategorized_only`/`category_id` filters |
@@ -139,13 +158,44 @@ Next:
 | Tests | 74 (`pytest tests/`, src/ pipeline) + 27 (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings, classification-coalescer threading tests, and — new this session — `routes/uploads.py` coverage: extension rejection, duplicate-hash 409, a failing file not blocking its neighbors, and sequential overlapping-date-range dedup) = 101 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 | Legal pages | **NEW** (Session 47): `/privacy` and `/terms`, static public App Router pages, drafted from the real data model; linked from the landing page footer and Settings |
-| Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections. **CHANGED** (Session 48): change-password form now gated by the shared `PasswordChecklist`; Account card shows `username` |
+| Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections. **CHANGED** (Session 48): change-password form now gated by the shared `PasswordChecklist`; Account card shows `username`. **CHANGED** (Session 50): removed the "Onboarding status" row (raw `profiles.onboarding_phase`) from the Account card — user-facing noise, not something users act on |
 | Username system | **NEW** (Session 48): `profiles.username` (unique case-insensitive, `[a-zA-Z0-9_]{3,20}`), set at signup via `signUp({ options: { data: { username } } })` → `handle_new_user()` trigger. Two `SECURITY DEFINER` RPCs (`is_username_available`, `get_email_for_username`, both `GRANT`ed to `anon`) support live availability checking and username-or-email sign-in without a backend route. Shown instead of email in the dashboard header (via `user_metadata.username`, no extra query) |
 | Password rules + consent | **NEW** (Session 48): shared `PasswordChecklist` component (9+ chars/A-Z/a-z/0-9/special) gates both signup and Settings change-password; signup requires a checked "I agree to Terms & Conditions and Privacy Policy" box (links to Session 47's pages) |
 | Forgot password | **NEW** (Session 48): `AuthClient` gained a third `'forgot'` mode calling `resetPasswordForEmail`; `/auth/verify` now branches on `type=recovery` to show a "set new password" form (`supabase.auth.updateUser`) instead of auto-redirecting to the dashboard |
 | Auth flow polish | **NEW** (Session 49): shared `PasswordInput` (show/hide eye toggle) used on all 6 password fields across signup/signin/Settings/recovery; live confirm-password mismatch text added to the two forms that lacked it (Settings change-password, recovery set-password — signup already had it); email/username/identifier trimmed before use; client-side soft lockout on sign-in after 5 failed attempts (escalating 30s→300s cooldown, resets on success). Two Supabase security-advisor findings fixed: `handle_new_user()`/`initialize_default_categories()`/`reassign_deleted_category_transactions()` (trigger-only functions) had EXECUTE revoked from `anon`/`authenticated` (harmless as direct RPC calls today, but needlessly public); "Leaked Password Protection" is disabled project-wide — flagged for the user, not fixable via any available tool (Dashboard-only setting) |
 
 ## Session Log
+
+### Session 50 (2026-08-11) — Onboarding checklist stuck-step bug + Settings cleanup
+
+**Scope**: user reported the onboarding checklist still showing "3 of 4 steps done"
+after already reviewing categories, asked for an audit so it doesn't bug out for
+new users, plus removal of the "Onboarding status" row from Settings.
+
+**Root cause**: `DashboardClient` derives `activeTab` by collapsing all wizard
+steps into `'transactions-model'`:
+```
+const activeTab = isWizardStep ? 'transactions-model' : (resolvedTab || 'overview');
+```
+That collapsed value was the one passed to `OnboardingChecklist`, whose
+`categories`-visited tracking only sets `localStorage[VISITED_KEY]` when
+`activeTab === 'categories'` — a condition that could never be true, since
+`activeTab` was never anything but `'transactions-model'` while inside the
+wizard. This affects every user, on any browser, permanently — not a stale
+localStorage or one-user issue.
+
+**Fix**: `DashboardClient.tsx` now passes `isWizardStep ? resolvedTab! : activeTab`
+to `OnboardingChecklist`, so the real wizard step (`upload`/`categories`/`label`/
+`train`) reaches the component whether navigated via the checklist's own "Go"
+buttons or the wizard's internal step pills/Next-Prev buttons.
+
+**Settings**: removed the "Onboarding status" field (raw `profiles.onboarding_phase`
+enum) from the Account card in `SettingsClient.tsx` — internal state with no
+user action attached to it, per user request. Backend field/column untouched.
+
+**Verified**: `tsc --noEmit` shows no new errors (pre-existing tsconfig
+deprecation warnings only, unrelated to these files). Not yet manually
+smoke-tested against a live account — see Next Suggested Step.
 
 ### Session 49 (2026-08-11) — Auth flow audit: password UX, live validation, soft rate limiting, advisor fixes
 

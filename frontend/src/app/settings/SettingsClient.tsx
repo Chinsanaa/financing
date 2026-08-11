@@ -181,10 +181,6 @@ export default function SettingsClient() {
                 {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : '—'}
               </p>
             </div>
-            <div>
-              <p className="section-label mb-0.5">Onboarding status</p>
-              <p className="text-sm font-medium capitalize">{profile?.onboarding_phase || '—'}</p>
-            </div>
           </div>
         </Card>
 
