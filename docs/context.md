@@ -63,36 +63,51 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 46): multi-file simultaneous upload, built on branch
-`claude/multi-file-simultaneous-uploads-6a59q7` (see Session 46 log). Session
-45's JWT fix + backend test suite, and Session 44's three UX changes, remain
-merged/pending PR as before.
+Current (Session 49): full audit of the auth flow built in Session 48, plus
+fixes — password show/hide toggle, live confirm-password mismatch on the two
+forms that lacked it (Settings change-password, recovery set-password), input
+trimming, a client-side soft lockout after repeated failed sign-ins, and two
+Supabase security-advisor findings addressed (trigger-only functions no
+longer directly RPC-callable; leaked-password-protection flagged for the user
+to enable manually — see Session 49 log). Same branch,
+`claude/privacy-terms-settings-pages-rfpqcx`.
 
 Next:
-1. Push this branch and open a PR; Vercel CI is the frontend typecheck/build
-   gate, `pytest tests/ backend/tests/` is the Python gate (101 passing).
-2. Manual E2E of the upload queue against a live account (no live credentials
-   in this environment, so not done this session) — the checklist is in the
-   plan file this session worked from: drop several files at once, re-upload
-   one to see the neutral "Skipped" state, drop an oversized/wrong-extension
-   file to confirm client-side rejection, upload two files with overlapping
-   dates and confirm no double-counted transactions, hit the 10-file cap,
-   use "Stop after this file" mid-batch.
-3. Still open from Session 45: manual smoke check of the JWT fix against a
+1. **User action needed, not code**: enable Supabase's "Leaked Password
+   Protection" (Dashboard → Authentication → Policies → Password Security) —
+   flagged by the security advisor, not togglable via any available tool.
+   Consider hCaptcha/Turnstile on signup/signin too (also dashboard-only,
+   needs site keys the user would have to obtain) for stronger bot/brute-force
+   defense than the client-side lockout added this session.
+2. Push and let CI run; `npm run build` is clean and signup/signin/settings
+   were smoke-tested against the real dev server + live Supabase project, but
+   no live signup/login/reset was actually completed end-to-end (would create
+   a real account) — do that manually before considering this done, same
+   checklist as Session 48's open item (still not done).
+3. Have the `/privacy` and `/terms` copy reviewed — still a working draft,
+   not legal-reviewed (Session 47 open item, unchanged).
+4. Still open from Session 46: manual E2E of the multi-file upload queue
+   against a live account (checklist in that session's plan file).
+5. Still open from Session 45: manual smoke check of the JWT fix against a
    real Supabase project before deploy.
-4. E2E on the live account at 1920×1080 + phone (still open from Session
+6. E2E on the live account at 1920×1080 + phone (still open from Session
    44): chart ticks read "Jun" and tooltip "June 2026"; pick colors in
    Categories and confirm recoloring; confirm the dashboard fills the
    screen.
-5. Still deferred: git-history privacy scrub (user decision), real worker
+7. Still deferred: git-history privacy scrub (user decision), real worker
    queue for training at scale (user decision — not needed at current user
    count), true per-month budget *history*, multi-currency,
    `_available_months` → Postgres RPC, real Postgres RLS-policy tests (would
    need a local/CLI Supabase stack), the `detect_source` ragged-CSV
-   fragility found this session (Session 46 log), no ESLint config in
-   `frontend/`.
+   fragility found in Session 46, no ESLint config in `frontend/`, no
+   username backfill for pre-existing accounts (they keep showing email
+   until a rename/claim flow is built), the `routes/auth.py` non-browser
+   `/auth/signup` endpoint still doesn't accept a username (frontend never
+   calls it, so low priority), real server-side per-account login rate
+   limiting (Session 49's lockout is client-side only — see that session's
+   log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 46, 2026-07-24)
+## Current State (Session 49, 2026-08-11)
 
 | Item | Status |
 |---|---|
@@ -123,8 +138,233 @@ Next:
 | JWT verification | **FIXED** (Session 45): `AuthMiddleware` verified `sub`/`aud` claims but never the ES256 signature itself (`verify_signature: False`, a Session 40 leftover) — any self-crafted token with an arbitrary `sub` was accepted as a valid session. Now verifies against Supabase's real JWKS via `backend/auth_utils.py::decode_supabase_jwt` (`jwt.PyJWKClient`); unused `supabase_jwt_secret` config removed |
 | Tests | 74 (`pytest tests/`, src/ pipeline) + 27 (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings, classification-coalescer threading tests, and — new this session — `routes/uploads.py` coverage: extension rejection, duplicate-hash 409, a failing file not blocking its neighbors, and sequential overlapping-date-range dedup) = 101 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
+| Legal pages | **NEW** (Session 47): `/privacy` and `/terms`, static public App Router pages, drafted from the real data model; linked from the landing page footer and Settings |
+| Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections. **CHANGED** (Session 48): change-password form now gated by the shared `PasswordChecklist`; Account card shows `username` |
+| Username system | **NEW** (Session 48): `profiles.username` (unique case-insensitive, `[a-zA-Z0-9_]{3,20}`), set at signup via `signUp({ options: { data: { username } } })` → `handle_new_user()` trigger. Two `SECURITY DEFINER` RPCs (`is_username_available`, `get_email_for_username`, both `GRANT`ed to `anon`) support live availability checking and username-or-email sign-in without a backend route. Shown instead of email in the dashboard header (via `user_metadata.username`, no extra query) |
+| Password rules + consent | **NEW** (Session 48): shared `PasswordChecklist` component (9+ chars/A-Z/a-z/0-9/special) gates both signup and Settings change-password; signup requires a checked "I agree to Terms & Conditions and Privacy Policy" box (links to Session 47's pages) |
+| Forgot password | **NEW** (Session 48): `AuthClient` gained a third `'forgot'` mode calling `resetPasswordForEmail`; `/auth/verify` now branches on `type=recovery` to show a "set new password" form (`supabase.auth.updateUser`) instead of auto-redirecting to the dashboard |
+| Auth flow polish | **NEW** (Session 49): shared `PasswordInput` (show/hide eye toggle) used on all 6 password fields across signup/signin/Settings/recovery; live confirm-password mismatch text added to the two forms that lacked it (Settings change-password, recovery set-password — signup already had it); email/username/identifier trimmed before use; client-side soft lockout on sign-in after 5 failed attempts (escalating 30s→300s cooldown, resets on success). Two Supabase security-advisor findings fixed: `handle_new_user()`/`initialize_default_categories()`/`reassign_deleted_category_transactions()` (trigger-only functions) had EXECUTE revoked from `anon`/`authenticated` (harmless as direct RPC calls today, but needlessly public); "Leaked Password Protection" is disabled project-wide — flagged for the user, not fixable via any available tool (Dashboard-only setting) |
 
 ## Session Log
+
+### Session 49 (2026-08-11) — Auth flow audit: password UX, live validation, soft rate limiting, advisor fixes
+
+**Scope**: user asked for a full audit of the authentication flow built in Session 48 —
+"does the UI/UX integrate well, are there good validations, is there rate limiting for wrong
+passwords, implement anything missing (e.g. confirm-password mismatch should show red text)."
+Read every auth-related file end to end (`AuthClient.tsx`, `SettingsClient.tsx`,
+`auth/verify/page.tsx`, `backend/routes/auth.py`) plus ran the Supabase security advisor
+against the live project.
+
+**Findings and fixes**:
+1. **Confirm-password mismatch text was missing in two of three places.** Signup already had
+   it (`confirmMismatch` → `Input`'s `error` prop); Settings' change-password and the recovery
+   set-password form on `/auth/verify` only checked on submit, with no live inline text. Added
+   the same `x.length > 0 && a !== b` pattern to both, wired to the new `PasswordInput`'s
+   `error` prop — this was the most literal item in the user's ask and is fixed everywhere now.
+2. **No password visibility toggle anywhere.** New shared `components/auth/PasswordInput.tsx`
+   (duplicates `Input`'s field styling rather than wrapping it, to keep the eye-icon
+   positioning simple and avoid fragile absolute-position math against a component that wasn't
+   built with a right-side slot) — swapped in for all 6 password fields: signup
+   password/confirm, Settings new/confirm, recovery new/confirm.
+3. **No rate limiting on the client's actual login path.** `backend/routes/auth.py` has real
+   IP-based rate limiting (`5/hour` signup, `10/15min` login via `slowapi`), but the frontend
+   has never called those routes — `AuthClient.tsx` calls `supabase.auth.signInWithPassword`
+   directly (an intentional Session 40 architecture choice, confirmed still true by reading
+   `routes/auth.py`'s own docstring). That backend rate limiting is effectively dead code from
+   the browser's perspective; the real server-side protection is Supabase Auth's own
+   project-level rate limits, which apply automatically regardless of app code and aren't
+   configurable through any available tool. Added a **client-side soft lockout** as UX-layer
+   defense-in-depth on top of that (explicitly commented as such, not a security boundary): 5
+   failed sign-in attempts trigger an escalating cooldown (30s, 60s, 120s, capped at 300s,
+   doubling per lockout, resetting on a successful login), with a live countdown, a disabled
+   submit button, and a warning once 3+ attempts have been used. **Did not** silently reroute
+   login through the backend to get its rate limiting for real — that reverses an established,
+   deliberate architecture decision (client-side Supabase auth, consistent with the RPC-based
+   username design from Session 48) and is exactly the kind of "big decision" CLAUDE.md says to
+   surface rather than just make; flagged in Next Suggested Step instead.
+4. **Inputs weren't trimmed.** A pasted email/username/identifier with leading/trailing
+   whitespace would silently fail (format regex, RPC lookup, or Supabase's own validation).
+   Now trimmed at the point of use in `AuthClient.tsx` (email, username, sign-in identifier)
+   and continuously in `UsernameField` (strips whitespace on every keystroke, since usernames
+   can never legitimately contain spaces — friendlier than surfacing a format error for it).
+5. **Supabase security advisor** (`get_advisors(type=security)`, run against project
+   `pxxqqffwummhkohnrvtz`): flagged `handle_new_user()`, `initialize_default_categories()`, and
+   `reassign_deleted_category_transactions()` — all `SECURITY DEFINER` trigger functions — as
+   directly callable via PostgREST RPC by `anon`/`authenticated` (e.g.
+   `POST /rest/v1/rpc/handle_new_user`). All three only reference `NEW`/`OLD`, which don't
+   exist outside trigger context, so a direct call errors out harmlessly today — but there's no
+   reason to leave them in the public API surface. New migration
+   (`20260811140000_revoke_trigger_only_function_execute.sql`, applied live via Supabase MCP)
+   revokes `EXECUTE` from `PUBLIC`/`anon`/`authenticated` on all three; confirmed this doesn't
+   break their triggers (Postgres fires triggers regardless of the caller's EXECUTE grant on
+   the function — that grant only gates direct/RPC calls). `is_username_available` and
+   `get_email_for_username` were flagged too, but that's the two RPCs from Session 48 working
+   as designed (they must be `anon`-callable to support pre-login username checks) — left as
+   intended, noted in the report rather than "fixed." The advisor's other findings (missing
+   `search_path` on `sum_user_transactions`/`monthly_spend_by_user`) are pre-existing and
+   unrelated to auth — out of scope, not touched.
+6. **"Leaked Password Protection" is disabled** on the live project (checks new passwords
+   against HaveIBeenPwned). This is a GoTrue/Auth-service setting, not something reachable via
+   SQL or any Supabase MCP tool available in this session (only DB-level tools exist:
+   `apply_migration`, `execute_sql`, `list_tables`, etc.) — flagged for the user to enable
+   manually at Dashboard → Authentication → Policies → Password Security. Same for
+   hCaptcha/Turnstile bot protection on signup/signin, suggested as a stronger alternative to
+   the client-side lockout, also dashboard-only and needs the user to obtain site keys.
+
+**Reviewed, found adequate, not changed**: loading-state disabling (the shared `Button`
+already disables while `loading`), ARIA on `Alert` (`role="alert"`/`aria-live` already
+correct), password manager hints (`autoComplete="new-password"`/`"current-password"` already
+correct throughout), generic "Invalid login credentials" messaging on sign-in (doesn't leak
+whether a username/email exists — the `get_email_for_username` RPC already returns `NULL` on
+no match rather than an error, so a bad username and a bad password look identical to the
+attacker). **Known, unfixed limitation, flagged not silently accepted**: Supabase's default
+`signUp` response for an already-registered email can reveal that the account exists (message
+text varies by project's email-confirmation settings) — this is Supabase Auth's own behavior,
+not something the app's code controls.
+
+**Verified**: `npm run build` clean (typecheck + prerender, all 8 routes). Smoke-tested
+against a real `next dev` server wired to the live project's anon key (temporary `.env.local`,
+deleted after, confirmed gitignored before and after) — confirmed the show/hide toggle and
+checklist render on `/auth?mode=signup`. The `REVOKE` statements were confirmed `{"success":true}` by `apply_migration`, which is
+sufficient signal the DDL applied — a follow-up advisor re-run to confirm the warnings cleared
+would be a cheap sanity check next session. No live signup/login/reset completed (see Next
+Suggested Step — same open item carried from Session 48, still not done).
+
+### Session 48 (2026-08-11) — Username system, forgot password, password rules, ToS/Privacy consent
+
+**Scope**: follow-up to Session 47's Privacy/Terms pages — user asked for a "Forgot password"
+path on sign-in, a live password-requirements checklist (screenshot reference: 9+ chars/A-Z/
+a-z/0-9/special char pill badges), a required Terms & Conditions / Privacy Policy consent
+checkbox at signup, and a unique username (live availability check, screenshot reference:
+green check + "Username is available") that displays instead of email and can be used to sign
+in alongside email. Explored the existing auth flow first via an Explore agent (`AuthClient.tsx`,
+`auth/verify/page.tsx`, `backend/routes/auth.py`, the `profiles` schema/triggers) before
+planning — confirmed none of this existed yet: no `username` column, no `resetPasswordForEmail`
+call anywhere, auth 100% client-side via `supabase-js`.
+
+**Decisions confirmed with the user up front** (AskUserQuestion, plan mode): username → email
+resolution for login is a Postgres `SECURITY DEFINER` RPC (not a new FastAPI route) — keeps
+auth entirely client-side, matching the existing architecture; the password checklist is a
+shared component used at signup **and** in Settings' change-password form; username uniqueness
+is case-insensitive.
+
+**Migration** (`supabase/migrations/20260811130000_add_username.sql`, applied live via
+Supabase MCP to project `pxxqqffwummhkohnrvtz`, verified by re-querying
+`information_schema.columns`/`pg_proc` afterward): `profiles.username text` with a format
+CHECK (`^[a-zA-Z0-9_]{3,20}$`) and a partial `lower(username)` unique index (NULLs excluded, so
+existing accounts without a username don't collide). `handle_new_user()` (the signup trigger)
+now also inserts `username` from `new.raw_user_meta_data->>'username'` — while touching it,
+added `SET search_path = public, pg_temp`, matching the hardening already applied to
+`initialize_default_categories()` after the Session 36 search-path incident (the original
+`handle_new_user()` predates that fix and never got it). Two new RPCs, both
+`GRANT EXECUTE ... TO anon, authenticated` since they must run pre-login:
+`is_username_available(check_username)` and `get_email_for_username(check_username)` (joins
+`auth.users` to `profiles`, returns `NULL` for no match — callers never learn whether a
+username exists beyond "login failed").
+
+**Frontend — new shared components**: `components/auth/PasswordChecklist.tsx` (5 regex-backed
+pill badges reusing `Badge`'s `success`/`neutral` tones, exports `passwordMeetsRequirements()`
+so callers can gate submit), `components/auth/UsernameField.tsx` (debounced — new
+`utils/useDebouncedValue.ts` hook — live `is_username_available` RPC call with a
+green-check/red-X availability message, plus client-side format validation before even
+querying), both used by `AuthClient.tsx` and (`PasswordChecklist` only) `SettingsClient.tsx`.
+
+**`AuthClient.tsx` rework**: the old boolean `isSignup` became a 3-way `mode: 'signin' |
+'signup' | 'forgot'`. Signup gained the username field + checklist + a required consent
+checkbox (`Link`s to `/terms`/`/privacy`, `target="_blank"`); submit is disabled until email +
+available username + all password requirements + matching confirm + checked box. Sign-in's
+email field became "Email or username" — on submit, a value without `@` is resolved through
+`get_email_for_username` first, then `signInWithPassword` proceeds with the resolved (or
+original) value as before, so a failed lookup just falls through to Supabase's normal
+"Invalid login credentials" rather than a distinct error. A new "Forgot password?" link (
+sign-in mode only) switches to the `'forgot'` mode: an email-only form calling
+`resetPasswordForEmail(email, { redirectTo: '${origin}/auth/verify' })`.
+
+**`auth/verify/page.tsx` rework**: previously every successful `exchangeCodeForSession`/
+`verifyOtp` redirected straight to `/dashboard`. Now captures `type=recovery` from the query
+string (present on Supabase's password-reset links) and, when set, skips the redirect and
+renders a "Set a new password" form (reusing `PasswordChecklist`) that calls
+`supabase.auth.updateUser({ password })` before redirecting — also listens for the
+`PASSWORD_RECOVERY` auth event as a second trigger path, since implicit-flow links surface the
+session via `onAuthStateChange` rather than the query string. Normal signup-confirmation links
+are unaffected.
+
+**Display + Settings**: dashboard header (`DashboardClient.tsx`) now reads
+`user?.user_metadata?.username || user?.email` — free (metadata is already mirrored at signup
+via `signUp`'s `options.data`), no extra query. `SettingsClient.tsx`'s Account card gained a
+Username row (from `GET /settings/profile`'s existing `select("*")`, no backend change needed);
+its change-password form now renders `PasswordChecklist` and disables submit until requirements
++ match are both satisfied.
+
+**Verified**: `npm run build` clean (typecheck + prerender). Smoke-tested against a real
+`next dev` server wired to the live Supabase project's anon key (temporary `.env.local`,
+deleted afterward, never committed — confirmed gitignored): curl'd the rendered HTML for
+`/auth?mode=signup` and `/auth` and confirmed the username field, password-checklist labels,
+Terms/Privacy links, "Email or username" field, and "Forgot password?" link all render.
+Playwright's browser wasn't available in this environment (`Chromium distribution 'chrome' is
+not found`), so this was HTML-level, not interactive — **no live signup/login/reset was
+actually completed** (would create a real account on the live project); that's the top item in
+Next Suggested Step.
+
+**Deferred, not done**: backfilling `username` for pre-existing accounts (they keep showing
+email until a rename/claim flow exists — out of scope, noted in the migration); the
+non-browser `POST /auth/signup` backend route still doesn't accept/forward a username (nothing
+calls it from the frontend, so low priority, flagged not fixed).
+
+### Session 47 (2026-08-11) — Privacy Policy, Terms & Conditions, Settings rework
+
+**Scope**: user asked for Privacy Policy + Terms & Conditions pages (each with their own
+URL), links in the landing page footer and in Settings, and further development of the
+Settings page. Explored the frontend (Next.js 14 App Router, custom Tailwind design
+system, no shadcn) and backend (`routes/settings.py`, `routes/dashboard.py`) first via two
+parallel Explore agents before planning.
+
+**Decisions confirmed with the user up front** (AskUserQuestion, plan mode): draft real
+policy content from the app's actual data handling (not placeholder text) — clearly
+labeled as a working draft needing legal review, not silently presented as final; routes
+at `/privacy` and `/terms` (not `/legal/...`); Settings scope for this pass limited to
+data export + account security (not notifications/appearance). Mid-plan, user also asked
+to remove the Budget/"Monthly income" section from Settings — confirmed via file read that
+income is already editable elsewhere (`BudgetTab.tsx`, `SavingsTab.tsx`,
+`UploadWithIncomeTab.tsx`, all hitting `/settings/profile` and `/settings/budget`), so this
+was a duplicate-control removal, not a feature removal.
+
+**Legal pages**: new `components/legal/LegalPageLayout.tsx` (shared chrome: home link,
+title, "Last updated", `LegalSection` wrapper), styled with the existing design tokens —
+no new dependency, modeled on `app/not-found.tsx` as the closest existing standalone-page
+pattern. `app/privacy/page.tsx` and `app/terms/page.tsx` are static (no `force-dynamic`,
+confirmed prerendered by `next build`). Content covers: what's collected (email, uploaded
+Alipay/WeChat statements, transactions, categories/labels, income/budget prefs, trained
+model artifacts), how it's used, storage/security (RLS, per-user storage buckets, JWT-
+gated backend), retention/deletion (points at Settings → Danger zone, matches what
+`DELETE /settings/account` actually cascades), user choices, and standard SaaS terms
+(acceptable use, "not financial advice" disclaimer since categorization is ML-assisted,
+liability limits, termination). Two facts couldn't be inferred from code and are left as
+inline placeholders on the pages themselves: hosting region and governing-law
+jurisdiction. Both pages end with a visible "working draft, not legal advice" note.
+
+**Footer links**: `components/landing/Landing.tsx` footer gained a `<nav>` with Privacy
+Policy / Terms & Conditions links next to the existing tagline, styled to match
+(`text-sm text-muted`, `hover:text-ink`).
+
+**Settings page** (`app/settings/SettingsClient.tsx`): removed the "Monthly income" card
+(`SectionHeader label="Budget"`) and its `income`/`handleUpdateIncome` state — no backend
+change needed since `PATCH /settings/profile` and `/settings/budget` are still used by the
+other call sites. Added three new cards before Danger zone: **Export your data** (reuses
+the already-existing `api.export.xlsx()` → `GET /dashboard/export`, same download pattern
+already used in `ReportsTab.tsx` — no new backend endpoint), **Change password** (backend
+has no password endpoint by design — confirmed auth is 100% client-side via `supabase-js`,
+same as `AuthClient.tsx` — so this calls `supabase.auth.updateUser({ password })` directly,
+with min-length + confirm-match validation), and **Legal** (links to `/privacy`/`/terms`).
+
+**Verified**: `npm run build` compiles clean, typechecks, and prerenders `/privacy` and
+`/terms` as static routes; `/settings` remains server-rendered on demand as before. Not yet
+verified: a live click-through (export download, password update against a real Supabase
+session) — no live credentials in this environment.
+
+**Still open**: legal review of the drafted policy text; the two inline placeholders
+(hosting region, jurisdiction); live E2E of export + password change described above.
 
 ### Session 46 (2026-07-24) — Multi-file simultaneous upload
 

@@ -266,6 +266,14 @@ export default function Landing() {
             Financing<span className="text-accent-strong">.</span>
           </span>
           <span>Personal transaction classification, powered by your own labels.</span>
+          <nav className="flex items-center gap-5">
+            <Link href="/privacy" className="transition-colors hover:text-ink">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-ink">
+              Terms &amp; Conditions
+            </Link>
+          </nav>
         </div>
       </footer>
     </div>

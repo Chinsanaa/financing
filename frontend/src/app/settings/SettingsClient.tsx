@@ -2,20 +2,22 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Download, FileText, ScrollText } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import { api } from '@/utils/api';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Input from '@/components/ui/Input';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 interface Profile {
   id: string;
+  username: string | null;
   email_verified_at: string;
   onboarding_phase: string;
-  monthly_income: number;
   created_at: string;
 }
 
@@ -25,14 +27,20 @@ export default function SettingsClient() {
 
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [income, setIncome] = useState<string>('0');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const deleteConfirmRef = useRef<HTMLDivElement>(null);
+
+  const [exporting, setExporting] = useState(false);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const confirmPasswordMismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
 
   useEffect(() => {
     if (deleteConfirm) deleteConfirmRef.current?.focus();
@@ -55,7 +63,6 @@ export default function SettingsClient() {
       try {
         const res = await api.get('/settings/profile');
         setProfile(res.data.profile);
-        setIncome(res.data.profile.monthly_income?.toString() || '0');
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load profile');
       } finally {
@@ -66,19 +73,50 @@ export default function SettingsClient() {
     checkAuth();
   }, [supabase, router]);
 
-  const handleUpdateIncome = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
-    setSuccess('');
-
+  const handleExport = async () => {
+    setExporting(true);
     try {
-      await api.patch('/settings/profile', { monthly_income: parseFloat(income) });
-      setSuccess('Income updated successfully');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update income');
+      const response = await api.export.xlsx();
+      const url = URL.createObjectURL(response.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        response.headers['content-disposition']?.split('filename=')[1]?.replace(/"/g, '') ||
+        'transactions.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to export data');
     } finally {
-      setSaving(false);
+      setExporting(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!passwordMeetsRequirements(newPassword)) {
+      setPasswordError('Password does not meet the requirements below');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+      setPasswordSuccess('Password updated successfully');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setPasswordError(err.message || 'Failed to update password');
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -130,6 +168,10 @@ export default function SettingsClient() {
           <SectionHeader label="Profile" title="Account" />
           <div className="space-y-4">
             <div>
+              <p className="section-label mb-0.5">Username</p>
+              <p className="text-sm font-medium">{profile?.username || '—'}</p>
+            </div>
+            <div>
               <p className="section-label mb-0.5">Email</p>
               <p className="text-sm font-medium">{user?.email}</p>
             </div>
@@ -147,28 +189,72 @@ export default function SettingsClient() {
         </Card>
 
         <Card className="p-6">
-          <SectionHeader label="Budget" title="Monthly income" />
-          <form onSubmit={handleUpdateIncome} className="space-y-4">
-            <div>
-              <Input
-                label="Monthly income (¥)"
-                type="number"
-                value={income}
-                onChange={(e) => setIncome(e.target.value)}
-                placeholder="0"
-              />
-              <p className="mt-1.5 text-xs text-muted">
-                Used for budget and savings calculations
-              </p>
-            </div>
-
+          <SectionHeader label="Data & Security" title="Export your data" />
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              Download your categorized transaction history as an Excel spreadsheet.
+            </p>
             {error && <Alert kind="error">{error}</Alert>}
-            {success && <Alert kind="success">{success}</Alert>}
+            <Button variant="outline" onClick={handleExport} loading={exporting}>
+              <Download className="h-4 w-4" />
+              {exporting ? 'Exporting' : 'Export transactions (.xlsx)'}
+            </Button>
+          </div>
+        </Card>
 
-            <Button type="submit" loading={saving}>
-              {saving ? 'Saving' : 'Save income'}
+        <Card className="p-6">
+          <SectionHeader label="Data & Security" title="Change password" />
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div>
+              <PasswordInput
+                label="New password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Create a new password"
+                autoComplete="new-password"
+              />
+              <div className="mt-2">
+                <PasswordChecklist password={newPassword} />
+              </div>
+            </div>
+            <PasswordInput
+              label="Confirm new password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter new password"
+              autoComplete="new-password"
+              error={confirmPasswordMismatch ? 'Passwords do not match' : undefined}
+            />
+
+            {passwordError && <Alert kind="error">{passwordError}</Alert>}
+            {passwordSuccess && <Alert kind="success">{passwordSuccess}</Alert>}
+
+            <Button
+              type="submit"
+              loading={passwordSaving}
+              disabled={!passwordMeetsRequirements(newPassword) || newPassword !== confirmPassword}
+            >
+              {passwordSaving ? 'Saving' : 'Update password'}
             </Button>
           </form>
+        </Card>
+
+        <Card className="p-6">
+          <SectionHeader label="Legal" title="Policies" />
+          <div className="space-y-3">
+            <Link
+              href="/privacy"
+              className="flex items-center gap-2.5 text-sm font-medium text-ink transition-colors hover:text-accent-strong"
+            >
+              <FileText className="h-4 w-4 text-muted" /> Privacy Policy
+            </Link>
+            <Link
+              href="/terms"
+              className="flex items-center gap-2.5 text-sm font-medium text-ink transition-colors hover:text-accent-strong"
+            >
+              <ScrollText className="h-4 w-4 text-muted" /> Terms &amp; Conditions
+            </Link>
+          </div>
         </Card>
 
         <Card className="border-danger/25 p-6">
