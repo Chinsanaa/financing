@@ -88,12 +88,15 @@ export default function AuthClient() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel */}
-      <div className="bg-grid relative hidden flex-col justify-between overflow-hidden p-10 lg:flex xl:p-14 2xl:p-20">
+      <div className="bg-grid relative hidden flex-col overflow-hidden p-10 lg:flex xl:p-14 2xl:p-20">
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-accent/10 blur-3xl animate-glow-pulse" />
         <Link href="/" className="relative font-display text-lg font-bold tracking-tight">
           Financing<span className="text-accent-strong">.</span>
         </Link>
-        <div className="relative">
+        {/* Centered in the remaining height, not spread edge-to-edge — a
+            fixed-height block here (vs. justify-between) is what stopped
+            this panel reading as empty on tall/wide desktop viewports. */}
+        <div className="relative flex flex-1 flex-col justify-center">
           <h1 className="font-display text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl 2xl:text-7xl">
             Your money,
             <br />
@@ -111,16 +114,16 @@ export default function AuthClient() {
               </li>
             ))}
           </ul>
+          <svg viewBox="0 0 400 80" className="relative mt-10 w-full max-w-lg opacity-60 xl:max-w-xl" aria-hidden="true">
+            <polyline
+              points="0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20"
+              fill="none"
+              stroke="rgb(var(--accent))"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
-        <svg viewBox="0 0 400 80" className="relative w-full max-w-lg opacity-60 xl:max-w-xl" aria-hidden="true">
-          <polyline
-            points="0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20"
-            fill="none"
-            stroke="rgb(var(--accent))"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
       </div>
 
       {/* Form panel */}
