@@ -1645,3 +1645,32 @@ FastAPI Backend (Railway)
 **Open**: none from this pass. If further design work is wanted, the natural next steps would be a visual QA pass across real breakpoints (this session verified via build success + code review, not a live browser screenshot pass) or extending the same treatment to any pages added later.
 
 **Next suggested step**: none pending — ask the user what to look at next.
+
+### Session 24 (2026-08-11) — Landing page width + auth panel centering (PR #39)
+User tested the deployed site and sent screenshots: the landing page read as too compact/narrow on a full-width Windows desktop window, and the auth brand panel's `flex-col justify-between` spread its logo/headline/graphic across the whole viewport height, making the middle content look small and isolated rather than centered.
+
+**What was built**: `Landing.tsx` widened from `max-w-6xl` (1152px) to `max-w-7xl` (1280px), `2xl:max-w-[1440px]` on very large screens, with a matching `lg:px-8` step, applied consistently across all 7 section containers. `AuthClient.tsx`'s brand panel restructured: logo stays pinned at the top, and the headline/paragraph/trust-points/graphic now live in a `flex-1 justify-center` block so they read as one centered group in the remaining height instead of stretched thin.
+
+**Verified**: `npm run build` clean. No live browser screenshot available in this environment (no working Playwright browser) — verified via code review and Tailwind flex/grid semantics.
+
+**Decided**: PR #38 was already merged by the time this was ready, so this went out as a new PR (#39) rather than reusing #38 — confirmed via `git merge-base --is-ancestor` that the branch's prior commits were already ancestors of `main` (real merge commit, not squashed) before pushing, so no rebase was needed.
+
+### Session 25 (2026-08-11) — Mobile auth logo position + light-mode chart colors
+Two more pieces of feedback: on mobile, the auth screen's logo sat too low instead of pinned to the top; the Overview tab's pie chart looked "too dark"/muddy in light mode, and the user asked directly whether colors should change per theme.
+
+**Root causes found**:
+- Auth logo: the mobile-only logo lived *inside* the same vertically-centered `motion.div` as the whole form, so a taller block (sign-up's 3 inputs vs sign-in's 2) pushed the logo down with it — it wasn't pinned to anything.
+- Chart colors: they already ARE theme-aware (`--cat-<key>` tokens, `globals.css`, defined for both `:root` and `.dark`) — but `useCategoryColors.ts`'s `chartColorFor()` was reusing the exact same tokens category *badges* use as **text color**, which need ~4.5:1 contrast and were deliberately darkened for that in light mode. A chart fill only needs ~3:1 (confirmed via the `dataviz` skill's checks), so the same dark "text-safe" hex read as muddy when used as a fill. Dark mode wasn't affected — those `--cat-*` values are already vivid.
+
+**What was built**:
+- `AuthClient.tsx`: mobile logo moved out to an `absolute left-4 top-4 lg:hidden` sibling of the outer grid (pinned regardless of form height); removed the old copy that lived inside the centered `motion.div`.
+- `globals.css`: added a `--chart-cat-<key>` block (12 keys) under `:root` only, reusing the already-vivid dark-mode `--cat-<key>` hex values as light-mode chart fills — validated with the `dataviz` skill's `validate_palette.js` (lightness band, chroma floor, contrast ≥3:1 vs white all PASS; adjacent-pair CVD separation has one below-target pair, consistent with — and no worse than — the app's own already-documented tradeoff in `categoryColors.ts`'s comment block, mitigated by the legend text + stroke gaps between slices that already exist). No `.dark` block needed — same values carry through since `.dark` doesn't override them.
+- `categoryColors.ts`: added `chartFillColorForKey(key)` alongside the existing `chartColorForKey`/`toneForKey` (badges untouched, still correct).
+- `useCategoryColors.ts`: repointed the hook's `chartColorFor` to the new `chartFillColorForKey` — this is the only consumer (StatsTab's pie + legend), so nothing else changed.
+- Explicitly left `CategoryColorPicker.tsx` alone: its swatches sit next to the literal hex code text, previewing the actual badge color — switching it to the vivid fill palette would make the swatch not match the badge appearance shown elsewhere in the app.
+
+**Verified**: `node validate_palette.js` run against the proposed 12 hexes (light, surface `#ffffff`) — lightness/chroma/contrast all PASS; `npm run build` clean.
+
+**Decided**: did not attempt to fully re-derive a from-scratch 12-color palette to pass all-pairs CVD separation — the `dataviz` skill itself notes no ordering of even its own 8-hue default clears all-pairs beyond 3 slots, so 12 user-customizable keys was never going to clear it; reused the already-shipped (and already-accepted) dark-mode hues instead of inventing new ones, which is a strict improvement over the muddy status quo without introducing new colors nobody has seen.
+
+**Next suggested step**: none pending — ask the user to confirm the mobile logo and light-mode pie chart now look right.

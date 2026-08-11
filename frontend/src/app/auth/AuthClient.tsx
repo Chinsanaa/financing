@@ -86,7 +86,17 @@ export default function AuthClient() {
   };
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="relative grid min-h-screen lg:grid-cols-2">
+      {/* Mobile-only logo, pinned to the top so it doesn't drift with the
+          centered form's height (sign-up has 3 inputs vs sign-in's 2). The
+          desktop logo lives in the brand panel below. */}
+      <Link
+        href="/"
+        className="absolute left-4 top-4 z-10 font-display text-lg font-bold tracking-tight sm:left-8 lg:hidden"
+      >
+        Financing<span className="text-accent-strong">.</span>
+      </Link>
+
       {/* Brand panel */}
       <div className="bg-grid relative hidden flex-col overflow-hidden p-10 lg:flex xl:p-14 2xl:p-20">
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-accent/10 blur-3xl animate-glow-pulse" />
@@ -134,10 +144,6 @@ export default function AuthClient() {
           transition={{ duration: 0.4, ease: 'easeOut' }}
           className="w-full max-w-sm lg:max-w-md"
         >
-          <Link href="/" className="mb-8 block font-display text-lg font-bold tracking-tight lg:hidden">
-            Financing<span className="text-accent-strong">.</span>
-          </Link>
-
           {/* Mode toggle */}
           <div className="mb-8 inline-flex rounded-pill bg-surface-2 p-1" role="tablist" aria-label="Sign in or create account">
             {[

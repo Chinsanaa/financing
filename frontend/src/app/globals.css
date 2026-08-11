@@ -38,6 +38,24 @@
   --cat-teal: 13 148 136;
   --cat-orange: 154 52 18;
   --cat-fuchsia: 192 38 211;
+  /* Chart-fill variants of the same 12 keys — badges need ~4.5:1 TEXT
+     contrast (hence the darker --cat-* values above), but a pie/chart
+     fill only needs ~3:1 mark contrast, so darkening these to text-safe
+     levels just reads as muddy. These reuse the already-vivid dark-surface
+     hues (below), which pass lightness/chroma/contrast checks against
+     white too — see dataviz skill's validate_palette.js. */
+  --chart-cat-lime: 77 124 15;
+  --chart-cat-violet: 139 92 246;
+  --chart-cat-cyan: 8 145 178;
+  --chart-cat-pink: 236 72 153;
+  --chart-cat-amber: 217 119 6;
+  --chart-cat-sky: 2 132 199;
+  --chart-cat-emerald: 5 150 105;
+  --chart-cat-rose: 225 29 72;
+  --chart-cat-indigo: 99 102 241;
+  --chart-cat-teal: 13 148 136;
+  --chart-cat-orange: 194 65 12;
+  --chart-cat-fuchsia: 217 70 239;
 }
 
 .dark {

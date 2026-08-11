@@ -5,7 +5,7 @@ import { useApi } from './useApi';
 import {
   CATEGORY_COLOR_KEY_SET,
   CategoryColorKey,
-  chartColorForKey,
+  chartFillColorForKey,
   hashCategoryKey,
   toneForKey,
 } from './categoryColors';
@@ -41,7 +41,7 @@ export function useCategoryColors() {
     return {
       keyFor,
       toneFor: (name: string) => toneForKey(keyFor(name)),
-      chartColorFor: (name: string) => chartColorForKey(keyFor(name)),
+      chartColorFor: (name: string) => chartFillColorForKey(keyFor(name)),
     };
   }, [data]);
 }
