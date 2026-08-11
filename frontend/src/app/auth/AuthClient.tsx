@@ -4,10 +4,17 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
+import { BrainCircuit, Languages, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { Alert } from '@/components/ui-feedback';
+
+const TRUST_POINTS = [
+  { icon: BrainCircuit, text: 'A model that is yours — trained on your own labels.' },
+  { icon: Languages, text: 'Bilingual by design — mixed Chinese and English, understood.' },
+  { icon: ShieldCheck, text: 'Private per user — nothing shared across accounts.' },
+];
 
 export default function AuthClient() {
   const router = useRouter();
@@ -81,23 +88,31 @@ export default function AuthClient() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel */}
-      <div className="bg-grid relative hidden flex-col justify-between overflow-hidden p-10 lg:flex">
+      <div className="bg-grid relative hidden flex-col justify-between overflow-hidden p-10 lg:flex xl:p-14 2xl:p-20">
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-accent/10 blur-3xl animate-glow-pulse" />
         <Link href="/" className="relative font-display text-lg font-bold tracking-tight">
           Financing<span className="text-accent-strong">.</span>
         </Link>
         <div className="relative">
-          <h1 className="font-display text-5xl font-bold leading-[1.08] tracking-tight">
+          <h1 className="font-display text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl 2xl:text-7xl">
             Your money,
             <br />
             <span className="text-accent-strong">decoded</span>.
           </h1>
-          <p className="mt-5 max-w-sm text-muted">
+          <p className="mt-5 max-w-md text-muted xl:max-w-lg xl:text-lg">
             One personal model, trained on your own labels, sorting every Alipay and
             WeChat transaction for you.
           </p>
+          <ul className="mt-8 space-y-3">
+            {TRUST_POINTS.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-start gap-3 text-sm text-muted xl:text-base">
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" aria-hidden="true" />
+                <span className="max-w-md">{text}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <svg viewBox="0 0 400 80" className="relative w-full max-w-md opacity-60" aria-hidden="true">
+        <svg viewBox="0 0 400 80" className="relative w-full max-w-lg opacity-60 xl:max-w-xl" aria-hidden="true">
           <polyline
             points="0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20"
             fill="none"
@@ -109,27 +124,29 @@ export default function AuthClient() {
       </div>
 
       {/* Form panel */}
-      <div className="flex items-center justify-center px-4 py-16 sm:px-8">
+      <div className="flex items-center justify-center px-4 py-16 sm:px-8 xl:px-12">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="w-full max-w-sm"
+          className="w-full max-w-sm lg:max-w-md"
         >
           <Link href="/" className="mb-8 block font-display text-lg font-bold tracking-tight lg:hidden">
             Financing<span className="text-accent-strong">.</span>
           </Link>
 
           {/* Mode toggle */}
-          <div className="mb-8 inline-flex rounded-pill bg-surface-2 p-1">
+          <div className="mb-8 inline-flex rounded-pill bg-surface-2 p-1" role="tablist" aria-label="Sign in or create account">
             {[
               { signup: false, label: 'Sign in' },
               { signup: true, label: 'Create account' },
             ].map(({ signup, label }) => (
               <button
                 key={label}
+                role="tab"
+                aria-selected={isSignup === signup}
                 onClick={() => switchMode(signup)}
-                className={`relative rounded-pill px-4 py-1.5 text-sm transition-colors ${
+                className={`relative rounded-pill px-4 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
                   isSignup === signup ? 'text-ink font-medium' : 'text-muted hover:text-ink'
                 }`}
               >

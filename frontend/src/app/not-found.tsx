@@ -27,7 +27,7 @@ export default function NotFound() {
     >
       <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-[640px] -translate-x-1/2 rounded-full bg-violet/12 blur-3xl" />
       <p
-        className="font-display select-none text-[10rem] font-bold leading-none tracking-tight text-edge/10 transition-transform duration-200 ease-out sm:text-[16rem]"
+        className="font-display select-none text-[10rem] font-bold leading-none tracking-tight text-edge/10 transition-transform duration-200 ease-out sm:text-[16rem] lg:text-[20rem]"
         style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
         aria-hidden="true"
       >
@@ -35,7 +35,7 @@ export default function NotFound() {
       </p>
       <div className="relative -mt-10 animate-fade-up sm:-mt-16">
         <p className="section-label mb-2">Page not found</p>
-        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
           This transaction doesn&apos;t exist.
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted">

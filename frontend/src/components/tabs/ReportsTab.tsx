@@ -252,7 +252,7 @@ export default function ReportsTab() {
                           defaultValue={txn.category_id ?? ''}
                           onChange={(e) => handleCategoryChange(txn, e.target.value)}
                           onBlur={() => setEditingId(null)}
-                          className="rounded-pill border border-edge/20 bg-surface px-3 py-1 text-sm text-ink focus:border-accent-strong/50 focus:outline-none"
+                          className="rounded-pill border border-edge/20 bg-surface px-3 py-1 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
                         >
                           <option value="" disabled>
                             Choose category…

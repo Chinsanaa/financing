@@ -37,7 +37,7 @@ export default function Button({
 }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-pill transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-pill transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       disabled={disabled || loading}
       {...rest}
     >

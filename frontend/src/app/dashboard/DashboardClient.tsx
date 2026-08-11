@@ -136,7 +136,7 @@ export default function DashboardClient() {
     <div className="min-h-screen">
       {/* Header */}
       <header className="sticky top-0 z-40 glass border-b border-edge/8">
-        <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between px-4 py-3 sm:px-6 lg:px-8 2xl:px-12">
+        <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between px-4 py-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           <Link href="/dashboard" className="font-display text-lg font-bold tracking-tight">
             Financing<span className="text-accent-strong">.</span>
           </Link>
@@ -146,14 +146,14 @@ export default function DashboardClient() {
             <Link
               href="/settings"
               aria-label="Settings"
-              className="flex h-9 w-9 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25"
+              className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <Settings className="h-4 w-4" />
             </Link>
             <button
               onClick={handleLogout}
               aria-label="Sign out"
-              className="flex h-9 w-9 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40"
+              className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <LogOut className="h-4 w-4" />
             </button>

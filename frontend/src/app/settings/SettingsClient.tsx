@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
@@ -32,6 +32,11 @@ export default function SettingsClient() {
   const [success, setSuccess] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const deleteConfirmRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (deleteConfirm) deleteConfirmRef.current?.focus();
+  }, [deleteConfirm]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -101,7 +106,7 @@ export default function SettingsClient() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl space-y-6 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-12 sm:px-6 lg:px-8 xl:px-10">
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
@@ -112,7 +117,7 @@ export default function SettingsClient() {
   return (
     <div className="min-h-screen">
       <header className="glass sticky top-0 z-40 border-b border-edge/8">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
           <h1 className="font-display text-lg font-bold tracking-tight">Settings</h1>
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" /> Back
@@ -120,7 +125,7 @@ export default function SettingsClient() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
         <Card className="p-6">
           <SectionHeader label="Profile" title="Account" />
           <div className="space-y-4">
@@ -175,7 +180,12 @@ export default function SettingsClient() {
             </p>
 
             {deleteConfirm ? (
-              <div className="space-y-3 rounded-lg border border-danger/30 bg-danger/5 p-4">
+              <div
+                ref={deleteConfirmRef}
+                role="alert"
+                tabIndex={-1}
+                className="space-y-3 rounded-lg border border-danger/30 bg-danger/5 p-4 focus:outline-none"
+              >
                 <p className="text-sm font-semibold text-danger">Are you absolutely sure?</p>
                 <p className="text-sm text-muted">
                   All transactions, categories, and trained models will be permanently deleted.

@@ -102,7 +102,7 @@ export default function SavingsTab() {
                     value={goalInput}
                     onChange={(e) => setGoalInput(e.target.value)}
                     placeholder="e.g. 3000"
-                    className="w-32 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none"
+                    className="w-32 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
                   />
                   <Button onClick={handleSaveGoal} loading={savingGoal} className="!px-3 !py-1.5 text-sm">
                     Save
