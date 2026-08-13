@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BrainCircuit, Languages, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
+import { apiClient } from '@/utils/api';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { Alert } from '@/components/ui-feedback';
@@ -115,10 +116,14 @@ export default function AuthClient() {
         const trimmedIdentifier = identifier.trim();
         let resolvedEmail = trimmedIdentifier;
         if (!trimmedIdentifier.includes('@')) {
-          const { data } = await supabase.rpc('get_email_for_username', {
-            check_username: trimmedIdentifier,
+          // Routed through the backend (not a direct Supabase RPC): the RPC's
+          // anon grant was revoked after it was found to let anyone harvest
+          // any username's real email address. This endpoint is rate-limited
+          // and public (no session yet at this point in the login flow).
+          const { data } = await apiClient.post('/auth/resolve-identifier', {
+            identifier: trimmedIdentifier,
           });
-          resolvedEmail = data || trimmedIdentifier;
+          resolvedEmail = data.email || trimmedIdentifier;
         }
 
         const { data, error: loginError } = await supabase.auth.signInWithPassword({

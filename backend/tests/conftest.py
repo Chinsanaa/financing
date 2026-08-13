@@ -18,6 +18,16 @@ for _p in (str(BACKEND_DIR), str(REPO_ROOT), str(REPO_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+# jieba doesn't build in every environment (same mock used by
+# tests/test_matching_optimization.py at the repo root) — importing `main`
+# pulls in routes/training.py -> src/retrain -> src/segment -> jieba
+# transitively, even though no backend test here exercises Chinese
+# tokenization directly.
+if "jieba" not in sys.modules:
+    from unittest.mock import MagicMock
+    sys.modules["jieba"] = MagicMock()
+    sys.modules["jieba"].cut = lambda text, cut_all=False: text.split()
+
 os.environ.setdefault("SUPABASE_URL", "https://test-project.supabase.co")
 # supabase-py's create_client validates the key looks JWT-shaped
 # (dot-separated segments) before ever making a network call, so the dummy
@@ -84,7 +94,11 @@ def make_token(ec_keypair):
     ) -> str:
         key = private_key if private_key is not None else trusted_private_pem
         now = datetime.now(timezone.utc)
-        payload = {"sub": sub, "aud": aud, "iat": now, "exp": now + exp_delta}
+        import auth_utils
+        payload = {
+            "sub": sub, "aud": aud, "iat": now, "exp": now + exp_delta,
+            "iss": auth_utils.EXPECTED_ISSUER,
+        }
         if extra_claims:
             payload.update(extra_claims)
         return jwt.encode(payload, key, algorithm=algorithm, headers={"kid": "test-kid"})
@@ -113,14 +127,18 @@ def fake_db(monkeypatch):
 
     fake = FakeSupabaseClient()
 
+    import routes.auth as auth_module
     import routes.categories as categories_module
     import routes.dashboard as dashboard_module
     import routes.settings as settings_module
+    import routes.training as training_module
     import routes.uploads as uploads_module
 
+    monkeypatch.setattr(auth_module, "supabase_client", fake)
     monkeypatch.setattr(categories_module, "supabase_client", fake)
     monkeypatch.setattr(dashboard_module, "supabase_client", fake)
     monkeypatch.setattr(settings_module, "supabase_client", fake)
+    monkeypatch.setattr(training_module, "supabase_client", fake)
     monkeypatch.setattr(uploads_module, "supabase_client", fake)
 
     return fake

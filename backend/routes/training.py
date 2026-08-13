@@ -9,12 +9,23 @@ from pathlib import Path
 from config import supabase_client
 from db import run_query
 from errors import internal_error, logger
-from datetime import datetime
+from limiter import limiter
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 from uuid import uuid4
 import tempfile
 import shutil
 import traceback
+
+# Artifacts classification can't function without; if any of these fail to
+# upload the run must not be reported as "succeeded" (see run_training).
+LOAD_BEARING_ARTIFACTS = frozenset({"classifier", "vectorizer"})
+
+# A "running" row older than this has almost certainly died with the
+# background task (process restart, crash) rather than actually still
+# training — training on a few thousand rows is fast. This is a read-time
+# staleness check, not a real reaper/timeout.
+STALE_RUNNING_THRESHOLD = timedelta(minutes=30)
 
 router = APIRouter()
 
@@ -27,6 +38,7 @@ class TrainRequest(BaseModel):
 
 
 @router.post("/retrain")
+@limiter.limit("5/hour")
 async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
     """Trigger model retraining in background.
 
@@ -57,6 +69,16 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
         df_labeled['category'] = df_labeled['categories'].apply(
             lambda c: c['name'] if c else None
         )
+
+        # Same floor retrain_model() enforces (src/retrain.py) — checking it
+        # here means a first-time user with too few labels gets an immediate
+        # 400 instead of a "Training started" 200 followed by a background
+        # failure they'd only discover by polling.
+        if len(df_labeled) < 5:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Need at least 5 labeled transactions to train (have {len(df_labeled)})",
+            )
 
         # Fetch user's categories
         categories_response = await run_query(
@@ -97,6 +119,22 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
         raise internal_error(e, "training/trigger_retrain")
 
 
+def _with_stale_flag(run: dict) -> dict:
+    """Flag a 'running' row whose started_at is past the staleness
+    threshold as effectively dead (crashed background task / process
+    restart with no reaper), so the frontend can show "this run appears
+    stuck" instead of an infinite spinner. Read-time only — doesn't touch
+    the stored status.
+    """
+    stale = False
+    if run.get("status") == "running" and run.get("started_at"):
+        started_at = datetime.fromisoformat(run["started_at"].replace("Z", "+00:00"))
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        stale = datetime.now(timezone.utc) - started_at > STALE_RUNNING_THRESHOLD
+    return {**run, "stale": stale}
+
+
 @router.get("/{model_run_id}")
 async def get_training_status(request: Request, model_run_id: str):
     """Poll training status."""
@@ -107,7 +145,7 @@ async def get_training_status(request: Request, model_run_id: str):
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Training run not found")
-        return response.data[0]
+        return _with_stale_flag(response.data[0])
     except HTTPException:
         raise
     except Exception as e:
@@ -127,7 +165,7 @@ async def list_training_runs(request: Request):
             .limit(50)
             .execute()
         )
-        return {"training_runs": response.data}
+        return {"training_runs": [_with_stale_flag(r) for r in response.data]}
     except HTTPException:
         raise
     except Exception as e:
@@ -185,6 +223,7 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
         # account deletion cleans the {user_id}/ prefix.
         storage_path_prefix = f"{user_id}/models/{model_run_id}"
         uploaded_files = []
+        failed_load_bearing = []
 
         for artifact_name, artifact_path in paths.items():
             if artifact_path.exists():
@@ -200,8 +239,20 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
                 except Exception as e:
                     logger.warning("[Training %s] Failed to upload %s: %s",
                                    model_run_id, artifact_path.name, e)
+                    if artifact_name in LOAD_BEARING_ARTIFACTS:
+                        failed_load_bearing.append(artifact_name)
 
         logger.info("[Training %s] Uploaded %d artifacts", model_run_id, len(uploaded_files))
+
+        # A load-bearing artifact (classifier/vectorizer) failing to upload
+        # must not be reported as "succeeded" — classification would
+        # silently fall back to rules-only forever with no user-visible
+        # error otherwise. Non-load-bearing failures (semantic/report) still
+        # just warn above.
+        if failed_load_bearing:
+            raise RuntimeError(
+                f"Load-bearing artifact(s) failed to upload: {', '.join(failed_load_bearing)}"
+            )
 
         # Mark the run succeeded, using the columns model_runs actually has.
         # (The old code wrote status='complete' — not a model_run_status enum

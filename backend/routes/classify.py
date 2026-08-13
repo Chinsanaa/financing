@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from config import supabase_client
 from db import run_query
 from errors import internal_error
+from limiter import limiter
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ class LabelRequest(BaseModel):
 
 
 @router.post("/{transaction_id}/label")
+@limiter.limit("60/hour")
 async def label_transaction(request: Request, transaction_id: str, req: LabelRequest):
     """Label a transaction from the review queue (recategorize)."""
     user_id = request.state.user_id
@@ -52,6 +54,7 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
 
 
 @router.post("/{transaction_id}/accept")
+@limiter.limit("60/hour")
 async def accept_model_suggestion(request: Request, transaction_id: str):
     """Accept model's category suggestion for a review queue transaction."""
     user_id = request.state.user_id

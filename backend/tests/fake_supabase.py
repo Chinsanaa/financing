@@ -210,6 +210,18 @@ class FakeAuth:
         self.admin = FakeAuthAdmin()
 
 
+class FakeRPCCall:
+    def __init__(self, client: "FakeSupabaseClient", name: str, params: dict):
+        self._client = client
+        self._name = name
+        self._params = params
+
+    def execute(self) -> FakeResponse:
+        handler = self._client.rpc_handlers.get(self._name)
+        data = handler(self._params) if handler else None
+        return FakeResponse(data=data)
+
+
 class FakeSupabaseClient:
     """Drop-in replacement for the real `supabase_client` in route modules."""
 
@@ -217,9 +229,14 @@ class FakeSupabaseClient:
         self._tables: dict[str, FakeTable] = {}
         self.storage = FakeStorage()
         self.auth = FakeAuth()
+        # name -> callable(params) -> data, for supabase_client.rpc(name, params)
+        self.rpc_handlers: dict[str, Any] = {}
 
     def table(self, name: str) -> FakeQueryBuilder:
         return self._tables.setdefault(name, FakeTable(name)).query()
+
+    def rpc(self, name: str, params: dict) -> FakeRPCCall:
+        return FakeRPCCall(self, name, params)
 
     def seed(self, table_name: str, rows: list[dict]):
         """Test helper: pre-populate a table with rows."""

@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from config import supabase_client
 from db import fetch_all_async, run_query
 from errors import internal_error
+from limiter import limiter
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -542,6 +543,7 @@ async def get_reports(
 
 
 @router.get("/export")
+@limiter.limit("10/hour")
 async def export_transactions(request: Request):
     """Export all user transactions as XLSX workbook.
 

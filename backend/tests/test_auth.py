@@ -132,6 +132,39 @@ def test_tampered_token_401_via_middleware(client, patch_jwks, make_token):
     assert response.status_code == 401
 
 
+# --- POST /auth/resolve-identifier ---
+# get_email_for_username's anon EXECUTE grant was revoked after it let any
+# unauthenticated caller harvest any username's real email address; lookup
+# now goes through this rate-limited, public (pre-auth) endpoint instead.
+
+def test_resolve_identifier_public_no_auth_header_required(client, fake_db):
+    fake_db.rpc_handlers["get_email_for_username"] = lambda params: "real@example.com"
+    resp = client.post("/auth/resolve-identifier", json={"identifier": "someuser"})
+    assert resp.status_code == 200
+    assert resp.json() == {"email": "real@example.com"}
+
+
+def test_resolve_identifier_unknown_username_returns_none_not_error(client, fake_db):
+    fake_db.rpc_handlers["get_email_for_username"] = lambda params: None
+    resp = client.post("/auth/resolve-identifier", json={"identifier": "nobody"})
+    assert resp.status_code == 200
+    assert resp.json() == {"email": None}
+
+
+def test_resolve_identifier_short_circuits_on_email_input(client, fake_db):
+    """An identifier containing '@' is already an email — must not even
+    reach the RPC (also avoids leaking whether a literal email string
+    happens to collide with a username)."""
+
+    def _should_not_be_called(params):
+        raise AssertionError("RPC should not be called for an email-shaped identifier")
+
+    fake_db.rpc_handlers["get_email_for_username"] = _should_not_be_called
+    resp = client.post("/auth/resolve-identifier", json={"identifier": "user@example.com"})
+    assert resp.status_code == 200
+    assert resp.json() == {"email": None}
+
+
 def test_forged_token_401_via_middleware(client, patch_jwks):
     """End-to-end version of the impersonation regression test: a forged
     token must not reach a real route handler."""
