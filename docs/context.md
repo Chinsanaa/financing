@@ -2036,3 +2036,35 @@ Kaggle/HF credentials become available in an environment that has them.
 
 **Next suggested step**: run the full suite (including jieba-dependent tests) in an
 environment where `jieba` installs cleanly, to confirm no ripple effects there too.
+
+### Session 51 (2026-08-13) — Repo cleanup: missing model2vec pin in backend
+
+**Scope**: user asked for a general repo cleanup/organization pass "considering the
+new model" (the Model2Vec semantic encoder from Session 31).
+
+**Finding**: `src/semantic.py`'s preferred encoder backend is Model2Vec
+(`potion-multilingual-128M`), and `backend/ml.py` loads/serves the semantic model
+bundle in production — but `backend/requirements.txt` (the pinned deps installed by
+`backend/Dockerfile` for the Railway deploy) never listed `model2vec`. The import in
+`semantic.py` is lazy and wrapped in try/except (`get_encoder()` returns `None` on
+failure), so nothing crashed — the backend was silently falling back to the weaker
+`LsaEncoder` for every user, every time, in production, since Session 31. Root
+`requirements.txt` (ML pipeline / tests) already had `model2vec>=0.3.0`; only the
+backend's separately-pinned copy was missing it.
+
+**Fix**: added `model2vec>=0.3.0` to `backend/requirements.txt`. Confirmed it's a
+small, pure-Python/numpy package (no torch/transformers pulled in) so this doesn't
+bloat the Railway image.
+
+**Repo organization check**: otherwise the tree matches `REPO_STRUCTURE.md` — no
+stray root files, no untracked cruft outside gitignored `__pycache__`/`.pytest_cache`,
+`data/` still template-only, docs still current. No structural changes made.
+
+**Verified**: `pip download model2vec --no-deps` confirms a lightweight
+(~60KB wheel) dependency footprint.
+
+**Next**: redeploy the backend (Railway) so the semantic model actually loads
+Model2Vec in production instead of the LSA fallback; worth spot-checking
+classification quality/confidence before vs. after on a live account, since the
+"real" pretrained encoder should meaningfully outperform the char n-gram fallback on
+unseen merchants.
