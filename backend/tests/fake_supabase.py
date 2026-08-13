@@ -27,6 +27,7 @@ class FakeQueryBuilder:
         self._table = table
         self._op = "select"
         self._filters: list[tuple[str, str, Any]] = []
+        self._or_filter: Optional[str] = None
         self._count_mode: Optional[str] = None
         self._payload: Optional[dict] = None
         self._on_conflict: Optional[str] = None
@@ -54,6 +55,13 @@ class FakeQueryBuilder:
 
     def lte(self, col: str, val: Any):
         self._filters.append(("lte", col, val))
+        return self
+
+    def or_(self, filter_str: str):
+        """Supports the one shape this codebase actually uses:
+        'col.is.null,col.eq.value' — PostgREST's comma-separated OR syntax.
+        Matches if ANY listed condition is true (ANDed with other filters)."""
+        self._or_filter = filter_str
         return self
 
     def order(self, col: str, desc: bool = False):
@@ -103,7 +111,20 @@ class FakeQueryBuilder:
                 return False
             if kind == "lte" and not (row.get(col) is not None and row.get(col) <= val):
                 return False
+        if self._or_filter:
+            conditions = self._or_filter.split(",")
+            if not any(self._or_condition_matches(row, cond) for cond in conditions):
+                return False
         return True
+
+    @staticmethod
+    def _or_condition_matches(row: dict, condition: str) -> bool:
+        col, op, val = condition.split(".", 2)
+        if op == "is":
+            return row.get(col) is None if val == "null" else row.get(col) is not None
+        if op == "eq":
+            return str(row.get(col)) == val
+        return False
 
 
 class FakeTable:

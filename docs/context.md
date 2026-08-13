@@ -63,7 +63,38 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 50): user reported the "Getting started" onboarding checklist
+Current (Session 51, updated same session): added an LLM fallback
+classification tier for transactions no rule or trained model can place,
+plus a fix so renamed categories don't silently orphan existing merchant
+rules. See Session 51 log for full detail. **Provider changed mid-session**:
+originally built against the Anthropic API; user asked for a free option
+instead, so it now calls **Groq's free-tier inference API**
+(`llama-3.3-70b-versatile`, OpenAI-compatible tool calling) via the `groq`
+SDK — `groq_api_key`/`GROQ_API_KEY` everywhere `anthropic_api_key`/
+`ANTHROPIC_API_KEY` is mentioned earlier in the Session 51 log below. Same
+architecture (batched call, tool-use schema constrained to live category
+names, never auto-applied) — only the provider/config names changed.
+
+Next:
+1. Set `GROQ_API_KEY` in the backend's real environment (Railway) — free at
+   console.groq.com. The feature no-ops cleanly without it, so this is
+   required before it does anything in production.
+2. Apply the new migration (`20260813160000_add_llm_classification_support.sql`)
+   to the live Supabase project.
+3. Manual live-account verification (no real API key was available in this
+   sandbox): upload a transaction from a merchant with no matching rule,
+   confirm it shows up in the review queue as an LLM suggestion, accept it,
+   confirm a new row appears in `merchant_rules`, then confirm a second
+   transaction from the same merchant resolves instantly via that rule
+   without another LLM call. Also manually confirm the review-queue UI
+   renders an `'llm'`-sourced suggestion sensibly (it wasn't touched this
+   session — should work via the existing `category_id`-as-suggestion
+   pattern, but wasn't checked in a browser).
+4. Consider whether the review queue should visually distinguish
+   `label_source='llm'` suggestions from `'model'` ones (e.g. a small badge)
+   — not done this session, purely a UI polish question.
+
+Previous (Session 50): user reported the "Getting started" onboarding checklist
 stuck at "3 of 4 steps done" after actually reviewing categories. Root cause:
 `DashboardClient` passed `OnboardingChecklist` a collapsed section id
 (`'transactions-model'`) instead of the actual wizard step, so the
@@ -126,13 +157,14 @@ Next:
    limiting (Session 49's lockout is client-side only — see that session's
    log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 49, 2026-08-11)
+## Current State (Session 51, 2026-08-13)
 
 | Item | Status |
 |---|---|
 | Product | Next.js (`frontend/`, Vercel) + FastAPI (`backend/`, Railway) + Supabase; the ONLY UI — Streamlit/Flask stacks deleted (Session 39) |
 | Personal transaction data in repo | Removed from working tree (Session 19); **still in git history** — open item |
 | Merchant rules | 554 global seeds in `merchant_rules` (user_id NULL) + per-user rows; source patterns in `src/merchant_categories.py`; `src/merchant_display.py` restored with 450-line curated map + translator fallback |
+| LLM fallback classifier | **NEW** (Session 51): `src/llm_classify.py` (Claude Haiku via `anthropic` SDK, batched, DB-free) catches rows rules+model leave as `label_source='none'` — mainly new accounts/unseen merchant vocabulary. Prompted with the user's LIVE category names (rename-proof by construction). Suggestion only (`needs_review=True`); confirming one writes a new per-user `merchant_rules` row (rule generalization loop) so the same merchant is free/instant next time. Requires `ANTHROPIC_API_KEY`; no-ops cleanly without it. Category rename (`PUT /categories/{id}`) now also syncs pre-existing `merchant_rules`/`special_rules` rows from the old name to the new one, so old rules aren't just abandoned |
 | Category taxonomy | **FIXED** (Session 42): signup trigger + live account now create exactly `ML_CATEGORIES` (Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Other) — matches what all 554 merchant rules target and what the classifier is trained on |
 | File upload (Alipay/WeChat) | **FIXED** (Session 40 + 41): JWT validation, session persistence, file format detection, Chinese column mapping, early-insert, row-level dedup, 409 duplicate blocking — **RELEASE-READY**. **NEW** (Session 46): multi-file — `UploadTab` queues up to 10 files and uploads them one after another to the unchanged `POST /uploads/`; each file shows its own outcome (imported / skipped as duplicate / failed) and a mid-batch failure never stops the rest. Sequential by design, not just UX: `dedup_new_rows` reads-then-writes with no unique index backing it, so file N's dedup query only sees file N−1's rows because it waits for that request to commit — running uploads concurrently would let overlapping date ranges double-import |
 | Schema | **FIXED** (Session 41 + 42): 3 migrations repair live divergence (file_type enum→text, per-user file_hash unique, ON DELETE CASCADE); Session 42 adds the category-taxonomy trigger fix — all idempotent against both live and fresh apply |
@@ -165,6 +197,116 @@ Next:
 | Auth flow polish | **NEW** (Session 49): shared `PasswordInput` (show/hide eye toggle) used on all 6 password fields across signup/signin/Settings/recovery; live confirm-password mismatch text added to the two forms that lacked it (Settings change-password, recovery set-password — signup already had it); email/username/identifier trimmed before use; client-side soft lockout on sign-in after 5 failed attempts (escalating 30s→300s cooldown, resets on success). Two Supabase security-advisor findings fixed: `handle_new_user()`/`initialize_default_categories()`/`reassign_deleted_category_transactions()` (trigger-only functions) had EXECUTE revoked from `anon`/`authenticated` (harmless as direct RPC calls today, but needlessly public); "Leaked Password Protection" is disabled project-wide — flagged for the user, not fixable via any available tool (Dashboard-only setting) |
 
 ## Session Log
+
+### Session 51 (2026-08-13) — LLM fallback classifier + category-rename rule sync
+
+**Scope**: user asked how to make `src/merchant_categories.py` generalize beyond
+their own transaction vocabulary (so another user's uploaded merchants aren't
+left uncategorized just because the hardcoded rules were written for one
+person), and separately flagged that user-renamed categories break existing
+merchant rules silently. Asked for an LLM to help. Explored via a background
+Explore agent first (full `merchant_categories.py` structure, the `categories`/
+`merchant_rules` Supabase schema, `backend/ml.py`'s rule/model/graduated-trust
+routing, and confirmed no existing LLM integration anywhere in the codebase —
+only `src/translate.py`'s free `deep_translator` call is a precedent for
+"external API from the pipeline"). Confirmed the rename bug directly by reading
+`backend/ml.py::_fetch_categories()`: rules resolve to a category by NAME, and a
+rename makes `name_to_id.get(old_name)` return `None` — the rule keeps
+"matching" the merchant but can no longer be applied.
+
+**Decisions confirmed with the user up front** (AskUserQuestion, plan mode):
+LLM role = fallback for rows rules/model leave unclassified, plus a rule-
+generalization loop (confirmed LLM answers get promoted to real per-user
+rules); trust = LLM suggestions never auto-apply, always land in the review
+queue like today's uncalibrated model suggestions; API key = one app-wide
+Anthropic key in backend env vars (not per-user bring-your-own-key), with
+cost controls.
+
+**What was built**:
+- `src/llm_classify.py` (new): pure, DB-free — `classify_with_llm(items,
+  categories, client=None)` sends ONE batched Claude Haiku
+  (`claude-haiku-4-5`) request per classification pass, using tool-use with a
+  JSON schema that constrains the returned `category` to an `enum` of exactly
+  the `categories` list the caller passes in. That's what makes it
+  rename-proof: the caller always passes the user's LIVE category names, so
+  the model literally cannot return a name that isn't currently valid.
+  Any failure (no client, network error, malformed response) returns
+  all-`None` rather than raising, same shape as `translate.py`'s
+  try/except-return-safe-default pattern.
+- `backend/ml.py`: after `classify_all()` (rules → model → graduated-trust
+  agreement), rows still `label_source='none'` (no rule matched, no trained
+  model — mainly brand-new accounts and merchant text the rule list has never
+  seen) get a fallback pass via `_llm_fallback_suggestions()`: deduped by
+  merchant so N transactions from the same unseen merchant cost one line-item
+  in one call, capped at `_LLM_MERCHANT_CAP=40` distinct merchants per pass as
+  a cost safety valve, and skipped entirely if `ANTHROPIC_API_KEY` isn't
+  configured. Results get `label_source='llm'`, `needs_review=True` —
+  never auto-applied, matching the existing graduated-trust philosophy where
+  only calibrated two-model agreement earns auto-apply.
+- `backend/routes/classify.py`: both confirm actions (`POST
+  /{id}/label`, `POST /{id}/accept`) now check whether the transaction being
+  confirmed had `label_source == 'llm'`, and if so insert a new per-user
+  `merchant_rules` row (`source='llm_confirmed'`) for that merchant →
+  confirmed category. This is the "generalization" loop the user asked for:
+  the next transaction from that exact merchant hits the free, instant,
+  trusted rule path instead of costing another LLM call. Best-effort — a
+  failure here never blocks the label/accept action itself. Found and fixed a
+  real bug while wiring this up: the fake test DB (and, it turns out, this is
+  worth double-checking against the real supabase-py client too) can hand
+  back a row reference rather than a copy, so reading `before` and then
+  updating the same row in the same request silently overwrote `before` too —
+  fixed by copying (`dict(before_response.data[0])`) before the update.
+- `backend/routes/categories.py`: `update_category` now detects a `name`
+  change and bulk-updates this user's existing `merchant_rules` and
+  `special_rules` rows where `category_name` equals the OLD name to the NEW
+  name, so pre-existing rules survive a rename too (not just newly-
+  LLM-confirmed ones). Best-effort, logged not raised on failure.
+- New migration `20260813160000_add_llm_classification_support.sql`:
+  additive `ALTER TYPE ... ADD VALUE` for `label_source_type` (`'llm'`) and
+  `merchant_rule_source` (`'llm_confirmed'`).
+- Config: `backend/config.py` gained `anthropic_api_key: str | None = None`;
+  `backend/.env.example` documents `ANTHROPIC_API_KEY`; `anthropic` added to
+  both `backend/requirements.txt` and root `requirements.txt`.
+- Tests: `tests/test_llm_classify.py` (10 tests, fully mocked Anthropic
+  client — batching, schema/category restriction, graceful failure,
+  confidence clamping); `backend/tests/test_llm_fallback.py` (7 tests —
+  no-API-key no-op, dedup, per-pass cap, end-to-end wiring through
+  `_classify_user_transactions` proving `needs_review` stays `True`);
+  `backend/tests/test_classify_llm_promotion.py` (5 tests — rule creation on
+  label/accept of an `'llm'` row, no rule created for `'model'`/`'rule'`
+  confirmations, the promoted rule is immediately visible to
+  `ml._fetch_rules()`); `backend/tests/test_category_rename_sync.py` (4 tests
+  — merchant_rules/special_rules sync on rename, cross-user isolation, no-op
+  on non-name updates). Extended `backend/tests/fake_supabase.py` with a
+  minimal `.or_()` implementation (only the `col.is.null,col.eq.value` shape
+  this codebase actually uses) since `ml._fetch_rules()` needed it for the
+  last test; added `routes.classify` to `conftest.py`'s `fake_db` patch list
+  (it wasn't wired into the fake-DB test harness before this session).
+
+**Verified**: `pytest tests/` (52 passing — everything not blocked by the
+pre-existing jieba-can't-build-from-source sandbox limitation, confirmed
+unchanged from Session 26's note by re-attempting the jieba install) +
+`pytest backend/tests/` (48 passing, all new + all pre-existing) — 100 total,
+no regressions. Confirmed the sandbox still can't install `jieba`
+(`AttributeError: install_layout` — same as Session 26, a Debian
+setuptools/distutils incompatibility unrelated to this session).
+
+**Deliberately scoped narrower than the plan's initial wording**: the LLM
+fallback only targets `label_source='none'` rows (no rule AND no trained
+model), not also non-agreed `'model'` predictions — a trained user's model
+suggestions already carry real signal from their own labels, so re-spending
+an LLM call on every uncalibrated model row would add cost without matching
+the actual problem statement (new users/unseen vocabulary have no model at
+all, which is exactly the `'none'` case).
+
+**Not done / open**: no live end-to-end test against a real Groq API key
+(none available in this sandbox) — the manual verification checklist from the
+plan (upload → review queue shows an `'llm'` suggestion → accept → second
+transaction from the same merchant resolves via the new rule, no second LLM
+call) still needs running against a live account before this ships. Frontend
+review-queue UI wasn't touched — it already renders `category_id` as a
+suggestion regardless of `label_source`, so `'llm'` suggestions should render
+correctly today, but this wasn't manually confirmed in a browser.
 
 ### Session 50 (2026-08-11) — Onboarding checklist stuck-step bug + Settings cleanup
 

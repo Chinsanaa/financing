@@ -108,16 +108,59 @@ async def update_category(request: Request, category_id: str, cat: CategoryUpdat
         # `color: null` passes exclude_unset and clears the column ("Auto").
         if update_data.get("color") is not None:
             await _validate_color(user_id, update_data["color"], exclude_id=category_id)
+
+        old_name = None
+        new_name = update_data.get("name")
+        if new_name:
+            before = await run_query(
+                lambda: supabase_client.table("categories").select("name").eq("id", category_id).eq("user_id", user_id).execute()
+            )
+            if before.data:
+                old_name = before.data[0]["name"]
+
         response = await run_query(
             lambda: supabase_client.table("categories").update(update_data).eq("id", category_id).eq("user_id", user_id).execute()
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Category not found or not authorized")
+
+        if old_name and new_name and old_name != new_name:
+            await _rename_category_in_rules(user_id, old_name, new_name)
+
         return {"category": response.data[0]}
     except HTTPException:
         raise
     except Exception as e:
         raise internal_error(e, "categories/update")
+
+
+async def _rename_category_in_rules(user_id: str, old_name: str, new_name: str) -> None:
+    """Keep this user's merchant/special rules pointing at a category name
+    that still exists after a rename.
+
+    merchant_rules.category_name and special_rules.category_name are matched
+    back to a live category by NAME (see backend/ml.py::_fetch_categories) —
+    without this, every existing rule that used to resolve to `old_name`
+    silently stops applying the moment the category is renamed. Best-effort:
+    a failure here must not block the rename itself.
+    """
+    try:
+        await run_query(
+            lambda: supabase_client.table("merchant_rules")
+            .update({"category_name": new_name})
+            .eq("user_id", user_id)
+            .eq("category_name", old_name)
+            .execute()
+        )
+        await run_query(
+            lambda: supabase_client.table("special_rules")
+            .update({"category_name": new_name})
+            .eq("user_id", user_id)
+            .eq("category_name", old_name)
+            .execute()
+        )
+    except Exception as e:
+        internal_error(e, "categories/rename_sync")  # logs; not re-raised
 
 
 @router.delete("/{category_id}")

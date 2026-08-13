@@ -37,6 +37,20 @@ Supabase PostgreSQL + Auth + Storage
    agree, their calibrated confidence clears a data-derived threshold, and the
    prediction isn't the catch-all. See `docs/FULL_AUDIT.md` for why raw model
    confidence can't be trusted on unseen merchants.
+4. **LLM fallback** (`label_source='llm'`, `src/llm_classify.py`): rows still
+   unclassified after rules + model (no rule hit, no trained model yet — the
+   common case for a new account or merchant vocabulary the hardcoded rules
+   were never written for) get one more, batched call to Groq's free-tier
+   inference API (an open model, no cost) using the user's *current*
+   category names, so it's immune to category renames. Always a
+   review-queue suggestion, never auto-applied. Confirming one writes back a
+   new per-user `merchant_rules` row ("rule generalization") — the next
+   transaction from that merchant hits the free rule path instead of costing
+   another LLM call. Requires `GROQ_API_KEY` (free at
+   [console.groq.com](https://console.groq.com)); skipped entirely if unset.
+   Renaming a category (`PUT /categories/{id}`) also updates any of that
+   user's existing `merchant_rules`/`special_rules` pointing at the old
+   name, so pre-existing rules survive the rename too.
 
 Classification runs automatically after every upload (rules-only until a model
 is trained) and re-runs after every training run (`backend/ml.py`).
@@ -134,7 +148,8 @@ financing/
 │   ├── semantic.py      # embedding classifier (Model2Vec / LSA fallback)
 │   ├── calibration.py   # top-label Platt scaling
 │   ├── eval_grouped.py  # GroupKFold evaluation + threshold derivation
-│   └── merchant_categories.py  # global rule patterns
+│   ├── merchant_categories.py  # global rule patterns
+│   └── llm_classify.py  # LLM fallback classifier (batched, DB-free)
 ├── supabase/            # migrations (schema, RLS, storage buckets, fixes)
 ├── tests/               # pytest suite for src/
 ├── scripts/test_local.sh
