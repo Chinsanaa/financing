@@ -9,6 +9,8 @@ import jwt
 from config import settings
 
 JWKS_URL = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+# Standard Supabase GoTrue issuer format for a given project URL.
+EXPECTED_ISSUER = f"{settings.supabase_url}/auth/v1"
 
 _jwk_client: jwt.PyJWKClient | None = None
 
@@ -40,4 +42,6 @@ def decode_supabase_jwt(token: str) -> dict:
         signing_key.key,
         algorithms=["ES256"],
         audience="authenticated",
+        issuer=EXPECTED_ISSUER,
+        leeway=10,  # tolerate small clock skew between this server and Supabase
     )

@@ -6,13 +6,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import jwt
 from typing import Optional
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from config import settings
 from errors import logger
 from auth_utils import decode_supabase_jwt
+from limiter import limiter
 
 # Initialize routers (will be imported below)
 from routes import auth, categories, uploads, training, classify, dashboard, settings as settings_router
@@ -35,7 +34,9 @@ app = FastAPI(
 )
 
 # --- Rate Limiting ---
-limiter = Limiter(key_func=get_remote_address)
+# `limiter` is the single shared Limiter instance (backend/limiter.py) —
+# every route module imports the same object so rate limits share one
+# counter across the app instead of each module tracking independently.
 app.state.limiter = limiter
 
 @app.exception_handler(RateLimitExceeded)
@@ -61,13 +62,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     PUBLIC_PATHS = frozenset({
         "/", "/health", "/docs", "/redoc", "/openapi.json",
-        "/auth/signup", "/auth/login", "/auth/refresh",
+        "/auth/signup", "/auth/login", "/auth/resolve-identifier",
     })
 
     async def dispatch(self, request: Request, call_next):
         # Skip auth for health check, docs, and public auth routes
-        # (signup/login/refresh happen before a user has a token to send).
-        # CORS preflights carry no Authorization header either.
+        # (signup/login/resolve-identifier happen before a user has a
+        # token to send). CORS preflights carry no Authorization header
+        # either.
         if request.url.path in self.PUBLIC_PATHS or request.method == "OPTIONS":
             return await call_next(request)
 
@@ -86,7 +88,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 # Verify the expected claims are present
                 if not user_id or payload.get("aud") != "authenticated":
                     raise jwt.InvalidTokenError("Missing required claims")
-            except (jwt.PyJWTError, KeyError) as e:
+            except (jwt.PyJWTError, KeyError, ValueError) as e:
+                # jwt.PyJWTError covers PyJWKClientConnectionError (JWKS
+                # fetch network failures are already wrapped into this by
+                # PyJWT); ValueError additionally covers a malformed (non-
+                # JSON) JWKS response, which PyJWKClient doesn't wrap — an
+                # external-service failure that must surface as 401, not an
+                # unhandled 500.
                 logger.warning(f"Token validation failed: {e}")
                 return JSONResponse(
                     {"detail": "Invalid or expired token"},

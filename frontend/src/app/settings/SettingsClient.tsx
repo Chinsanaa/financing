@@ -35,6 +35,7 @@ export default function SettingsClient() {
 
   const [exporting, setExporting] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -97,6 +98,10 @@ export default function SettingsClient() {
     setPasswordError('');
     setPasswordSuccess('');
 
+    if (!currentPassword) {
+      setPasswordError('Enter your current password');
+      return;
+    }
     if (!passwordMeetsRequirements(newPassword)) {
       setPasswordError('Password does not meet the requirements below');
       return;
@@ -108,9 +113,24 @@ export default function SettingsClient() {
 
     setPasswordSaving(true);
     try {
+      // Re-verify the current password before changing it — a bare access
+      // token alone used to be enough to change a password with no re-auth
+      // check. signInWithPassword re-establishes a fresh session on success
+      // and fails without one, so this doubles as the re-auth step.
+      if (!user?.email) throw new Error('Missing account email; try reloading the page');
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (reauthError) {
+        setPasswordError('Current password is incorrect');
+        return;
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
       setPasswordSuccess('Password updated successfully');
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
@@ -201,6 +221,13 @@ export default function SettingsClient() {
         <Card className="p-6">
           <SectionHeader label="Data & Security" title="Change password" />
           <form onSubmit={handleChangePassword} className="space-y-4">
+            <PasswordInput
+              label="Current password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Enter your current password"
+              autoComplete="current-password"
+            />
             <div>
               <PasswordInput
                 label="New password"
@@ -228,7 +255,11 @@ export default function SettingsClient() {
             <Button
               type="submit"
               loading={passwordSaving}
-              disabled={!passwordMeetsRequirements(newPassword) || newPassword !== confirmPassword}
+              disabled={
+                !currentPassword ||
+                !passwordMeetsRequirements(newPassword) ||
+                newPassword !== confirmPassword
+              }
             >
               {passwordSaving ? 'Saving' : 'Update password'}
             </Button>

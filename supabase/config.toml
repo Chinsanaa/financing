@@ -179,10 +179,13 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+# Matches the frontend's PasswordChecklist requirement (9+ chars) — server-side
+# enforcement was previously looser than the UI, so a direct API call (bypassing
+# the UI's checklist) could set a 6-char password with no complexity.
+minimum_password_length = 9
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
-password_requirements = ""
+password_requirements = "lower_upper_letters_digits_symbols"
 
 # Configure passkey sign-ins.
 # [auth.passkey]
@@ -225,7 +228,10 @@ double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
 enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
-secure_password_change = false
+# Was false: a bare stolen access token was enough to change a password with no
+# re-auth check. SettingsClient.tsx's change-password form now re-verifies the
+# current password via signInWithPassword before calling updateUser.
+secure_password_change = true
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.

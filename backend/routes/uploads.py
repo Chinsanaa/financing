@@ -7,6 +7,7 @@ from starlette.concurrency import run_in_threadpool
 from config import supabase_client
 from db import run_query
 from errors import internal_error, logger
+from limiter import limiter
 import pandas as pd
 from datetime import datetime
 from uuid import uuid4
@@ -23,6 +24,25 @@ router = APIRouter()
 MAX_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_ROWS = 50000
 
+# XLSX (like all modern Office formats) is a ZIP container — a real one
+# always starts with a ZIP local-file-header signature. An empty/spanned
+# archive uses a different signature, but a just-created XLSX always has at
+# least one entry, so PK\x03\x04 is the one to expect here.
+XLSX_MAGIC = b"PK\x03\x04"
+
+
+def _validate_file_content(filename: str, content: bytes) -> None:
+    """Reject a file whose actual content doesn't match its declared
+    extension, before it's parsed. Best-effort — not a hard content-type
+    guarantee (a CSV has no reliable magic bytes of its own), but it catches
+    the case that matters: a file claiming to be .csv/.xlsx that's actually
+    something else, parsed downstream as if it were trusted.
+    """
+    if filename.endswith('.xlsx') and not content.startswith(XLSX_MAGIC):
+        raise ValueError("File does not look like a valid Excel (.xlsx) file")
+    if filename.endswith('.csv') and content.startswith(XLSX_MAGIC):
+        raise ValueError("File extension is .csv but content looks like a binary/Excel file")
+
 
 class UploadResponse(BaseModel):
     upload_id: str
@@ -35,6 +55,7 @@ class UploadResponse(BaseModel):
 
 
 @router.post("/")
+@limiter.limit("20/hour")
 async def upload_file(request: Request, file: UploadFile = File(...)):
     """Upload a CSV/Excel file (Alipay or WeChat format) with strict validation.
 
@@ -64,6 +85,9 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         # Validation 2: Size limit
         if len(content) > MAX_SIZE:
             raise ValueError(f"File exceeds 10MB limit ({len(content) / 1024 / 1024:.1f}MB)")
+
+        # Validation 2b: content matches declared extension (magic bytes)
+        _validate_file_content(file.filename, content)
 
         # Validation 3: Duplicate file check (per user, by content hash)
         file_hash = calculate_file_hash(content)

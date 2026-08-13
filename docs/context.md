@@ -2036,3 +2036,166 @@ Kaggle/HF credentials become available in an environment that has them.
 
 **Next suggested step**: run the full suite (including jieba-dependent tests) in an
 environment where `jieba` installs cleanly, to confirm no ripple effects there too.
+
+### Session 51 (2026-08-13) — Repo cleanup: missing model2vec pin in backend
+
+**Scope**: user asked for a general repo cleanup/organization pass "considering the
+new model" (the Model2Vec semantic encoder from Session 31).
+
+**Finding**: `src/semantic.py`'s preferred encoder backend is Model2Vec
+(`potion-multilingual-128M`), and `backend/ml.py` loads/serves the semantic model
+bundle in production — but `backend/requirements.txt` (the pinned deps installed by
+`backend/Dockerfile` for the Railway deploy) never listed `model2vec`. The import in
+`semantic.py` is lazy and wrapped in try/except (`get_encoder()` returns `None` on
+failure), so nothing crashed — the backend was silently falling back to the weaker
+`LsaEncoder` for every user, every time, in production, since Session 31. Root
+`requirements.txt` (ML pipeline / tests) already had `model2vec>=0.3.0`; only the
+backend's separately-pinned copy was missing it.
+
+**Fix**: added `model2vec>=0.3.0` to `backend/requirements.txt`. Confirmed it's a
+small, pure-Python/numpy package (no torch/transformers pulled in) so this doesn't
+bloat the Railway image.
+
+**Repo organization check**: otherwise the tree matches `REPO_STRUCTURE.md` — no
+stray root files, no untracked cruft outside gitignored `__pycache__`/`.pytest_cache`,
+`data/` still template-only, docs still current. No structural changes made.
+
+**Verified**: `pip download model2vec --no-deps` confirms a lightweight
+(~60KB wheel) dependency footprint.
+
+**Next**: redeploy the backend (Railway) so the semantic model actually loads
+Model2Vec in production instead of the LSA fallback; worth spot-checking
+classification quality/confidence before vs. after on a live account, since the
+"real" pretrained encoder should meaningfully outperform the char n-gram fallback on
+unseen merchants.
+
+### Session 27 (2026-08-13) — Pre-launch security hardening pass
+A separate, earlier session (before this one picked it up) ran three parallel Explore
+audits (backend API, frontend/Supabase, ML pipeline) ahead of inviting real users, and
+wrote a plan (`Pre-launch hardening pass: security + robustness fixes`) with a few
+already-confirmed user decisions (raise server-side password policy to match the
+frontend, require current-password re-entry on password change, defer dependency
+version bumps to a separate pass). That plan was never implemented — checked `git log`
+and the live files directly (`supabase/config.toml`, the `get_email_for_username` RPC
+grant, no `/auth/resolve-identifier` endpoint, no CSP header) and confirmed nothing
+from it had landed. This session implemented it.
+
+**What was built**:
+- **Email-harvesting RPC (High, real PII leak) — fixed.** `get_email_for_username`'s
+  anon EXECUTE grant let anyone resolve any username to its real email address
+  directly via Supabase's RPC endpoint. New migration
+  (`20260813000000_revoke_email_lookup_anon.sql`) revokes anon+authenticated EXECUTE;
+  username→email resolution now goes through a new rate-limited (`10/minute`)
+  `POST /auth/resolve-identifier` (`backend/routes/auth.py`), called via the
+  service-role client (bypasses the revoke) and added to `AuthMiddleware.PUBLIC_PATHS`
+  (pre-auth, no session yet at login time). `AuthClient.tsx` now calls this endpoint
+  instead of `supabase.rpc(...)` directly; same null-fallback behavior kept
+  intentionally (avoids a different username-existence leak).
+- **Password policy gap — fixed.** `supabase/config.toml`: `minimum_password_length`
+  6→9, `password_requirements` empty→`lower_upper_letters_digits_symbols`, matching
+  `PasswordChecklist.tsx`'s UI rule (previously a direct API call could set a 6-char
+  password with no complexity). **Not yet applied to the live Supabase project** —
+  `config.toml` alone doesn't push to a hosted project; the Dashboard's Auth policy
+  settings need a manual/CLI sync, flagged in the PR.
+- **No re-auth on password change — fixed.** `secure_password_change` false→true.
+  `SettingsClient.tsx`'s change-password form gained a "Current password" field;
+  `handleChangePassword` now calls `signInWithPassword` with it before `updateUser`,
+  erroring "Current password is incorrect" on failure instead of trusting a bare
+  access token. Same live-project caveat as above.
+- **Missing rate limits — fixed.** All route modules previously instantiated their own
+  `slowapi.Limiter()` (auth.py) or relied on nothing at all. Added `backend/limiter.py`
+  (one shared `Limiter` instance); `main.py` and every route module now import it, so
+  limits share one counter. Applied: `POST /uploads/` 20/hour, `POST /training/retrain`
+  5/hour, `GET /dashboard/export` 10/hour, `POST /classify/{id}/label`+`/accept`
+  60/hour each.
+- **Upload content validation — fixed.** `backend/routes/uploads.py`: new
+  `_validate_file_content()` rejects a `.xlsx` upload that doesn't start with the ZIP
+  local-file-header signature (`PK\x03\x04`) and a `.csv` upload that does (i.e. a
+  mislabeled binary file), before parsing. Full un-capped-size zip-bomb-style risk on
+  `.xlsx` remains a best-effort mitigation, not a hard guarantee — pandas has no
+  streaming row-cap for Excel — matching the plan's own caveat; `detect_source`'s
+  existing `nrows=50`/`nrows=0` detection reads already provide a coarse guard before
+  the full parse.
+- **Service-role RLS bypass — documented.** Added a prominent comment block in
+  `backend/config.py` stating the invariant explicitly (every user-data query MUST
+  `.eq("user_id", ...)`, no DB-level safety net). Audit found every current route
+  already does this correctly — no code behavior change, just making the invariant
+  explicit for future routes.
+- **Training robustness — fixed**, all in `backend/routes/training.py`:
+  - `trigger_retrain` now pre-checks `len(df_labeled) >= 5` (same floor
+    `retrain_model()` enforces) and returns 400 immediately, before creating a
+    `model_runs` row or spawning the background task — was previously an immediate
+    200 "Training started" even for e.g. 2 labeled rows, discoverable only by polling.
+  - `run_training` now tracks `classifier`/`vectorizer` as load-bearing artifacts; if
+    either fails to upload to Storage, the run is marked `status="failed"` with a
+    clear error instead of `"succeeded"` — previously a load-bearing upload failure
+    was silently swallowed (`logger.warning` only) and the run reported success while
+    classification silently stayed rules-only forever.
+  - `get_training_status`/`list_training_runs` now compute a `stale: true` flag on any
+    `running` row whose `started_at` is more than 30 minutes old (crashed background
+    task / process restart with no reaper) — read-time only, no new background
+    process. Frontend surfacing of this flag (e.g. in `TrainingTab.tsx`) is a natural
+    follow-up but wasn't in the plan's file list for this pass.
+- **CSP header — added.** `frontend/next.config.js`: new `Content-Security-Policy`
+  built from `NEXT_PUBLIC_API_URL` (no backend origin is hardcoded anywhere in the
+  repo — it's env-configured per deploy) plus `https://*.supabase.co`; `script-src`/
+  `style-src` keep `'unsafe-inline'` since the App Router's inline hydration script
+  needs it without extra nonce middleware — tightening that is a noted follow-up, not
+  in scope here.
+- **Small fixes**:
+  - `backend/auth_utils.py`: `jwt.decode(...)` now passes `leeway=10` (clock-skew
+    tolerance) and `issuer=EXPECTED_ISSUER` (`{supabase_url}/auth/v1`, the standard
+    Supabase GoTrue issuer format — derived, not invented). Updated
+    `backend/tests/conftest.py`'s `make_token` fixture to include a matching `iss`
+    claim so existing tests keep passing.
+  - `backend/main.py`: `AuthMiddleware`'s except clause broadened from
+    `(jwt.PyJWTError, KeyError)` to also catch `ValueError` — `PyJWKClientConnectionError`
+    (JWKS network failures) turned out to already be a `PyJWTError` subclass in the
+    pinned PyJWT version (verified directly, not assumed), but a malformed/non-JSON
+    JWKS response raises a bare `json.JSONDecodeError` (a `ValueError`) that wasn't
+    caught — would have surfaced as an unhandled 500 instead of 401.
+  - Removed the dead `/auth/refresh` stub (grepped the frontend first — confirmed
+    unused) and its `PUBLIC_PATHS` entry; `/auth/resolve-identifier` added in its
+    place as the new pre-auth-required public path.
+
+**Verified**: `pytest tests/` (backend) — 32/32 pass, including two new files
+(`test_training.py`: pre-check returns 400 and creates no `model_runs` row for 0 and 3
+labeled samples; `test_auth.py` additions: `/auth/resolve-identifier` works without an
+auth header, returns `{"email": null}` for unknown usernames and short-circuits
+without calling the RPC at all for an already-email-shaped identifier). Extended
+`fake_supabase.py` with a minimal `.rpc(name, params)` fake (configurable per-test
+handler) and `conftest.py`'s `fake_db` fixture to also patch `routes.auth`/
+`routes.training`, both needed for the new tests. Also added a jieba mock to
+`backend/tests/conftest.py` (same pattern `tests/test_matching_optimization.py`
+already uses at the repo root) — `main.py` transitively imports jieba via
+`routes.training → src.retrain → src.segment`, which was silently blocking 16+ of the
+existing 22 backend tests in this sandbox even before this session's changes; fixing
+it was necessary to actually verify anything through the `client`/`fake_db` fixtures
+end-to-end. `cd frontend && npm run build` — compiles, typechecks, generates all
+routes; manually confirmed the generated CSP header value by evaluating
+`next.config.js`'s `headers()` function directly.
+
+**Decided**: implemented on this session's designated branch
+(`claude/categorization-method-eval-styu0q`) alongside the earlier, unrelated
+categorization-rules work, since that's the branch this session is scoped to — not a
+judgment call to combine the two topics, just a branch constraint.
+
+**Open**:
+- `supabase/config.toml`'s password-policy and `secure_password_change` changes are
+  **not yet applied to the live Supabase project** — need a manual Dashboard check or
+  `supabase db push`-equivalent sync; flagged clearly in the PR.
+- The migration revoking the RPC grant has not been applied to the live project either
+  — same reasoning as prior sessions (Session 22's Supabase migrations): this session
+  didn't have live-project access confirmed/approved for a direct apply.
+- CSP `script-src`/`style-src` still allow `'unsafe-inline'` — nonce-based tightening
+  needs Next.js middleware wiring, out of scope for this pass.
+- `stale: true` flag exists in the training-status API response but isn't yet
+  surfaced in `TrainingTab.tsx` — not in the original plan's file list, left as a
+  natural follow-up.
+- FastAPI/pydantic/`@supabase/ssr` version bumps were explicitly deferred (user
+  decision carried over from the plan).
+
+**Next suggested step**: confirm with the user whether to apply the new migration and
+the `config.toml` Auth-policy changes to the live Supabase project now (both need
+explicit approval per this session's operating rules for shared/production systems),
+then smoke-test signup/login/password-change against the real deployed app.

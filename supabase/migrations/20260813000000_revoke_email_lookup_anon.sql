@@ -1,0 +1,12 @@
+-- get_email_for_username(text) was callable directly by anon clients via the
+-- Supabase RPC endpoint — anyone could harvest the real email address for
+-- any username in the system (direct PII disclosure, not just account
+-- enumeration). Username->email resolution now goes through a rate-limited
+-- FastAPI endpoint (POST /auth/resolve-identifier) using the service-role
+-- client, which bypasses this grant entirely, so no anon/authenticated
+-- grant is needed on this function anymore.
+--
+-- is_username_available(text) is left untouched: it only returns a
+-- boolean, not PII, and the frontend's live signup-availability check
+-- still needs it to be anon-callable.
+REVOKE EXECUTE ON FUNCTION public.get_email_for_username(text) FROM anon, authenticated;
