@@ -129,6 +129,7 @@ def fake_db(monkeypatch):
 
     import routes.auth as auth_module
     import routes.categories as categories_module
+    import routes.classify as classify_module
     import routes.dashboard as dashboard_module
     import routes.settings as settings_module
     import routes.training as training_module
@@ -136,6 +137,7 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(auth_module, "supabase_client", fake)
     monkeypatch.setattr(categories_module, "supabase_client", fake)
+    monkeypatch.setattr(classify_module, "supabase_client", fake)
     monkeypatch.setattr(dashboard_module, "supabase_client", fake)
     monkeypatch.setattr(settings_module, "supabase_client", fake)
     monkeypatch.setattr(training_module, "supabase_client", fake)

@@ -14,6 +14,12 @@ classify anything. Now:
   "suggested_category"), EXCEPT calibrated two-model agreement
   (label_source='model_agreed'), which auto-applies per src/classify.py's
   graduated-trust gate.
+- Rows still unclassified after rules + model (label_source='none' — no rule
+  matched and no trained model exists yet) get one more, most-expensive
+  fallback pass: a batched LLM call (src/llm_classify.py) using the user's
+  CURRENT category names, so it works for merchant vocabulary this codebase
+  has never seen and is immune to category renames. LLM results are always
+  suggestions (label_source='llm', needs_review=True) — never auto-applied.
 
 Model bundles are cached in-process per (user_id, model_run_id); a new
 training run invalidates the cache via `invalidate_user_bundle`.
@@ -25,10 +31,17 @@ from typing import Optional
 
 import pandas as pd
 
-from config import supabase_client
+from config import settings, supabase_client
 from errors import logger
 
 from src.classify import classify_all, load_model_bundle, ModelBundle  # noqa: E402
+from src.llm_classify import classify_with_llm  # noqa: E402
+
+# Safety valve: cap how many distinct merchants one classification pass will
+# send to the LLM, so one big/weird upload can't spike cost in a single call.
+# Anything beyond the cap is simply left for the next pass / manual review,
+# same as if this fallback tier didn't run at all.
+_LLM_MERCHANT_CAP = 40
 
 # Artifact file names, keyed the same way training.py's paths dict is.
 ARTIFACT_FILES = {
@@ -213,6 +226,50 @@ def _fetch_categories(user_id: str) -> tuple:
     return name_to_id, list(name_to_id.keys()), catch_all
 
 
+def _llm_fallback_suggestions(result, categories: list[str]) -> dict:
+    """Rows classify_all left as label_source='none' (no rule, no trained
+    model) get one more try via the LLM, keyed by transaction id.
+
+    Cost controls: skipped entirely if no API key is configured; deduped so
+    each distinct merchant string costs one line-item in ONE batched call,
+    not one call per transaction; capped at _LLM_MERCHANT_CAP distinct
+    merchants per pass. Every LLM answer is a suggestion only — the caller
+    still sets needs_review=True and never auto-applies it.
+    """
+    if not settings.anthropic_api_key or not categories:
+        return {}
+
+    none_rows = result[result["label_source"] == "none"]
+    if none_rows.empty:
+        return {}
+
+    unique_merchants = none_rows["merchant"].astype(str).str.strip().unique().tolist()
+    if len(unique_merchants) > _LLM_MERCHANT_CAP:
+        unique_merchants = unique_merchants[:_LLM_MERCHANT_CAP]
+
+    # One representative description per merchant keeps the batch small.
+    items = []
+    for merchant in unique_merchants:
+        sample = none_rows[none_rows["merchant"].astype(str).str.strip() == merchant].iloc[0]
+        items.append({"merchant": merchant, "description": sample.get("description", "")})
+
+    answers = classify_with_llm(items, categories)
+
+    merchant_to_answer = {
+        m: a for m, a in zip(unique_merchants, answers) if a is not None
+    }
+    if not merchant_to_answer:
+        return {}
+
+    suggestions = {}
+    for _, row in none_rows.iterrows():
+        merchant = str(row["merchant"]).strip()
+        answer = merchant_to_answer.get(merchant)
+        if answer is not None:
+            suggestions[row["id"]] = answer
+    return suggestions
+
+
 def classify_user_transactions(user_id: str) -> int:
     """Classify all of a user's pending-review, not-manually-labeled rows.
 
@@ -259,6 +316,9 @@ def _classify_user_transactions(user_id: str) -> int:
         catch_all=catch_all,
     )
 
+    llm_categories = [c for c in valid_categories if c != catch_all]
+    llm_suggestions = _llm_fallback_suggestions(result, llm_categories)
+
     updated = 0
     for _, row in result.iterrows():
         label_source = row["label_source"]
@@ -281,8 +341,20 @@ def _classify_user_transactions(user_id: str) -> int:
                 "label_source": "model",
                 "needs_review": True,
             }
+        elif label_source == "none" and row["id"] in llm_suggestions:
+            suggestion = llm_suggestions[row["id"]]
+            category_id = name_to_id.get(suggestion["category"])
+            if not category_id:
+                continue
+            update = {
+                "category_id": category_id,
+                "confidence": _clip_confidence(suggestion["confidence"]),
+                "label_source": "llm",
+                "needs_review": True,
+            }
         else:
-            # No rule matched and no model available — leave for manual review.
+            # No rule matched and no model/LLM suggestion available — leave
+            # for manual review.
             continue
 
         try:
