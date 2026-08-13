@@ -27,6 +27,11 @@ def _match_merchant(merchant: str, rules: dict, sorted_patterns: list) -> str | 
 
     Semantics (unchanged): exact match first, then longest-pattern-first
     substring match. Returns the category, or None if nothing matched.
+
+    Note: sorted_patterns is produced by a stable sort on pattern length, so
+    two patterns of equal length are tried in their original dict/list
+    order, not by any explicit specificity rule — see merchant_categories.py
+    module docstring.
     """
     # Try exact match first
     if merchant in rules:

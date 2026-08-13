@@ -2,6 +2,16 @@
 
 Order matters for export: more specific patterns should appear before broader
 ones in MERCHANT_CATEGORY_RULES. apply_merchant_rules() also sorts by length.
+
+Precedence at match time (see label._match_merchant): patterns are tried
+longest-first, so a more specific/longer pattern always beats a shorter,
+broader one for the same merchant string. For two patterns of *equal*
+length, the sort is stable, so whichever one appears first in this file (in
+MERCHANT_CATEGORY_RULES, then LOCAL_MERCHANT_RULES) wins — a same-length
+collision is resolved by list position, not by any explicit rule. Keep this
+in mind when adding new short/generic patterns; prefer patterns specific
+enough that same-length collisions can't happen at all (see
+tests/test_merchant_rules.py for regression coverage of known-risky cases).
 """
 from __future__ import annotations
 
@@ -143,7 +153,8 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("fare", "Transportation"),
     ("transit", "Transportation"),
     ("train", "Transportation"),
-    ("bus", "Transportation"),
+    # "bus" deliberately excluded: too generic (matches "business", "busy", etc.);
+    # "subway"/"metro"/"transit" cover public transit without the collision risk.
     ("subway", "Transportation"),
     ("metro", "Transportation"),
     ("flight", "Transportation"),
@@ -151,7 +162,8 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("airline", "Transportation"),
     ("parking", "Transportation"),
     ("toll", "Transportation"),
-    ("gas", "Transportation"),
+    # "gas" deliberately excluded: matches inside unrelated words (e.g. "Vegas");
+    # "fuel" below covers the same intent more safely.
     ("fuel", "Transportation"),
     ("车费", "Transportation"),
     ("乘坐", "Transportation"),
@@ -441,10 +453,10 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("jacket", "Shopping"),
     ("gadget", "Shopping"),
     ("device", "Shopping"),
-    ("toy", "Shopping"),
+    # bare "toy"/"pet" deliberately excluded: too generic (e.g. "Toyota", "carpet",
+    # "Pete's"); the "toy store"/"pet store" patterns below cover the real intent.
     ("toy store", "Shopping"),
     ("pet store", "Shopping"),
-    ("pet", "Shopping"),
     ("book", "Shopping"),
     ("bookstore", "Shopping"),
     ("office supplies", "Shopping"),
@@ -582,8 +594,10 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("wechat", "Transfers & Gifts"),
     ("withdrawal", "Transfers & Gifts"),
     ("Withdrawal", "Transfers & Gifts"),
-    ("bank", "Transfers & Gifts"),
-    ("Bank", "Transfers & Gifts"),
+    # Deliberately no bare "bank"/"Bank" rule: it's the most generic collision-prone
+    # pattern in this file (matches any merchant with "bank" as a substring, e.g.
+    # non-bank businesses with "bank" in the name). The explicit bank names above
+    # already cover the realistic domestic cases.
 ]
 
 # User-specific / local merchants (override or supplement chain rules)
@@ -642,7 +656,8 @@ LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
     ("ujin", "Transfers & Gifts"),
     ("Uranmaa", "Transfers & Gifts"),
     ("Udval Lkhagvadorj", "Transfers & Gifts"),
-    ("Ari", "Transfers & Gifts"),
+    # "Ari" deliberately excluded: doubles as a common substring (e.g. "Mariana",
+    # "Aristocrat") — too broad to trust as a bare, never-reviewed rule.
     ("Anar", "Transfers & Gifts"),
     ("E. DULGUUN", "Transfers & Gifts"),
     ("B. E. DULGUUN", "Transfers & Gifts"),
@@ -654,12 +669,13 @@ LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
     ("Misheel.S", "Transfers & Gifts"),
     ("Erkhkhongor", "Transfers & Gifts"),
     ("G. A. ERDENE", "Transfers & Gifts"),
-    ("Hi", "Transfers & Gifts"),
     ("ODAY", "Transfers & Gifts"),
     ("Naransuvd", "Transfers & Gifts"),
     ("Yugi", "Transfers & Gifts"),
-    ("alex", "Transfers & Gifts"),
     ("murun", "Transfers & Gifts"),
+    # "Hi" and "alex" deliberately excluded: common English greeting/word and a
+    # substring of unrelated brand names (e.g. "Alexander McQueen", "Alex's Pizza")
+    # — too broad to trust as a bare, never-reviewed rule.
 ]
 
 # NYU Shanghai: cafeteria POS charges vs campus admin fees (match on description).
@@ -678,10 +694,14 @@ DESCRIPTION_KEYWORD_RULES: list[tuple[str, tuple[str, ...]]] = [
                     "takeout", "meal", "dine", "餐", "面", "烧烤", "火锅", "粥", "外卖")),
     ("Groceries", ("vegetable", "fruit", "produce", "grocery", "生鲜", "蔬菜",
                    "水果", "食材", "日用品", "菜", "批发")),
-    ("Shopping", ("shoe", "cloth", "dress", "gadget", "toy", "book", "laptop",
-                  "charger", "cable", "camera", "watch", "鞋", "衣服", "玩具", "书籍")),
-    ("Transportation", ("ride", "ticket", "flight", "parking", "airport", "gas", "fuel",
+    ("Shopping", ("shoe", "cloth", "dress", "gadget", "book", "laptop",
+                  "charger", "cable", "camera", "鞋", "衣服", "玩具", "书籍")),
+    # "watch"/"toy" deliberately excluded: "watch" is usually the verb ("watch a
+    # movie"), and "toy" collides with unrelated words ("Toyota") — both high
+    # false-positive rate in free-text descriptions.
+    ("Transportation", ("ride", "ticket", "flight", "parking", "airport", "fuel",
                         "车费", "机票", "停泊", "加油", "汽油")),
+    # "gas" deliberately excluded: matches inside unrelated words (e.g. "Vegas").
     ("Transfers & Gifts", ("send money", "gift", "present", "payment", "transfer", "remittance",
                            "红包", "汇款", "礼物", "赏金")),
 ]
