@@ -16,10 +16,11 @@ classify anything. Now:
   graduated-trust gate.
 - Rows still unclassified after rules + model (label_source='none' — no rule
   matched and no trained model exists yet) get one more, most-expensive
-  fallback pass: a batched LLM call (src/llm_classify.py) using the user's
-  CURRENT category names, so it works for merchant vocabulary this codebase
-  has never seen and is immune to category renames. LLM results are always
-  suggestions (label_source='llm', needs_review=True) — never auto-applied.
+  fallback pass: a batched LLM call (src/llm_classify.py, Groq's free-tier
+  API) using the user's CURRENT category names, so it works for merchant
+  vocabulary this codebase has never seen and is immune to category renames.
+  LLM results are always suggestions (label_source='llm', needs_review=True)
+  — never auto-applied.
 
 Model bundles are cached in-process per (user_id, model_run_id); a new
 training run invalidates the cache via `invalidate_user_bundle`.
@@ -236,7 +237,7 @@ def _llm_fallback_suggestions(result, categories: list[str]) -> dict:
     merchants per pass. Every LLM answer is a suggestion only — the caller
     still sets needs_review=True and never auto-applies it.
     """
-    if not settings.anthropic_api_key or not categories:
+    if not settings.groq_api_key or not categories:
         return {}
 
     none_rows = result[result["label_source"] == "none"]

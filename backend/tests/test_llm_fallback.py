@@ -15,9 +15,9 @@ from config import settings
 @pytest.fixture(autouse=True)
 def _restore_api_key():
     """settings is a module-level singleton — don't leak the test key."""
-    original = settings.anthropic_api_key
+    original = settings.groq_api_key
     yield
-    settings.anthropic_api_key = original
+    settings.groq_api_key = original
 
 
 def _none_row(id_, merchant, description=""):
@@ -28,7 +28,7 @@ def _none_row(id_, merchant, description=""):
 
 
 def test_no_api_key_skips_llm_entirely(monkeypatch):
-    settings.anthropic_api_key = None
+    settings.groq_api_key = None
     called = []
     monkeypatch.setattr(ml, "classify_with_llm", lambda items, cats: called.append(1) or [])
 
@@ -40,7 +40,7 @@ def test_no_api_key_skips_llm_entirely(monkeypatch):
 
 
 def test_no_none_rows_skips_llm_call(monkeypatch):
-    settings.anthropic_api_key = "test-key"
+    settings.groq_api_key = "test-key"
     called = []
     monkeypatch.setattr(ml, "classify_with_llm", lambda items, cats: called.append(1) or [])
 
@@ -55,7 +55,7 @@ def test_no_none_rows_skips_llm_call(monkeypatch):
 
 
 def test_only_none_rows_are_sent_and_result_maps_back_by_row(monkeypatch):
-    settings.anthropic_api_key = "test-key"
+    settings.groq_api_key = "test-key"
 
     def fake_classify_with_llm(items, categories):
         assert categories == ["Eating Out", "Groceries"]  # catch-all excluded
@@ -77,7 +77,7 @@ def test_only_none_rows_are_sent_and_result_maps_back_by_row(monkeypatch):
 
 
 def test_dedupes_same_merchant_into_one_line_item(monkeypatch):
-    settings.anthropic_api_key = "test-key"
+    settings.groq_api_key = "test-key"
     calls = []
 
     def fake_classify_with_llm(items, categories):
@@ -103,7 +103,7 @@ def test_dedupes_same_merchant_into_one_line_item(monkeypatch):
 
 
 def test_caps_distinct_merchants_per_pass(monkeypatch):
-    settings.anthropic_api_key = "test-key"
+    settings.groq_api_key = "test-key"
     monkeypatch.setattr(ml, "_LLM_MERCHANT_CAP", 2)
 
     def fake_classify_with_llm(items, categories):
@@ -122,7 +122,7 @@ def test_caps_distinct_merchants_per_pass(monkeypatch):
 
 
 def test_unanswered_merchant_is_absent_from_suggestions(monkeypatch):
-    settings.anthropic_api_key = "test-key"
+    settings.groq_api_key = "test-key"
     monkeypatch.setattr(ml, "classify_with_llm", lambda items, cats: [None])
 
     result = pd.DataFrame([_none_row("t1", "Mystery Merchant")])
@@ -148,7 +148,7 @@ def test_end_to_end_llm_suggestion_never_auto_applies(monkeypatch, fake_db):
     monkeypatch.setattr(ml, "_fetch_rules", lambda user_id: {})
     monkeypatch.setattr(ml, "get_user_bundle", lambda user_id: None)
     monkeypatch.setattr(ml, "classify_with_llm", lambda items, cats: [{"category": "Eating Out", "confidence": 0.8}])
-    settings.anthropic_api_key = "test-key"
+    settings.groq_api_key = "test-key"
 
     updated = ml._classify_user_transactions("u1")
 

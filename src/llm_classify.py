@@ -5,9 +5,11 @@ ML model > this). It never runs on its own — callers (backend/ml.py) decide
 which rows qualify, dedupe by merchant first, and treat every result here as
 an unconfirmed suggestion (never auto-applied).
 
-Deliberately pure / DB-free, matching the rest of src/ (importable by both
-backend/ and tests/ with no network access required for the latter — pass a
-fake `client` and nothing here touches the real API).
+Uses Groq's free-tier inference API (an open model, OpenAI-compatible tool
+calling) rather than a paid provider — no cost to run for a personal/hobby
+deployment. Deliberately pure / DB-free, matching the rest of src/
+(importable by both backend/ and tests/ with no network access required for
+the latter — pass a fake `client` and nothing here touches the real API).
 
 Rename-proofing: `categories` must be the caller's CURRENT category names
 (fetched fresh from the categories table), not any hardcoded list. The tool
@@ -17,32 +19,37 @@ category name can ever be returned.
 """
 from __future__ import annotations
 
-MODEL = "claude-haiku-4-5"
+import json
+
+MODEL = "llama-3.3-70b-versatile"
 
 _TOOL_NAME = "classify_transactions"
 
 
 def _build_tool(categories: list[str]) -> dict:
     return {
-        "name": _TOOL_NAME,
-        "description": "Assign each transaction to exactly one of the given categories.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "results": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "index": {"type": "integer", "description": "0-based index of the transaction in the input list"},
-                            "category": {"type": "string", "enum": categories},
-                            "confidence": {"type": "number", "description": "0.0-1.0 how confident this category is correct"},
+        "type": "function",
+        "function": {
+            "name": _TOOL_NAME,
+            "description": "Assign each transaction to exactly one of the given categories.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "index": {"type": "integer", "description": "0-based index of the transaction in the input list"},
+                                "category": {"type": "string", "enum": categories},
+                                "confidence": {"type": "number", "description": "0.0-1.0 how confident this category is correct"},
+                            },
+                            "required": ["index", "category", "confidence"],
                         },
-                        "required": ["index", "category", "confidence"],
                     },
                 },
+                "required": ["results"],
             },
-            "required": ["results"],
         },
     }
 
@@ -52,7 +59,8 @@ def _build_prompt(items: list[dict]) -> str:
         "Classify each of the following personal-finance transactions into a "
         "spending category. Merchant/description text may be in Chinese, "
         "English, or a mix of both. Use your best judgement of what the "
-        "merchant actually sells or the transaction is for.",
+        "merchant actually sells or the transaction is for. Call the "
+        "classify_transactions tool with one result per transaction below.",
         "",
     ]
     for i, item in enumerate(items):
@@ -83,24 +91,26 @@ def classify_with_llm(
 
     try:
         if client is None:
-            import anthropic
+            import groq
 
-            client = anthropic.Anthropic()
+            client = groq.Groq()
 
         tool = _build_tool(categories)
-        response = client.messages.create(
+        response = client.chat.completions.create(
             model=MODEL,
             max_tokens=1024,
             tools=[tool],
-            tool_choice={"type": "tool", "name": _TOOL_NAME},
+            tool_choice={"type": "function", "function": {"name": _TOOL_NAME}},
             messages=[{"role": "user", "content": _build_prompt(items)}],
         )
 
         results: list[dict | None] = [None] * len(items)
-        for block in response.content:
-            if getattr(block, "type", None) != "tool_use" or block.name != _TOOL_NAME:
+        message = response.choices[0].message
+        for call in message.tool_calls or []:
+            if call.function.name != _TOOL_NAME:
                 continue
-            for entry in block.input.get("results", []):
+            arguments = json.loads(call.function.arguments)
+            for entry in arguments.get("results", []):
                 idx = entry.get("index")
                 category = entry.get("category")
                 if not isinstance(idx, int) or not (0 <= idx < len(items)):

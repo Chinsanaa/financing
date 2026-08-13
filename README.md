@@ -40,14 +40,16 @@ Supabase PostgreSQL + Auth + Storage
 4. **LLM fallback** (`label_source='llm'`, `src/llm_classify.py`): rows still
    unclassified after rules + model (no rule hit, no trained model yet — the
    common case for a new account or merchant vocabulary the hardcoded rules
-   were never written for) get one more, batched Claude Haiku call using the
-   user's *current* category names, so it's immune to category renames.
-   Always a review-queue suggestion, never auto-applied. Confirming one
-   writes back a new per-user `merchant_rules` row ("rule generalization") —
-   the next transaction from that merchant hits the free rule path instead of
-   costing another LLM call. Requires `ANTHROPIC_API_KEY`; skipped entirely
-   if unset. Renaming a category (`PUT /categories/{id}`) also updates any of
-   that user's existing `merchant_rules`/`special_rules` pointing at the old
+   were never written for) get one more, batched call to Groq's free-tier
+   inference API (an open model, no cost) using the user's *current*
+   category names, so it's immune to category renames. Always a
+   review-queue suggestion, never auto-applied. Confirming one writes back a
+   new per-user `merchant_rules` row ("rule generalization") — the next
+   transaction from that merchant hits the free rule path instead of costing
+   another LLM call. Requires `GROQ_API_KEY` (free at
+   [console.groq.com](https://console.groq.com)); skipped entirely if unset.
+   Renaming a category (`PUT /categories/{id}`) also updates any of that
+   user's existing `merchant_rules`/`special_rules` pointing at the old
    name, so pre-existing rules survive the rename too.
 
 Classification runs automatically after every upload (rules-only until a model

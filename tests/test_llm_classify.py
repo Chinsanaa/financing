@@ -1,15 +1,21 @@
 """Tests for the LLM fallback classifier (src/llm_classify.py).
 
-No real network calls — a fake Anthropic client stands in for
-`anthropic.Anthropic()`, shaped like the real SDK's `messages.create()`
-response (a list of content blocks, tool_use blocks carrying `.input`).
+No real network calls — a fake Groq client stands in for `groq.Groq()`,
+shaped like the real SDK's `chat.completions.create()` response (OpenAI-
+compatible: choices[0].message.tool_calls[].function.{name,arguments}).
 """
+import json
 from types import SimpleNamespace
 
 from llm_classify import classify_with_llm
 
 
-class _FakeMessages:
+def _tool_call(tool_input: dict | None):
+    arguments = "null" if tool_input is None else json.dumps(tool_input)
+    return SimpleNamespace(function=SimpleNamespace(name="classify_transactions", arguments=arguments))
+
+
+class _FakeCompletions:
     def __init__(self, tool_input: dict | None = None, raise_error: bool = False):
         self._tool_input = tool_input
         self._raise_error = raise_error
@@ -19,13 +25,22 @@ class _FakeMessages:
         self.calls.append(kwargs)
         if self._raise_error:
             raise RuntimeError("simulated API failure")
-        block = SimpleNamespace(type="tool_use", name="classify_transactions", input=self._tool_input)
-        return SimpleNamespace(content=[block])
+        message = SimpleNamespace(tool_calls=[_tool_call(self._tool_input)])
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
+class _FakeChat:
+    def __init__(self, tool_input: dict | None = None, raise_error: bool = False):
+        self.completions = _FakeCompletions(tool_input, raise_error)
 
 
 class _FakeClient:
     def __init__(self, tool_input: dict | None = None, raise_error: bool = False):
-        self.messages = _FakeMessages(tool_input, raise_error)
+        self.chat = _FakeChat(tool_input, raise_error)
+
+    @property
+    def calls(self):
+        return self.chat.completions.calls
 
 
 CATEGORIES = ["Eating Out", "Groceries", "Shopping"]
@@ -57,16 +72,16 @@ def test_single_batched_call_for_multiple_items():
 
     classify_with_llm(items, CATEGORIES, client=client)
 
-    assert len(client.messages.calls) == 1
+    assert len(client.calls) == 1
 
 
 def test_tool_schema_only_offers_passed_categories():
     client = _FakeClient({"results": []})
     classify_with_llm([{"merchant": "X", "description": ""}], CATEGORIES, client=client)
 
-    call = client.messages.calls[0]
+    call = client.calls[0]
     tool = call["tools"][0]
-    assert tool["input_schema"]["properties"]["results"]["items"]["properties"]["category"]["enum"] == CATEGORIES
+    assert tool["function"]["parameters"]["properties"]["results"]["items"]["properties"]["category"]["enum"] == CATEGORIES
 
 
 def test_category_outside_allowed_set_is_ignored():
@@ -93,7 +108,7 @@ def test_client_error_returns_all_none():
 
 
 def test_malformed_response_returns_all_none():
-    client = _FakeClient(tool_input=None)  # missing "results" entirely
+    client = _FakeClient(tool_input=None)  # arguments == "null" -> .get() on non-dict fails
     items = [{"merchant": "A", "description": ""}]
     result = classify_with_llm(items, CATEGORIES, client=client)
     assert result == [None]
@@ -102,7 +117,7 @@ def test_malformed_response_returns_all_none():
 def test_empty_items_returns_empty_list():
     client = _FakeClient({"results": []})
     assert classify_with_llm([], CATEGORIES, client=client) == []
-    assert client.messages.calls == []
+    assert client.calls == []
 
 
 def test_empty_categories_returns_all_none_without_calling_client():
@@ -110,7 +125,7 @@ def test_empty_categories_returns_all_none_without_calling_client():
     items = [{"merchant": "A", "description": ""}]
     result = classify_with_llm(items, [], client=client)
     assert result == [None]
-    assert client.messages.calls == []
+    assert client.calls == []
 
 
 def test_confidence_is_clamped_to_0_1():

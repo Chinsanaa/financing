@@ -11,9 +11,11 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
     environment: str = "development"
     # Optional: enables the LLM fallback classification tier (src/llm_classify.py).
-    # Unset in dev/test just means that tier is skipped, same as having no
-    # trained model — rows stay in the review queue with no suggestion.
-    anthropic_api_key: str | None = None
+    # Groq's free-tier inference API (open model, no cost) — not a paid
+    # provider. Unset in dev/test just means that tier is skipped, same as
+    # having no trained model — rows stay in the review queue with no
+    # suggestion.
+    groq_api_key: str | None = None
 
     class Config:
         env_file = ".env"

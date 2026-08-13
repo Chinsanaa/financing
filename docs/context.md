@@ -63,15 +63,22 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 51): added an LLM fallback classification tier (Claude Haiku)
-for transactions no rule or trained model can place, plus a fix so renamed
-categories don't silently orphan existing merchant rules. See Session 51 log
-for full detail.
+Current (Session 51, updated same session): added an LLM fallback
+classification tier for transactions no rule or trained model can place,
+plus a fix so renamed categories don't silently orphan existing merchant
+rules. See Session 51 log for full detail. **Provider changed mid-session**:
+originally built against the Anthropic API; user asked for a free option
+instead, so it now calls **Groq's free-tier inference API**
+(`llama-3.3-70b-versatile`, OpenAI-compatible tool calling) via the `groq`
+SDK — `groq_api_key`/`GROQ_API_KEY` everywhere `anthropic_api_key`/
+`ANTHROPIC_API_KEY` is mentioned earlier in the Session 51 log below. Same
+architecture (batched call, tool-use schema constrained to live category
+names, never auto-applied) — only the provider/config names changed.
 
 Next:
-1. Set `ANTHROPIC_API_KEY` in the backend's real environment (Railway) — the
-   feature no-ops cleanly without it, so this is required before it does
-   anything in production.
+1. Set `GROQ_API_KEY` in the backend's real environment (Railway) — free at
+   console.groq.com. The feature no-ops cleanly without it, so this is
+   required before it does anything in production.
 2. Apply the new migration (`20260813160000_add_llm_classification_support.sql`)
    to the live Supabase project.
 3. Manual live-account verification (no real API key was available in this
@@ -292,7 +299,7 @@ an LLM call on every uncalibrated model row would add cost without matching
 the actual problem statement (new users/unseen vocabulary have no model at
 all, which is exactly the `'none'` case).
 
-**Not done / open**: no live end-to-end test against a real Anthropic API key
+**Not done / open**: no live end-to-end test against a real Groq API key
 (none available in this sandbox) — the manual verification checklist from the
 plan (upload → review queue shows an `'llm'` suggestion → accept → second
 transaction from the same merchant resolves via the new rule, no second LLM
