@@ -412,9 +412,12 @@ async def get_savings(request: Request):
         raise internal_error(e, "dashboard/savings")
 
 
+APPROACHING_BUDGET_THRESHOLD = 0.8  # 80% of budget; not yet user-configurable
+
+
 @router.get("/action")
 async def get_action(request: Request):
-    """Action items: over-budget categories, review queue count."""
+    """Action items: over-budget / approaching-budget categories, review queue count."""
     user_id = request.state.user_id
 
     try:
@@ -444,6 +447,14 @@ async def get_action(request: Request):
                         "current": spend,
                         "limit": budget,
                         "overage": spend - budget,
+                    })
+                elif budget > 0 and spend >= APPROACHING_BUDGET_THRESHOLD * budget:
+                    actions.append({
+                        "type": "approaching_budget",
+                        "category": cat_name,
+                        "current": spend,
+                        "limit": budget,
+                        "pct": round(100 * spend / budget, 1),
                     })
 
         # Review queue count

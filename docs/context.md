@@ -2434,3 +2434,84 @@ alerts): `budget_alerts` table + `profiles` columns, extend `_spend_by_category`
 in `backend/routes/dashboard.py` for an "approaching" threshold state, and a
 notification bell in `DashboardClient.tsx` — no email yet, that's its own step
 right after.
+
+### Session 53 (2026-08-13) — Budget alerts step 1: in-app "approaching budget" + notification bell (branch `claude/feature-planning-roadmap-g74j9j`)
+
+Continued the approved feature roadmap (docs/context.md Session 52, plan file
+`/root/.claude/plans/what-more-features-should-binary-snowglobe.md`) with the
+first half of feature 2 (budget alerts). Re-grounded the original plan sketch
+against the actual current code first (via a fresh Explore pass, not assumed)
+and made one deliberate simplification: **no new `budget_alerts` table or
+`profiles` columns yet.** A persistence table only earns its place once
+something needs to avoid re-sending the same email twice (the email step,
+still open) — building it now to back a stateless, re-fetched-on-load in-app
+list would be premature. Flagged, not silent; recorded in the plan file.
+
+- **`backend/routes/dashboard.py`**: `get_action` gains a third action type,
+  `"approaching_budget"` — categories where `budget > 0` and spend is between
+  a hardcoded 80% threshold (`APPROACHING_BUDGET_THRESHOLD`) and 100% of
+  budget (strictly under `over_budget`'s `spend > budget`, so a category is
+  never flagged as both at once). Per-user-configurable thresholds are
+  deferred to the email step, when a Settings UI for alert preferences is
+  being built anyway.
+- **`frontend/src/components/tabs/ActionTab.tsx`**: third card branch for
+  `approaching_budget` (amber/`--chart-5` toned, matching the existing
+  "near budget" color already used in `BudgetTab.tsx`'s progress bars —
+  reused the same design-system variable rather than inventing a new color).
+- **`frontend/src/components/ui/NotificationBell.tsx`** (new): reads the same
+  `/dashboard/action` response (via `useApi`'s shared cache, so it's not a
+  second network call beyond what `ActionTab` already makes when both are
+  mounted) and shows a badge count of `over_budget` + `approaching_budget`
+  items. Wired into `DashboardClient.tsx`'s header between the username and
+  `ThemeToggle`, same `h-11 w-11 rounded-pill border border-edge/10` button
+  pattern as the adjacent Settings/Logout buttons; clicking navigates to the
+  Action-plan sub-tab via the existing `goToTab` callback.
+- **Test infra fixes** (`backend/tests/fake_supabase.py`): the fake was
+  missing two operations `_spend_by_category` already used in production —
+  `.not_.is_(col, "null")` (a *property* returning a filter object, not a
+  method — real postgrest-py works the same way, per the docstring already in
+  `dashboard.py`) and `.lt(col, val)`. Both were silent gaps until this
+  session's new test actually exercised `_spend_by_category` through the
+  fake for the first time. Added `_NotFilter` (mirrors the real client's
+  `.not_` property) and a `"lt"`/`"not_is"` branch in `_matches`.
+
+**Verified**:
+- `backend/tests/test_dashboard_action.py` (4 new tests: over-budget flagged,
+  approaching-budget flagged at exactly 80%, under-threshold not flagged, a
+  category is never both `over_budget` and `approaching_budget` at once) —
+  ran against a throwaway venv with `backend/requirements-dev.txt` installed.
+  Full existing `backend/tests/` suite: 56/56 pass, no regressions (the two
+  fake-client fixes didn't change behavior for any existing test, only
+  unblocked the new one).
+- `frontend`: `npx tsc --noEmit` clean; `npm run build` compiles, typechecks,
+  and generates all routes with the bell and the new action card included.
+  **Not manually verified in a live browser** — same sandbox limitation as
+  Session 52 (no Supabase project credentials available to sign in as a real
+  user).
+- Cleaned up: removed the throwaway Python venv and `frontend/.next` build
+  output.
+
+**Decided**: simplified feature 2's first step to skip persistence entirely
+(see above) — this is a deviation from the plan file's original sketch,
+recorded there directly rather than only here.
+
+**Open** (carried into the next session per the approved plan's build order):
+- Feature 2's second half: `budget_alerts` table, `profiles.alert_email_enabled`
+  / `alert_thresholds` columns, and Resend email wiring — not yet built. This
+  is where the per-user-configurable threshold and the persistence table both
+  actually get added, once there's a Settings UI for alert preferences to pair
+  them with.
+- Feature 3 (insights/anomalies) and Feature 4 (search/filter/bulk-recategorize,
+  then transaction splits last) — not yet built.
+- No cron/scheduler exists anywhere in the backend — still an open
+  infra decision for the email step.
+- The `recurring_merchants` migration (Session 52) still has not been applied
+  to the live Supabase project.
+
+**Next suggested step**: continue the approved plan's build order with feature
+2's email half (`budget_alerts` schema, `profiles` alert-preference columns,
+Resend HTTP API wiring behind a `BackgroundTasks` call after
+upload/classify/label, and a Settings toggle) — or, if the user would rather
+see feature 3 (insights/anomalies) or feature 4 (transaction management) next,
+that's a live re-prioritization question worth asking rather than assuming
+the original order still holds.

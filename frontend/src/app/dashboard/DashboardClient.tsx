@@ -16,6 +16,7 @@ import { createClient } from '@/utils/supabase';
 import { TabBar, TabPanel, TabItem } from '@/components/ui/Tabs';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import NotificationBell from '@/components/ui/NotificationBell';
 import DashboardLoading from './loading';
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
 
@@ -147,6 +148,7 @@ export default function DashboardClient() {
             <p className="mr-2 hidden text-sm text-muted sm:block">
               {user?.user_metadata?.username || user?.email}
             </p>
+            <NotificationBell onClick={() => goToTab('action')} />
             <ThemeToggle />
             <Link
               href="/settings"

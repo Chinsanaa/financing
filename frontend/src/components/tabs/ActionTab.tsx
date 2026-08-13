@@ -14,6 +14,7 @@ interface Action {
   current?: number;
   limit?: number;
   overage?: number;
+  pct?: number;
   count?: number;
   message?: string;
 }
@@ -74,6 +75,28 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
                         {formatCurrencyWhole(action.overage || 0)}
                       </p>
                       <p className="text-xs text-danger">over</p>
+                    </div>
+                  </div>
+                </Card>
+              );
+            } else if (action.type === 'approaching_budget') {
+              return (
+                <Card key={idx} className="border-[color:var(--chart-5)]/25 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--chart-5)]" />
+                      <div>
+                        <p className="text-sm font-semibold">Approaching budget: {action.category}</p>
+                        <p className="mt-0.5 text-xs text-muted">
+                          Spent {formatCurrencyWhole(action.current || 0)} of {formatCurrencyWhole(action.limit || 0)} budget
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-display text-lg font-bold text-[color:var(--chart-5)] tabular-nums">
+                        {action.pct}%
+                      </p>
+                      <p className="text-xs text-[color:var(--chart-5)]">used</p>
                     </div>
                   </div>
                 </Card>

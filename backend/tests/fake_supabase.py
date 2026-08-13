@@ -22,6 +22,17 @@ class FakeResponse:
         self.count = count
 
 
+class _NotFilter:
+    """Returned by `FakeQueryBuilder.not_` — negates the next filter call."""
+
+    def __init__(self, qb: "FakeQueryBuilder"):
+        self._qb = qb
+
+    def is_(self, col: str, val: Any):
+        self._qb._filters.append(("not_is", col, val))
+        return self._qb
+
+
 class FakeQueryBuilder:
     def __init__(self, table: "FakeTable"):
         self._table = table
@@ -56,6 +67,18 @@ class FakeQueryBuilder:
     def lte(self, col: str, val: Any):
         self._filters.append(("lte", col, val))
         return self
+
+    def lt(self, col: str, val: Any):
+        self._filters.append(("lt", col, val))
+        return self
+
+    @property
+    def not_(self) -> "_NotFilter":
+        """postgrest-py exposes `.not_` as a PROPERTY (not a method) whose
+        methods negate the next filter, e.g. `.not_.is_("category_id", "null")`.
+        See the module docstring in backend/routes/dashboard.py for why this
+        matters — calling `.not_(...)` raises TypeError on the real client."""
+        return _NotFilter(self)
 
     def or_(self, filter_str: str):
         """Supports the one shape this codebase actually uses:
@@ -107,9 +130,13 @@ class FakeQueryBuilder:
                 return False
             if kind == "is" and val == "null" and row.get(col) is not None:
                 return False
+            if kind == "not_is" and val == "null" and row.get(col) is None:
+                return False
             if kind == "gte" and not (row.get(col) is not None and row.get(col) >= val):
                 return False
             if kind == "lte" and not (row.get(col) is not None and row.get(col) <= val):
+                return False
+            if kind == "lt" and not (row.get(col) is not None and row.get(col) < val):
                 return False
         if self._or_filter:
             conditions = self._or_filter.split(",")

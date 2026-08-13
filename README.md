@@ -106,6 +106,13 @@ re-detection runs. Detection logic lives in `src/recurring.py` (pure pandas,
 no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
 detection, and upserts into the `recurring_merchants` cache table.
 
+**Budget alerts**: the header's notification bell shows a live count of
+over-budget and approaching-budget (≥80% of a category's monthly budget)
+categories, computed on every load by `GET /dashboard/action` — no
+persistence yet, so it's an in-app-only signal for now (checked when you use
+the app, not a push notification). Clicking it jumps to **Planning → Action
+plan**, which lists both kinds of budget warnings as cards.
+
 ## Quick start (local)
 
 ```bash
