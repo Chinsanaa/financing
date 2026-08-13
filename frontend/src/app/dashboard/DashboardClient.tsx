@@ -28,6 +28,7 @@ const SavingsTab = dynamic(() => import('@/components/tabs/SavingsTab'), { loadi
 const ActionTab = dynamic(() => import('@/components/tabs/ActionTab'), { loading: tabLoading, ssr: false });
 const ReportsTab = dynamic(() => import('@/components/tabs/ReportsTab'), { loading: tabLoading, ssr: false });
 const TransactionsModelTab = dynamic(() => import('@/components/tabs/TransactionsModelTab'), { loading: tabLoading, ssr: false });
+const SubscriptionsTab = dynamic(() => import('@/components/tabs/SubscriptionsTab'), { loading: tabLoading, ssr: false });
 
 /** Four sections with sub-tabs. Transactions & Model merged into one workflow. */
 const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
@@ -45,6 +46,7 @@ const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
     subs: [
       { id: 'budget', label: 'Budget' },
       { id: 'savings', label: 'Savings' },
+      { id: 'subscriptions', label: 'Subscriptions' },
       { id: 'action', label: 'Action plan' },
     ],
   },
@@ -57,6 +59,7 @@ const TAB_SECTION: Record<string, string> = {
   'transactions-model': 'transactions-model',
   budget: 'planning',
   savings: 'planning',
+  subscriptions: 'planning',
   action: 'planning',
   reports: 'reports',
 };
@@ -191,6 +194,7 @@ export default function DashboardClient() {
           )}
           {activeTab === 'budget' && <BudgetTab />}
           {activeTab === 'savings' && <SavingsTab />}
+          {activeTab === 'subscriptions' && <SubscriptionsTab />}
           {activeTab === 'action' && <ActionTab onNavigate={goToTab} />}
           {activeTab === 'reports' && <ReportsTab />}
         </TabPanel>

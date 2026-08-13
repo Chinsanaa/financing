@@ -68,7 +68,7 @@ Two very different questions:
 The ten original tabs are grouped into five compact sections with sub-tabs:
 **Overview** (a monthly-spending line chart + category split), **Transactions**
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
-(Budget / Savings / Action plan), and **Reports**. A dismissible onboarding
+(Budget / Savings / Subscriptions / Action plan), and **Reports**. A dismissible onboarding
 checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
 separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
@@ -97,6 +97,14 @@ same color follows that category everywhere: the Overview pie chart, badges in
 Budget/Review/Label, and Reports. Categories without a chosen color get a stable
 automatic color. The dashboard layout is fluid — it fills large desktop screens
 (capped for ultrawides) and adapts down to tablet and phone.
+
+**Subscriptions**: the **Planning → Subscriptions** tab auto-detects recurring
+merchants (≥3 charges in the trailing 6 months at a monthly or weekly cadence,
+with a stable amount) and shows an estimated monthly total. Each detected
+merchant can be confirmed or dismissed; dismissals persist across future
+re-detection runs. Detection logic lives in `src/recurring.py` (pure pandas,
+no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
+detection, and upserts into the `recurring_merchants` cache table.
 
 ## Quick start (local)
 
@@ -136,7 +144,7 @@ verified with `npx tsc --noEmit && npm run build`.
 financing/
 ├── frontend/            # Next.js app (see frontend/README.md)
 ├── backend/             # FastAPI app (see backend/README.md)
-│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings
+│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings, subscriptions
 │   ├── auth_utils.py    # JWT verification against Supabase's JWKS
 │   ├── tests/           # JWT verification + cross-user isolation tests
 │   └── ml.py            # per-user model loading + bulk classification
@@ -149,7 +157,8 @@ financing/
 │   ├── calibration.py   # top-label Platt scaling
 │   ├── eval_grouped.py  # GroupKFold evaluation + threshold derivation
 │   ├── merchant_categories.py  # global rule patterns
-│   └── llm_classify.py  # LLM fallback classifier (batched, DB-free)
+│   ├── llm_classify.py  # LLM fallback classifier (batched, DB-free)
+│   └── recurring.py     # recurring/subscription merchant detection (pure pandas, DB-free)
 ├── supabase/            # migrations (schema, RLS, storage buckets, fixes)
 ├── tests/               # pytest suite for src/
 ├── scripts/test_local.sh

@@ -2341,3 +2341,96 @@ judgment call to combine the two topics, just a branch constraint.
 the `config.toml` Auth-policy changes to the live Supabase project now (both need
 explicit approval per this session's operating rules for shared/production systems),
 then smoke-test signup/login/password-change against the real deployed app.
+
+### Session 52 (2026-08-13) — New feature roadmap: recurring/subscription detection (branch `claude/feature-planning-roadmap-g74j9j`)
+
+User asked what features a real personal-finance app user would expect that are
+still missing. Surveyed the repo (pipeline, dashboard tabs, backend routes, schema)
+and proposed a feature list; user picked, in priority order: (1) recurring/
+subscription detection, (2) budget alerts & notifications, (3) spending insights/
+anomalies, (4) better transaction management (search/filter/bulk/split), plus
+multi-currency, net worth, and tags scoped architecturally for later. Full plan
+written to `/root/.claude/plans/what-more-features-should-binary-snowglobe.md`
+(approved). Ops items already open above (Groq prod key, pending LLM-classification
+migration, review-queue LLM badge) were explicitly kept out of scope for this work.
+
+This session built feature 1 (recurring/subscription detection) end to end:
+
+- **Migration** `supabase/migrations/20260813200000_add_recurring_merchants.sql`:
+  new `recurring_merchants` table (user_id, merchant, category_id, cadence,
+  typical_amount, last_seen, is_confirmed, is_dismissed), same 4-policy RLS
+  pattern as every other per-user table. Derived cache, not a new source of
+  truth — `transactions` stays authoritative; re-detection re-upserts
+  cadence/amount/last_seen but never touches confirm/dismiss flags, so a
+  dismissal survives future re-detection runs. **Not yet applied to the live
+  Supabase project** (same as other pending migrations above — needs explicit
+  approval before a direct apply).
+- **`src/recurring.py`** (new): pure pandas function `detect_recurring_merchants(df,
+  now=None)`. A merchant qualifies if it has ≥3 transactions in the trailing 6
+  months, a median day-gap within ±5 days of monthly (30d) or weekly (7d), and
+  amount variance (median absolute deviation) within 15% of the median amount.
+  No DB access in this module — matches the existing split where `src/` holds
+  transformation logic and `backend/routes/` holds Supabase queries.
+- **`backend/routes/subscriptions.py`** (new): `GET /subscriptions/` (runs
+  detection, upserts the cache, returns the list + an estimated `monthly_total`
+  with weekly cadences normalized ×4.33), `POST /subscriptions/{id}/confirm`,
+  `POST /subscriptions/{id}/dismiss`. Registered in `main.py`. The list endpoint
+  filters `is_dismissed` in Python rather than `.eq("is_dismissed", False)` in
+  the query — a freshly-upserted row relies on the column's DB-side default,
+  which only exists once actually committed; filtering client-side avoids that
+  round-trip dependency without changing behavior.
+- **`frontend/src/components/tabs/SubscriptionsTab.tsx`** (new): card grid of
+  detected merchants (cadence, category, amount, confirm/dismiss actions) plus
+  an estimated monthly total, wired in as a new "Subscriptions" sub-tab under
+  Planning in `DashboardClient.tsx`. Added typed `api.subscriptions.{list,
+  confirm,dismiss}` helpers to `frontend/src/utils/api.ts`.
+- **Test infra fix**: `backend/tests/fake_supabase.py`'s `FakeTable.upsert` only
+  supported a single-dict payload matched on one conflict column; the real
+  route (like the pre-existing `dashboard.py` budget-category upsert) does a
+  bulk upsert on a composite conflict key. Extended it to accept a list of
+  dicts and match on *all* listed conflict columns — this was an untested gap
+  in the shared fake, not new route-specific behavior.
+
+**Verified**:
+- `tests/test_recurring.py` (7 new tests, pure pandas — monthly/weekly detection,
+  irregular/too-few-occurrences/unstable-amount/outside-lookback-window all
+  correctly excluded, empty-input shape) — ran against a throwaway venv
+  (`pandas` + `pytest` only, since no project venv exists in this sandbox):
+  7/7 pass.
+- `backend/tests/test_subscriptions.py` (4 new tests: detects + returns a
+  recurring merchant, isolates by user_id, confirm only affects the owner's row
+  (404 for another user), dismiss excludes it from the next list call) plus the
+  full existing `backend/tests/` suite — ran against a throwaway venv with
+  `backend/requirements-dev.txt` installed: 52/52 pass, no regressions.
+- `frontend`: `npx tsc --noEmit` clean; `npm run build` compiles, typechecks,
+  and generates all routes with the new tab included. **Not manually verified
+  in a live browser** — no Supabase project credentials are available in this
+  sandbox to sign in as a real user, so the tab has not been visually confirmed
+  end-to-end. Flagging this explicitly rather than claiming full UI verification.
+- Cleaned up: removed the throwaway Python venvs and the `frontend/.next` build
+  output; nothing left in the working tree beyond the intended source changes.
+
+**Decided**: recurring-merchant confirm/dismiss requires explicit user action
+before anything else (e.g. a future budget-alert feature) trusts a detected
+subscription — nothing currently auto-applies detected subscriptions to budget
+math, per the plan's stated default.
+
+**Open** (carried into the next session per the approved plan's build order):
+- Feature 2 (budget alerts & notifications): schema, "approaching budget" state
+  on the action endpoint, and an in-app notification bell — not yet built.
+- Feature 2b (Resend email wiring), Feature 3 (insights/anomalies), Feature 4
+  (search/filter/bulk-recategorize, then transaction splits last) — not yet
+  built; see the plan file for full detail per feature.
+- No cron/scheduler exists anywhere in the backend — a real prerequisite for
+  budget alerts and subscription refresh to fire without user activity, flagged
+  as a separate infra decision in the plan rather than silently worked around.
+- The new `recurring_merchants` migration has not been applied to the live
+  Supabase project (needs the same explicit approval as other pending
+  migrations noted above).
+
+**Next suggested step**: apply the new migration to the live project (with
+approval), then continue the approved plan's build order with feature 2 (budget
+alerts): `budget_alerts` table + `profiles` columns, extend `_spend_by_category`
+in `backend/routes/dashboard.py` for an "approaching" threshold state, and a
+notification bell in `DashboardClient.tsx` — no email yet, that's its own step
+right after.

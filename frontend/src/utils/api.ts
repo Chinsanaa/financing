@@ -97,4 +97,10 @@ export const api = {
   export: {
     xlsx: () => apiClient.get('/dashboard/export', { responseType: 'blob' }),
   },
+
+  subscriptions: {
+    list: () => apiClient.get('/subscriptions/'),
+    confirm: (id: string) => apiClient.post(`/subscriptions/${id}/confirm`, {}),
+    dismiss: (id: string) => apiClient.post(`/subscriptions/${id}/dismiss`, {}),
+  },
 };

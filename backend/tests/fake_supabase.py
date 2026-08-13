@@ -164,18 +164,26 @@ class FakeTable:
             return FakeResponse(data=matched)
 
         if qb._op == "upsert":
-            key_col = qb._on_conflict
-            existing = next(
-                (r for r in self.rows if key_col and r.get(key_col) == qb._payload.get(key_col)),
-                None,
-            )
-            if existing is not None:
-                existing.update(qb._payload)
-                return FakeResponse(data=[existing])
-            row = dict(qb._payload)
-            row.setdefault("id", f"{self.name}-{next(self._id_counter)}")
-            self.rows.append(row)
-            return FakeResponse(data=[row])
+            key_cols = [c.strip() for c in qb._on_conflict.split(",")] if qb._on_conflict else []
+            payload = qb._payload if isinstance(qb._payload, list) else [qb._payload]
+            upserted = []
+            for item in payload:
+                existing = next(
+                    (
+                        r for r in self.rows
+                        if key_cols and all(r.get(c) == item.get(c) for c in key_cols)
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    existing.update(item)
+                    upserted.append(existing)
+                else:
+                    row = dict(item)
+                    row.setdefault("id", f"{self.name}-{next(self._id_counter)}")
+                    self.rows.append(row)
+                    upserted.append(row)
+            return FakeResponse(data=upserted)
 
         if qb._op == "delete":
             matched = [r for r in self.rows if qb._matches(r)]

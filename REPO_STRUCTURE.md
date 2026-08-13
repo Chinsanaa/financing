@@ -23,7 +23,7 @@ financing/
 │   ├── ml.py                  # per-user model loading (Storage) + bulk classification
 │   ├── errors.py              # log-and-mask error helper
 │   ├── routes/                # auth, categories, uploads, training, classify,
-│   │                          #   dashboard, settings
+│   │                          #   dashboard, settings, subscriptions
 │   ├── requirements.txt       # pinned backend deps (installed by Dockerfile)
 │   ├── railway.json, Procfile, Dockerfile
 │   └── .env.example
@@ -42,6 +42,7 @@ financing/
 │   ├── retrain.py             # training entry point (used by backend/routes/training.py)
 │   ├── cv_utils.py            # merchant-leakage guard for CV splits
 │   ├── validate.py            # data sanity checks
+│   ├── recurring.py           # recurring/subscription merchant detection (pure pandas)
 │   └── paths.py               # CLI-mode artifact paths
 │
 ├── supabase/
