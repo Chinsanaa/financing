@@ -119,7 +119,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://financing-one.vercel.app"],
+    allow_origins=["http://localhost:3000"],
+    # A single hardcoded production domain (the old "financing-one.vercel.app"
+    # value) breaks the moment Vercel serves the app from any other domain —
+    # this project alone has financingmn.vercel.app, financing-chinsanaa.vercel.app,
+    # financing-git-main-chinsanaa.vercel.app, plus a unique URL per deploy and
+    # per branch preview. Starlette's CORSMiddleware returns a hard 400 on
+    # preflight for any origin not covered here (not just missing headers),
+    # so this regex needs to cover every Vercel URL this project can ever
+    # serve from, not just whichever one was noted down once.
+    allow_origin_regex=r"^https://financing[a-z0-9-]*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
