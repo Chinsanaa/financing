@@ -44,6 +44,7 @@ A pipeline that:
 | Peer-to-peer transfers (转账/红包) | Left as expense (not auto-excluded) | Ambiguous — could be a real gift/spend; user can extend `_TRANSFER_KEYWORDS` if they want these excluded too |
 | Semantic classifier | Model2Vec static embeddings + LogisticRegression, LSA fallback when weights unavailable | Numpy-only (no torch), captures merchant meaning TF-IDF can't (Session 31) |
 | Auto-apply threshold | Derived from grouped-CV data (target precision 90%, min support 30); no threshold saved if unreachable | Never invent a trust boundary — honest "stays in review" beats a guessed number (Session 31) |
+| Category taxonomy size | Expanded 7 → 13 ML categories (Housing, Personal Care & Health, Entertainment, Travel, Education, Investments added) | User wanted fuller spending coverage; trimmed from a much longer list (Insurance, Debt payments, separate Personal Care/Health, etc.) to keep per-category sample counts viable for the classifier (Session 52) |
 
 ## Key Terms
 
@@ -63,7 +64,38 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 51, updated same session): added an LLM fallback
+Current (Session 52): expanded the ML category taxonomy from 7 to 13
+categories (added Housing, Personal Care & Health, Entertainment, Travel,
+Education, Investments). See Session 52 log for full detail — decision
+history (user's first proposal, several rounds of trimming/merging via
+AskUserQuestion), the merchant-rule remapping, and the live migration.
+
+Next:
+1. **Retrain the live model.** The classifier itself (whatever TF-IDF/
+   semantic model is currently trained) still only knows the old 7 output
+   classes — it was not retrained this session (no way to trigger
+   `POST /training/retrain` outside an authenticated browser session from
+   this environment). Until the user retrains via the Model → Training tab,
+   new-category transactions will only get categorized by the merchant-rule
+   layer, not the ML layer, and needs_review may undercount. **Do this
+   first**, before evaluating whether the new categories are useful.
+2. Manually review how the two Watsons/屈臣氏-adjacent rule moves and the
+   NYU Shanghai special-case change (Tuition and Fees → Education, was
+   Utilities & Services) land on next classify — no test transactions existed
+   to verify against in this sandbox (only SQL-level verification of the
+   categories/merchant_rules tables, no live classify_all() run against real
+   transaction text).
+3. Watch whether "Investments" gets real usage — it shipped with only
+   generic keyword-based rules (余额宝/基金/理财/股票/brokerage), no confirmed
+   real merchant patterns, since this session had no visibility into what the
+   user's Alipay/WeChat investment transactions actually look like. Expect it
+   to need refinement once real data shows up in the review queue.
+4. The new categories' merchant rules are a reasonable starting guess, not
+   exhaustively researched — expect false positives/negatives until enough
+   labeled data accumulates per category (e.g. bare "streaming"/"membership"-
+   type keywords are inherently fuzzier than brand-name patterns).
+
+Previous (Session 51, updated same session): added an LLM fallback
 classification tier for transactions no rule or trained model can place,
 plus a fix so renamed categories don't silently orphan existing merchant
 rules. See Session 51 log for full detail. **Provider changed mid-session**:
@@ -157,7 +189,7 @@ Next:
    limiting (Session 49's lockout is client-side only — see that session's
    log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 51, 2026-08-13)
+## Current State (Session 52, 2026-08-14)
 
 | Item | Status |
 |---|---|
@@ -195,8 +227,134 @@ Next:
 | Password rules + consent | **NEW** (Session 48): shared `PasswordChecklist` component (9+ chars/A-Z/a-z/0-9/special) gates both signup and Settings change-password; signup requires a checked "I agree to Terms & Conditions and Privacy Policy" box (links to Session 47's pages) |
 | Forgot password | **NEW** (Session 48): `AuthClient` gained a third `'forgot'` mode calling `resetPasswordForEmail`; `/auth/verify` now branches on `type=recovery` to show a "set new password" form (`supabase.auth.updateUser`) instead of auto-redirecting to the dashboard |
 | Auth flow polish | **NEW** (Session 49): shared `PasswordInput` (show/hide eye toggle) used on all 6 password fields across signup/signin/Settings/recovery; live confirm-password mismatch text added to the two forms that lacked it (Settings change-password, recovery set-password — signup already had it); email/username/identifier trimmed before use; client-side soft lockout on sign-in after 5 failed attempts (escalating 30s→300s cooldown, resets on success). Two Supabase security-advisor findings fixed: `handle_new_user()`/`initialize_default_categories()`/`reassign_deleted_category_transactions()` (trigger-only functions) had EXECUTE revoked from `anon`/`authenticated` (harmless as direct RPC calls today, but needlessly public); "Leaked Password Protection" is disabled project-wide — flagged for the user, not fixable via any available tool (Dashboard-only setting) |
+| Category taxonomy | **CHANGED** (Session 52): 7 → 13 categories. `src/categories.py::ML_CATEGORIES` now: Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Housing, Personal Care & Health, Entertainment, Travel, Education, Investments, Other. `EXTRA_LABEL_CATEGORIES` removed (Entertainment/Travel/Health & Wellness are now real ML categories instead of deferred labels normalized to Other); `CATEGORY_NORMALIZE` now maps legacy `'Health & Wellness'` → `'Personal Care & Health'`. `initialize_default_categories()` trigger creates all 13 for new signups; existing users backfilled via migration `20260814010000_expand_category_taxonomy.sql`. **Classifier NOT yet retrained on the new classes** — see Next Suggested Step |
 
 ## Session Log
+
+### Session 52 (2026-08-14) — Category taxonomy expanded 7 → 13
+
+**Scope**: user wanted a fuller/more standard personal-budget category list —
+supplied several published category-list references (bank/finance blog
+"recommended budgeting categories" style lists, 15-40+ items each spanning
+Housing/Insurance/Debt/Retirement/etc.) and asked me to research and decide
+on a final set myself, given "minimal categories but full coverage of
+spendings" as the guiding constraint.
+
+**Process**: pulled real category-distribution data from the live Supabase
+project (`pxxqqffwummhkohnrvtz`) first rather than working from the pasted
+reference lists alone — 683 categorized transactions across the 7 existing
+categories, heavily skewed (Eating Out 47%, Groceries 31%, everything else
+single digits), plus discovered a live user had already manually created an
+8th category ("Entertainment") that was silently getting folded into "Other"
+at classify time — `EXTRA_LABEL_CATEGORIES`/`CATEGORY_NORMALIZE` in
+`src/categories.py` treated it as a deferred label, not a real ML class, a
+pre-existing bug surfaced (not caused) this session. Pushed back on adopting
+the user's full pasted list wholesale (would have meant 15-20+ categories
+against only 683 labeled transactions — several existing categories already
+sit at 7-9 samples, and `MIN_SAMPLES_PER_CLASS=2` means the classifier would
+technically train but most classes would never clear the 90%-precision
+auto-apply threshold, defeating the point of the ML layer). Went through
+several rounds of `AskUserQuestion` narrowing: trimmed-set vs full-list vs
+manual-label-only scoping, then merged Personal Care into Health (per user's
+explicit ask, "minimal categories but full coverage"), then a final lock-in
+confirmation.
+
+**Final 13**: Groceries, Transportation, Utilities & Services, Eating Out,
+Shopping, Transfers & Gifts (unchanged) + Housing, Personal Care & Health,
+Entertainment, Travel, Education, Investments (new) + Other. Explicitly
+**not** added: Insurance, Debt payments/loans (rare-to-absent in Alipay/
+WeChat exports specifically — those get paid via bank autopay, not through
+the apps this pipeline ingests); Hobbies (merged into Entertainment); Gifts &
+donations (merged into existing Transfers & Gifts).
+
+**Code changes**:
+- `src/categories.py`: `ML_CATEGORIES` now 13 entries. Removed
+  `EXTRA_LABEL_CATEGORIES` (Entertainment/Travel/Health & Wellness are now
+  real ML categories, not deferred labels) — `LABEL_CATEGORIES` is now just
+  `ML_CATEGORIES`. `CATEGORY_NORMALIZE` keeps `'Health & Wellness' →
+  'Personal Care & Health'` for old labeled data, drops the Travel/
+  Entertainment → Other mappings (no longer needed, they're identity now).
+  `ACTIVE_CATEGORIES` simplified from `ML_CATEGORIES + ['Saving', 'Investing']`
+  to just `ML_CATEGORIES` — that extension was dead code (grepped, zero
+  references anywhere else in the codebase) superseded by the real
+  `'Investments'` category.
+- `src/merchant_categories.py`: moved patterns whose real category changed —
+  airline/airport/flight-ticket patterns (中国东方航空 etc., flight/airport/
+  airline keywords) Transportation → Travel; video-streaming platforms
+  (爱奇艺/腾讯视频/优酷/芒果TV/汽水音乐/哔哩哔哩/B站/网易) Utilities & Services
+  → Entertainment; Wanda cinema (万达影城/万达) Shopping → Entertainment;
+  drugstores (屈臣氏/万宁 Watsons) Shopping → Personal Care & Health. Added
+  new pattern blocks for all 6 new categories (Travel: Ctrip/Qunar/Fliggy/
+  Booking.com/Airbnb/hotel chains + keywords; Housing: rent/mortgage/property
+  management keywords; Personal Care & Health: pharmacy/hospital/clinic/gym/
+  salon keywords; Entertainment: Netflix/Spotify/Steam/PlayStation/Xbox +
+  cinema/concert keywords; Education: tuition/university/textbook keywords;
+  Investments: 余额宝/基金/理财/股票/brokerage keywords). NYU Shanghai's
+  "Tuition and Fees"/"NYUCard Print Fee" special-case
+  (`special_category()`) moved from Utilities & Services to Education —
+  better fit now that Education exists. `DESCRIPTION_KEYWORD_RULES` updated
+  to match (moved flight/airport/ticket disambiguation keywords out of
+  Transportation into a new Travel entry, added entries for the other 5 new
+  categories). Four short bare patterns (`HOA`, `gym`, `spa`, `KTV`) were
+  caught and removed by the existing
+  `test_no_dangerously_short_unallowlisted_patterns` regression test — too
+  generic/collision-prone for a never-reviewed rule (e.g. "spa" inside
+  "space"); relies on the longer/Chinese alternatives instead. Regenerated
+  `data/templates/merchant_rules_starter.csv` (690 rules, up from 554) via
+  `python3 src/merchant_categories.py`.
+- New migration `supabase/migrations/20260814010000_expand_category_taxonomy.sql`,
+  applied live to project `pxxqqffwummhkohnrvtz`: (1) `initialize_default_categories()`
+  now creates all 13 categories for new signups with sort_order 1-13 and a
+  color per category (see below); (2) backfills the 6 new categories onto
+  every existing user via `ON CONFLICT (user_id, name) DO NOTHING` (existing
+  7 untouched; the live user's manually-created "Entertainment" — already
+  'pink' — was left alone rather than duplicated); (3) syncs the global
+  `merchant_rules` seed (554 rows from the original `20260703000001`
+  migration, never auto-synced since) with the code changes above: 25
+  `UPDATE`s remapping patterns to their new category, 84 `INSERT`s for the
+  new category patterns (`ON CONFLICT DO NOTHING`) — deliberately excludes
+  `LOCAL_MERCHANT_RULES` (personal contact names like "Tara"/"Steve"), which
+  the original seed migration never synced to the DB either, since global
+  rules fire for every account and personal names aren't something that
+  should auto-categorize other users' transactions; (4) re-sequences
+  `sort_order` to the canonical 1-13 order for every user (the backfill step
+  appends new rows at whatever position a user's existing rows already used,
+  which left the live user's manually-created "Entertainment" at sort_order
+  0 instead of 9). **Color assignment**: the 12-key design-system palette
+  (`categories_color_allowed` CHECK) has one fewer slot than 13 categories,
+  so `Investments` intentionally gets `color = NULL` (falls back to the
+  frontend's deterministic hash, per the existing Session 44 "auto" design) —
+  every other category got a distinct key matching what the live account
+  already had for its original 8.
+
+**Verified**: `pytest tests/ backend/tests/` → 197 passing (99 src + 98
+backend, no regressions; also fixed this session's incidental sandbox
+environment issue — `numpy>=2` installed by an unpinned `pip install -r
+backend/requirements.txt` broke `scipy`/sklearn imports, pinned back to
+`numpy<2` to match `pandas==2.1.3`'s constraint, not a code change).
+Re-queried the live `categories` and `merchant_rules` tables after applying
+the migration to confirm the expected end state (13 categories with correct
+colors/sort_order; spot-checked several remapped merchant_rules rows).
+
+**Not done / open**:
+1. **The trained classifier was not retrained** — it still only outputs the
+   old 7 classes. No way to trigger `POST /training/retrain` from this
+   sandbox (needs an authenticated browser session against the live
+   account). Until the user retrains via Model → Training, the new
+   categories are reachable only through the merchant-rule layer, not ML
+   predictions.
+2. No live `classify_all()` run against real transaction text to confirm the
+   remapped/new rules behave as expected on actual merchant strings — only
+   verified at the rule-table level (SQL) and via the existing pytest
+   regression suite (synthetic/decoy merchants, not this user's real data).
+3. The new categories' merchant rules are first-pass guesses (generic
+   English/Chinese keywords for Housing/Personal Care & Health/Education/
+   Investments especially) — expect to refine them once real transactions
+   start landing in the review queue under these categories.
+4. Didn't touch `data/labeled/merchant_rules_expanded.csv` beyond the
+   `write_rules_csv()` regeneration already covered above (that path is
+   gitignored, so nothing to commit there, but worth noting the working
+   tree's copy is now also 690 rows).
 
 ### Session 51 (2026-08-13) — LLM fallback classifier + category-rename rule sync
 

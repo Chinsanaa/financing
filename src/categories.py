@@ -1,6 +1,7 @@
 """Canonical category lists shared across pipeline and dashboard."""
 
-# 7 categories the ML classifier is trained on
+# 13 categories the ML classifier is trained on (expanded from the original 7
+# on 2026-08-14 — see docs/context.md Session 52 for the decision record).
 ML_CATEGORIES = [
     'Groceries',
     'Transportation',
@@ -8,29 +9,27 @@ ML_CATEGORIES = [
     'Eating Out',
     'Shopping',
     'Transfers & Gifts',
+    'Housing',
+    'Personal Care & Health',
+    'Entertainment',
+    'Travel',
+    'Education',
+    'Investments',
     'Other',
 ]
 
-# Extra labels for interactive labeling (mapped to ML categories at train time)
-EXTRA_LABEL_CATEGORIES = [
-    'Health & Wellness',
-    'Travel',
-    'Entertainment',
-]
-
-# Map extra / legacy rule categories → ML category for dashboard + training
+# Legacy/alternate category names that should collapse into an ML category
+# when seen in old labeled data or a user's freeform category name.
 CATEGORY_NORMALIZE = {
-    'Health & Wellness': 'Other',
-    'Travel': 'Other',
-    'Entertainment': 'Other',
+    'Health & Wellness': 'Personal Care & Health',
     '???': 'Other',
 }
 
 # All categories shown during interactive labeling
-LABEL_CATEGORIES = ML_CATEGORIES + EXTRA_LABEL_CATEGORIES
+LABEL_CATEGORIES = ML_CATEGORIES
 
-# Dashboard + budget (ML spending + savings buckets)
-ACTIVE_CATEGORIES = ML_CATEGORIES + ['Saving', 'Investing']
+# Dashboard + budget buckets
+ACTIVE_CATEGORIES = ML_CATEGORIES
 
 FORECAST_MONTHS = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
 
