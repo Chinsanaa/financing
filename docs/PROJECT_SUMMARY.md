@@ -22,7 +22,7 @@ A multi-tenant SaaS that helps users categorize and analyze spending from Alipay
 ```
 User Browser (Next.js, Vercel)
     ↓ [JWT in Authorization header]
-FastAPI Backend (Railway)
+FastAPI Backend (Render)
     ↓ [Service role key, explicit user_id scoping]
 Supabase PostgreSQL + Auth + Storage (Singapore)
     ↓ [RLS policies enforce per-user isolation]
@@ -34,7 +34,7 @@ Supabase PostgreSQL + Auth + Storage (Singapore)
 - **Database**: PostgreSQL (9 tables, RLS enabled)
 - **Auth**: Supabase Auth (email/password + JWT)
 - **ML**: scikit-learn (Logistic Regression + TF-IDF + semantic embeddings)
-- **Hosting**: Vercel (frontend), Railway (backend), Supabase (database + storage)
+- **Hosting**: Vercel (frontend), Render (backend), Supabase (database + storage)
 
 ---
 
@@ -104,7 +104,7 @@ Supabase PostgreSQL + Auth + Storage (Singapore)
 | Feature extraction | Hybrid (TF-IDF + semantic embeddings) | Handles unseen merchants better than TF-IDF alone |
 | Review queue | Per-transaction labeling | Iterative feedback loop, not batch relabeling |
 | Account deletion | Storage-first, then Auth | Prevents orphaned Storage objects if Auth delete fails |
-| Rate limiting | Slowapi (in-memory) | Fast for single Railway instance; Redis needed if scaled |
+| Rate limiting | Slowapi (in-memory) | Fast for a single Render instance; Redis needed if scaled |
 | Upload validation | Strict (size/rows/sniff) | Prevents abuse; helpful error messages for users |
 
 ---
@@ -160,7 +160,7 @@ Supabase PostgreSQL + Auth + Storage (Singapore)
 
 ### Scaling Notes
 
-- **Rate limiting**: Slowapi is in-memory. Scale to Redis-backed if >1 Railway instance.
+- **Rate limiting**: Slowapi is in-memory. Scale to Redis-backed if >1 Render instance.
 - **Model storage**: Supabase Storage works for small models (<100MB). Migrate to S3 if needed.
 - **Database**: Supabase handles auto-scaling. Monitor CPU/RAM if >10k monthly users.
 
@@ -181,15 +181,15 @@ cd backend && pip install -r requirements.txt && python -m uvicorn main:app --re
 # Use .env.local with Supabase credentials (Phase 1 setup)
 ```
 
-### Production (Railway + Vercel + Supabase)
+### Production (Render + Vercel + Supabase)
 
 **See**: `DEPLOYMENT.md` for step-by-step instructions.
 
 1. Push code to GitHub
-2. Connect Railway → GitHub, set env vars, deploy backend
+2. Connect Render → GitHub, set env vars, deploy backend
 3. Connect Vercel → GitHub (frontend directory), set env vars, deploy frontend
 4. Update CORS whitelist in FastAPI with Vercel URL
-5. Run health checks: `/health` on Railway + login flow on Vercel
+5. Run health checks: `/health` on Render + login flow on Vercel
 
 ---
 
@@ -212,7 +212,7 @@ names; recover it from git history if needed. Full instructions:
 │   ├── src/app/                # Pages: auth, dashboard, settings
 │   ├── src/components/tabs/    # 10 dashboard tabs
 │   └── src/utils/              # Supabase + API client
-├── backend/                     # FastAPI app (Railway)
+├── backend/                     # FastAPI app (Render)
 │   ├── routes/                 # auth, categories, uploads, training, classify, dashboard, settings
 │   ├── main.py                 # App, CORS, auth middleware, rate limiting
 │   ├── config.py               # Supabase client
@@ -239,7 +239,7 @@ names; recover it from git history if needed. Full instructions:
 
 ### For Beta Testing
 
-1. Deploy to Railway + Vercel (DEPLOYMENT.md)
+1. Deploy to Render + Vercel (DEPLOYMENT.md)
 2. Invite test users (sign up → onboard → use dashboard)
 3. Gather feedback on UX, accuracy, performance
 4. Fix bugs and iterate

@@ -56,7 +56,11 @@ Production checklist for financing SaaS before launch.
 
 ## 6. CORS Configuration
 
-- [x] Allowed origins: `http://localhost:3000` (dev), `https://financing.vercel.app` (prod)
+- [x] Allowed origins: `http://localhost:3000` (dev), `allow_origin_regex=r"^https://financing[a-z0-9-]*\.vercel\.app$"` (prod —
+  matches every domain/preview/deploy URL Vercel generates for this
+  project; a single hardcoded prod domain previously caused a full outage
+  when Vercel served the app from a different one, since Starlette's
+  CORSMiddleware hard-400s preflight for any origin not covered)
 - [x] Credentials: `true` (allow cookies)
 - [x] Methods: `["*"]` (explicit allow needed for production audit, but safe for now)
 - [x] Headers: `["*"]` (standard)
@@ -226,7 +230,7 @@ Before deploying to prod:
 - [ ] Secrets rotated (JWT secret, service role key)
 - [ ] Logs configured (CloudWatch, Datadog, or equivalent)
 - [ ] Monitoring alerts set (auth failures, rate limit spike, 500 errors)
-- [ ] HTTPS enforced (Railway/Vercel auto-enforce)
+- [ ] HTTPS enforced (Render/Vercel auto-enforce)
 - [ ] Database backups enabled (Supabase default)
 - [ ] Session TTLs audited (JWT exp, refresh token rotation)
 
@@ -235,7 +239,7 @@ Before deploying to prod:
 - **RLS is the boundary**, not the client. Backend explicitly re-scopes even though RLS holds.
 - **XSS**: React's JSX escaping + no innerHTML means safe by default. Keep it that way.
 - **SQL injection**: Supabase parameterized API prevents this entirely. No raw SQL ever.
-- **Rate limiting**: slowapi in-memory for single-instance Railway. If scaled to multiple replicas, swap for Redis-backed limiter.
+- **Rate limiting**: slowapi in-memory for a single-instance Render deploy. If scaled to multiple replicas, swap for Redis-backed limiter.
 
 ---
 

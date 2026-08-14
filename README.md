@@ -12,7 +12,7 @@ show where the money went.
 ```
 User Browser (Next.js on Vercel)
     ↓ Supabase Auth (email/password, sign-in via email or username) → JWT in Authorization header
-FastAPI Backend (Railway)
+FastAPI Backend (Render)
     ↓ service-role key + explicit user_id scoping on every query
 Supabase PostgreSQL + Auth + Storage
     ↓ RLS policies as defense-in-depth per-user isolation
@@ -151,7 +151,7 @@ npm run dev                  # http://localhost:3000
 ```
 
 Guides: `docs/guides/START_LOCAL.md` (setup), `docs/guides/TEST_LOCAL.md`
-(manual test flows), `docs/guides/DEPLOYMENT.md` (Railway + Vercel + Supabase).
+(manual test flows), `docs/guides/DEPLOYMENT.md` (Render + Vercel + Supabase).
 
 ## Tests
 

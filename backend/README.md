@@ -1,4 +1,4 @@
-# Backend — FastAPI (Railway)
+# Backend — FastAPI (Render)
 
 Multi-tenant API for the transaction classifier. Validates Supabase JWTs,
 scopes every query by `user_id`, and drives the ML pipeline in `../src/`.
@@ -81,8 +81,9 @@ enforced by (1) the JWT middleware (verifies signature, `aud`, `sub`, `exp`)
 and (2) an explicit `.eq("user_id", user_id)` filter in every query. RLS
 policies remain in place as defense-in-depth for any anon-key access path.
 
-## Deployment (Railway)
+## Deployment (Render)
 
-Config-as-code via `railway.json` (note the `sh -c "uvicorn … --port $PORT"`
-wrapper — Railway does not shell-expand `startCommand` itself). `Procfile` and
-`Dockerfile` mirror it. See `../docs/guides/DEPLOYMENT.md`.
+Docker web service building from `Dockerfile` (Docker context: repo root,
+so it can `COPY src/` alongside `backend/`). `Dockerfile`'s `CMD` reads
+`$PORT` from the environment (Render assigns it dynamically — don't
+hardcode 8000 anywhere else). See `../docs/guides/DEPLOYMENT.md`.

@@ -17,7 +17,7 @@ financing/
 │   ├── src/components/        # ui-feedback.tsx atoms + ui/*.tsx + tabs/*.tsx
 │   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (cache)
 │
-├── backend/                   # FastAPI app → Railway (see backend/README.md)
+├── backend/                   # FastAPI app → Render (see backend/README.md)
 │   ├── main.py                # app, JWT auth middleware, CORS, rate limiting
 │   ├── config.py              # env settings + service-role Supabase client
 │   ├── ml.py                  # per-user model loading (Storage) + bulk classification
@@ -25,7 +25,7 @@ financing/
 │   ├── routes/                # auth, categories, uploads, training, classify,
 │   │                          #   dashboard, settings, subscriptions
 │   ├── requirements.txt       # pinned backend deps (installed by Dockerfile)
-│   ├── railway.json, Procfile, Dockerfile
+│   ├── Dockerfile             # Docker context is the repo root (needs ../src/ too)
 │   └── .env.example
 │
 ├── src/                       # ML pipeline (imported by backend/ and tests/)

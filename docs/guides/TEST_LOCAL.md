@@ -113,7 +113,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-**Important**: Use `http://localhost:8000` (not HTTPS, not a Railway URL).
+**Important**: Use `http://localhost:8000` (not HTTPS, not a Render URL).
 
 ### 2.3: Start the Next.js Dev Server
 
@@ -376,9 +376,9 @@ Once local testing passes:
 
 1. **Push to GitHub**: `git push origin main`
 2. **Create/merge PR #13**
-3. **Deploy to Railway**: Link repo, set env vars, deploy
+3. **Deploy to Render**: Link repo, set env vars, deploy
 4. **Deploy to Vercel**: Link frontend, set env vars, deploy
-5. **Monitor logs**: Check Railway + Vercel dashboards
+5. **Monitor logs**: Check Render + Vercel dashboards
 
 See **DEPLOYMENT.md** for detailed steps.
 
