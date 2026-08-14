@@ -9,7 +9,7 @@ User Browser
   ↓
 Vercel (Next.js Frontend, Port 443)
   ↓ [JWT in Authorization header]
-Railway (FastAPI Backend, Port 8000)
+Render (FastAPI Backend, Docker, Port 8000)
   ↓ [Service Role Key]
 Supabase (PostgreSQL + Auth + Storage, Singapore)
 ```
@@ -17,27 +17,25 @@ Supabase (PostgreSQL + Auth + Storage, Singapore)
 ## Prerequisites
 
 - [ ] Supabase project created (Phase 1, already done)
-- [ ] Railway account (https://railway.app) — free tier available
+- [ ] Render account (https://render.com) — free tier available
 - [ ] Vercel account (https://vercel.com) — free tier available
 - [ ] GitHub account with repo linked
 
 ## Part 1: Supabase Setup (Already Done)
 
-Schema, migrations, and RLS policies are in place:
-- `supabase/migrations/20260703000000_initial_schema.sql` ✓
-- `supabase/migrations/20260703000001_seed_rules_and_categories.sql` ✓
-- `supabase/migrations/20260704000000_create_storage_buckets.sql` ✓
-- `supabase/migrations/20260705194314_fix_search_path_in_trigger_functions.sql` ✓
-- `supabase/migrations/20260705194600_fix_reassign_category_trigger_missing_column.sql` ✓
-- `supabase/migrations/20260706080000_fix_uploads_schema_mismatch.sql` ✓
+Schema and RLS policies are in place — the full migration history lives in
+`supabase/migrations/`. Don't hand-maintain a list of "applied" migrations
+in this doc (it goes stale fast); instead check what's actually pending
+before any deploy:
 
-Apply any not-yet-applied migrations with `supabase db push` (or the Supabase
-MCP `apply_migration` tool) before deploying backend changes that rely on them.
+```bash
+supabase migration list   # or the Supabase MCP `list_migrations` tool
+```
 
-**Railway note**: `backend/railway.json` wraps the start command in
-`sh -c "uvicorn main:app --host 0.0.0.0 --port $PORT"` — Railway invokes
-`startCommand` without a shell, so a bare `$PORT` is passed literally and
-crash-loops the service. Keep the `sh -c` wrapper.
+Apply any not-yet-applied migrations with `supabase db push` (or the
+Supabase MCP `apply_migration` tool) before deploying backend changes that
+rely on them — a migration and the backend code that depends on its schema
+should land together, not backend-first.
 
 Verify buckets exist:
 ```bash
@@ -53,7 +51,12 @@ Get credentials from Supabase dashboard:
 
 ---
 
-## Part 2: Deploy FastAPI Backend to Railway
+## Part 2: Deploy FastAPI Backend to Render
+
+The backend is a Docker web service on Render, building from
+`backend/Dockerfile`. The live service for this repo is named **`financing`**
+(dashboard: `https://dashboard.render.com/web/srv-d9sn3ov40ujc73di29ag`,
+region Singapore, free plan, auto-deploys on every push to `main`).
 
 ### Step 2.1: Push Code to GitHub
 
@@ -61,39 +64,54 @@ Get credentials from Supabase dashboard:
 git push origin main
 ```
 
-### Step 2.2: Connect Railway to GitHub Repo
+Render's `financing` service has `autoDeploy: yes` on `main` — a push there
+triggers a build automatically. No manual deploy step needed for routine
+changes.
 
-1. Go to https://railway.app/dashboard
-2. Click **New Project** → **Deploy from GitHub**
-3. Select your repo (`Chinsanaa/financing`)
-4. Select branch: `main`
-5. Click **Deploy**
+### Step 2.2: Connect Render to GitHub Repo (first-time setup only)
 
-Railway will automatically detect the `Dockerfile` and build.
+1. Go to https://dashboard.render.com
+2. Click **New** → **Web Service**
+3. Connect and select your repo (`Chinsanaa/financing`)
+4. Runtime: **Docker**, Dockerfile path: `backend/Dockerfile`, Docker
+   context: `.` (repo root — the Dockerfile needs both `backend/` and
+   `src/`)
+5. Branch: `main`
+6. Region: choose one close to your Supabase project (this deployment uses
+   Singapore, matching Supabase's region)
+7. Click **Create Web Service**
 
-### Step 2.3: Set Environment Variables on Railway
+### Step 2.3: Set Environment Variables on Render
 
-In Railway dashboard, go to **Variables**:
+In the service's **Environment** tab, add:
 
 ```
 SUPABASE_URL=https://[PROJECT_ID].supabase.co
 SUPABASE_ANON_KEY=[your_anon_key]
 SUPABASE_SERVICE_ROLE_KEY=[your_service_role_key_secret!]
 ENVIRONMENT=production
+RESEND_API_KEY=[your_resend_key]   # optional — enables budget-alert emails; unset = no-op
+GROQ_API_KEY=[your_groq_key]       # optional — enables LLM fallback classification; unset = skipped
 ```
 
-**IMPORTANT**: Service role key is a secret. Never commit to Git.
+**IMPORTANT**: These are all secrets except nothing here is public — never
+commit any of them to Git. Render env vars live only in Render's dashboard
+and the running container; saving them triggers an automatic redeploy.
 
 ### Step 2.4: Verify Backend is Running
 
-1. Wait for build to complete (3-5 minutes)
-2. Click **Deployments** → latest → **View Logs**
-3. Should see: `Uvicorn running on 0.0.0.0:8000`
-4. Click the Railway domain URL to test:
-   - `https://[railway-url]/health` should return `{"status": "ok"}`
-   - `https://[railway-url]/docs` should show Swagger UI
+1. Wait for the build to complete (a Docker build typically takes a few
+   minutes)
+2. In the Render dashboard: **Logs** tab
+3. Should see: `Uvicorn running on 0.0.0.0:8000` (or whatever `$PORT`
+   Render assigned — the Dockerfile's `CMD`/`ENTRYPOINT` should read
+   `$PORT`, not hardcode 8000)
+4. Hit the service URL to test:
+   - `https://[render-url]/health` should return `{"status": "ok"}`
+   - `https://[render-url]/docs` should show Swagger UI
 
-**Save the Railway backend URL**: You'll need it for the frontend.
+**Save the Render backend URL** (e.g. `https://financing-lxgt.onrender.com`
+for this project): you'll need it for the frontend.
 
 ---
 
@@ -119,7 +137,7 @@ In Vercel project settings, go to **Environment Variables**:
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://[PROJECT_ID].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=[your_anon_key]
-NEXT_PUBLIC_API_URL=https://[railway-url]  # No trailing slash
+NEXT_PUBLIC_API_URL=https://[render-url]  # No trailing slash
 ```
 
 **IMPORTANT**: `NEXT_PUBLIC_*` variables are exposed to the browser (intended).
@@ -149,7 +167,7 @@ In frontend **Upload** tab:
 2. Upload a sample CSV file (Alipay or WeChat format)
 3. Should parse and show: "Uploaded X transactions"
 
-If error: check backend logs on Railway (`Deployments` → `Logs`).
+If error: check backend logs on Render (service dashboard → **Logs**).
 
 ### Step 4.2: Test Training Pipeline
 
@@ -204,18 +222,26 @@ If error: check backend logs. Common issues:
 
 ### "Training still running after 1 hour"
 - **Cause**: Background task crashed silently
-- **Fix**: Check Railway backend logs → look for exceptions in `run_training()`
+- **Fix**: Check Render backend logs → look for exceptions in `run_training()`
 - **Fix**: Ensure `src/retrain.py` imports work (`sys.path` set)
+
+### Budget-alert emails never arrive / LLM fallback never fires
+- **Cause**: `RESEND_API_KEY` / `GROQ_API_KEY` unset on Render — both features
+  no-op silently when their key is missing (by design, so a missing optional
+  key never breaks the request), so nothing errors, they just don't do
+  anything.
+- **Fix**: Set the relevant key in the Render service's **Environment** tab
+  (see Part 2, Step 2.3) and confirm the automatic redeploy finished.
 
 ---
 
 ## Monitoring & Logs
 
-### Railway Backend Logs
-1. Dashboard → **Deployments** → latest
-2. Click **View Logs**
-3. Search for errors: "Failed", "Error", "Exception"
-4. Common patterns: missing env vars, import errors, API failures
+### Render Backend Logs
+1. Service dashboard → **Logs** tab
+2. Search for errors: "Failed", "Error", "Exception"
+3. Common patterns: missing env vars, import errors, API failures
+4. **Metrics** tab has CPU/memory/request-count graphs if you need them
 
 ### Vercel Frontend Logs
 1. Dashboard → **Deployments** → latest
@@ -231,14 +257,17 @@ If error: check backend logs. Common issues:
 
 ## Scaling & Future Work
 
-- **Database**: Supabase handles auto-scaling (PostgreSQL 15)
-- **Backend**: Railway scales containers automatically
+- **Database**: Supabase handles auto-scaling (PostgreSQL 17)
+- **Backend**: Render's free plan spins down on inactivity (cold starts on
+  the first request after idle) and has limited resources — fine for a
+  personal project, worth moving to a paid plan before real user traffic
 - **Frontend**: Vercel has built-in CDN and edge caching
 - **Storage**: Supabase Storage backed by S3, unlimited capacity
 
 For 10k+ monthly users:
 - Monitor Supabase CPU/RAM (Settings → Usage)
-- Consider Railway paid plan if hitting bandwidth limits
+- Consider a paid Render plan (no cold starts, more CPU/RAM) if hitting
+  free-tier limits
 - Add Redis cache for frequently accessed data (optional)
 
 ---
@@ -255,14 +284,14 @@ git merge <feature-branch>
 git push origin main
 ```
 
-Railway and Vercel will auto-redeploy on push to main.
+Render and Vercel will auto-redeploy on push to main.
 
 ---
 
 ## Contacts & Docs
 
 - **Supabase**: https://supabase.io/docs
-- **Railway**: https://docs.railway.app
+- **Render**: https://render.com/docs
 - **Vercel**: https://vercel.com/docs
 - **FastAPI**: https://fastapi.tiangolo.com
 - **Next.js**: https://nextjs.org/docs
@@ -270,4 +299,4 @@ Railway and Vercel will auto-redeploy on push to main.
 ---
 
 **Deployment Status**: Ready for production
-**Last Updated**: 2026-07-05
+**Last Updated**: 2026-08-14
