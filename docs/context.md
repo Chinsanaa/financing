@@ -3885,3 +3885,46 @@ configured, same limitation as Session 60.
 **Next suggested step**: do the live-browser pass covering both this
 session's Budget tab addition and Session 60's Reports redesign together,
 since neither has been checked in a running browser yet.
+
+### Session 62 (2026-08-14) — Reports tab: Need/Want/Savings bucket column + filter
+
+User asked to add Need/Want/Savings to the Reports tab too. Clarified via
+AskUserQuestion: a badge column (reusing the same sky/amber/emerald colors
+as the 50/30/20 breakdown) plus a Bucket filter dropdown in the existing
+Filters panel — no sort-by-bucket. Uncategorized/split rows show blank
+(no badge) rather than guessing, since `CATEGORY_BUCKET` maps a single
+category name to a bucket and neither of those rows has exactly one.
+
+**What changed:**
+- `backend/routes/dashboard.py` `GET /reports`: new optional `bucket`
+  query param (`Need`/`Want`/`Savings`, unrecognized values ignored). When
+  set, looks up the user's category ids whose name falls in that bucket
+  (via `CATEGORY_BUCKET`, already imported for the 50/30/20 endpoint) and
+  filters `.in_("category_id", ids)`; short-circuits to an empty page if
+  the user has none of that bucket's categories (avoids passing an empty
+  list to `.in_()`). Each returned row now also carries a `bucket` field
+  (`None` for split rows, uncategorized rows, and categories not in the
+  static mapping).
+- `backend/tests/test_dashboard_reports_filters.py`: four new tests —
+  bucket field correctness (including the split/uncategorized None cases),
+  the `?bucket=` filter narrowing results, the empty-match short-circuit,
+  and an unrecognized bucket value being ignored rather than erroring.
+- `frontend/src/components/tabs/ReportsTab.tsx`: `Transaction.bucket`
+  added to the interface; new `bucketFilter` state feeding a `Bucket`
+  `<Select>` (All/Need/Want/Savings) in the filters panel next to Sort
+  by/Rows per page; new table column rendering a `Badge` with
+  `toneForKey('sky'|'amber'|'emerald')` (same palette as
+  `RuleBreakdown.tsx`) via a small `BUCKET_TONE` map, blank when
+  `txn.bucket` is `null`.
+
+**Verified**: full backend suite (116/116) and frontend `tsc --noEmit`
+pass. **Not verified**: no live browser check (still no Supabase
+credentials in this sandbox) — same open item as Sessions 60–61.
+
+**Open**: the live-browser verification backlog now covers three things —
+Session 60's Reports redesign, Session 61's Budget-tab 50/30/20 section,
+and this session's bucket column/filter. All three should be checked
+together in one pass once real credentials are available.
+
+**Next suggested step**: the live-browser pass (unchanged ask from
+Session 61, now with one more item to check).

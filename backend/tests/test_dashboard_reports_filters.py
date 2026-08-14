@@ -163,3 +163,96 @@ def test_sort_by_unrecognized_value_falls_back_to_date_desc(client, patch_jwks, 
     assert response.status_code == 200
     merchants = [t["merchant"] for t in response.json()["transactions"]]
     assert merchants == ["New Shop", "Old Shop"]
+
+
+def test_bucket_field_reflects_category_bucket_and_is_null_for_split_and_uncategorized(
+    client, patch_jwks, make_token, fake_db
+):
+    fake_db.seed("categories", [
+        {"id": "cat-need", "user_id": USER_A, "name": "Groceries"},
+        {"id": "cat-want", "user_id": USER_A, "name": "Eating Out"},
+        {"id": "cat-savings", "user_id": USER_A, "name": "Investments"},
+    ])
+    fake_db.seed("transactions", [
+        {"id": "t1", "user_id": USER_A, "merchant": "Need Shop", "description": "",
+         "amount": 10, "timestamp": "2026-06-01T00:00:00", "category_id": "cat-need",
+         "categories": {"name": "Groceries"}, "is_split": False, "label_source": "override"},
+        {"id": "t2", "user_id": USER_A, "merchant": "Want Shop", "description": "",
+         "amount": 20, "timestamp": "2026-06-02T00:00:00", "category_id": "cat-want",
+         "categories": {"name": "Eating Out"}, "is_split": False, "label_source": "override"},
+        {"id": "t3", "user_id": USER_A, "merchant": "Savings Shop", "description": "",
+         "amount": 30, "timestamp": "2026-06-03T00:00:00", "category_id": "cat-savings",
+         "categories": {"name": "Investments"}, "is_split": False, "label_source": "override"},
+        {"id": "t4", "user_id": USER_A, "merchant": "Unlabeled Shop", "description": "",
+         "amount": 5, "timestamp": "2026-06-04T00:00:00", "category_id": None,
+         "categories": None, "is_split": False, "label_source": "none"},
+    ])
+    fake_db.seed("transactions", [{
+        "id": "t5", "user_id": USER_A, "merchant": "Costco", "description": "",
+        "amount": 40.0, "timestamp": "2026-06-05T00:00:00", "category_id": None,
+        "categories": None, "is_split": True, "label_source": "override",
+    }])
+    fake_db.seed("transaction_splits", [
+        {"id": "s1", "user_id": USER_A, "transaction_id": "t5", "category_id": "cat-need",
+         "categories": {"name": "Groceries"}, "amount": 25.0},
+        {"id": "s2", "user_id": USER_A, "transaction_id": "t5", "category_id": "cat-want",
+         "categories": {"name": "Eating Out"}, "amount": 15.0},
+    ])
+
+    response = client.get(
+        "/dashboard/reports?sort_by=date&sort_dir=asc", headers=_headers(make_token)
+    )
+
+    assert response.status_code == 200
+    bucket_by_merchant = {t["merchant"]: t["bucket"] for t in response.json()["transactions"]}
+    assert bucket_by_merchant == {
+        "Need Shop": "Need",
+        "Want Shop": "Want",
+        "Savings Shop": "Savings",
+        "Unlabeled Shop": None,
+        "Costco": None,  # split — spans two buckets, no single answer
+    }
+
+
+def test_bucket_filter_only_returns_that_buckets_categories(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("categories", [
+        {"id": "cat-need", "user_id": USER_A, "name": "Groceries"},
+        {"id": "cat-want", "user_id": USER_A, "name": "Eating Out"},
+    ])
+    fake_db.seed("transactions", [
+        {"id": "t1", "user_id": USER_A, "merchant": "Need Shop", "description": "",
+         "amount": 10, "timestamp": "2026-06-01T00:00:00", "category_id": "cat-need",
+         "categories": {"name": "Groceries"}, "is_split": False, "label_source": "override"},
+        {"id": "t2", "user_id": USER_A, "merchant": "Want Shop", "description": "",
+         "amount": 20, "timestamp": "2026-06-02T00:00:00", "category_id": "cat-want",
+         "categories": {"name": "Eating Out"}, "is_split": False, "label_source": "override"},
+    ])
+
+    response = client.get("/dashboard/reports?bucket=Need", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 1
+    assert body["transactions"][0]["merchant"] == "Need Shop"
+
+
+def test_bucket_filter_with_no_matching_categories_returns_empty_page(
+    client, patch_jwks, make_token, fake_db
+):
+    _seed_txn(fake_db, "t1", "Shop", "x", 10, "2026-06-01T00:00:00")
+
+    response = client.get("/dashboard/reports?bucket=Savings", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 0
+    assert body["transactions"] == []
+
+
+def test_bucket_with_unrecognized_value_is_ignored(client, patch_jwks, make_token, fake_db):
+    _seed_txn(fake_db, "t1", "Shop", "x", 10, "2026-06-01T00:00:00")
+
+    response = client.get("/dashboard/reports?bucket=nonsense", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    assert response.json()["total_count"] == 1
