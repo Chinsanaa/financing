@@ -3064,3 +3064,47 @@ real remaining items are (a) set `RESEND_API_KEY` in Railway (user action,
 not something I can do from here) and (b) do a first live manual
 walkthrough of the whole roadmap's UI now that real data can flow through
 it. After that, revisit features 5–7 or whatever's next.
+
+### Session 59 (2026-08-14) — Render migration + PR #47 merged (branch `claude/feature-planning-roadmap-g74j9j` → `main`)
+
+User is deploying on **Render, not Railway** (correcting the assumption
+baked into `docs/guides/DEPLOYMENT.md` since 2026-07-05). Found the real
+service via the Render MCP server: `financing`
+(`srv-d9sn3ov40ujc73di29ag`, Docker build from `backend/Dockerfile`,
+Singapore, free plan, auto-deploys from `main`,
+`https://financing-lxgt.onrender.com`). User set `RESEND_API_KEY` and
+`GROQ_API_KEY` there manually via the Render dashboard (declined to paste
+the key values into chat for me to set via MCP — reasonable, respected).
+
+**What changed:**
+- `docs/guides/DEPLOYMENT.md` rewritten: every Railway reference replaced
+  with the real Render setup (dashboard steps, env var list including the
+  two new keys, troubleshooting entry for "alerts/LLM silently no-op if
+  the key is unset"). Also replaced the hand-maintained, already-stale
+  "applied migrations" checklist with a pointer to check migration status
+  live before deploying, so this doc doesn't drift out of sync again.
+- PR #47 marked ready for review (was draft since 2026-08-13) via GitHub
+  MCP, then **merged into `main`** by the user shortly after — confirmed
+  via the `pull_request.closed` webhook event (`outcome: merged`). Session
+  auto-unsubscribed from PR #47's activity per the standard flow.
+
+**Decided**: left `backend/railway.json` in place (flagged as dead config
+now that the service runs on Render, not deleted) — the user didn't ask
+for repo cleanup, just the deployment docs and env vars fixed.
+
+**Open**:
+- `backend/railway.json` is now genuinely dead config — worth deleting
+  next time anyone's touching backend deploy config, not urgent.
+- Now that `main` has the code and the DB migrations were already applied
+  ahead of the merge, Render/Vercel should auto-redeploy with the full
+  feature set live for the first time. Not yet confirmed working
+  end-to-end in a live browser — this is now genuinely possible to check
+  (real deploy, real data) rather than blocked on missing credentials.
+- Features 5–7 (multi-currency, net worth, tags) remain architecture-only
+  sketches, not started.
+
+**Next suggested step**: confirm the Render/Vercel auto-redeploy from
+`main` actually picked up this merge and the app works end-to-end
+live (health check, a login, one of the new features like Subscriptions
+or Insights) — first real chance to do this all session. After that,
+revisit features 5–7 or whatever's next.
