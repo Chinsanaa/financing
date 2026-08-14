@@ -17,6 +17,7 @@ import { TabBar, TabPanel, TabItem } from '@/components/ui/Tabs';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import NotificationBell from '@/components/ui/NotificationBell';
+import Tooltip from '@/components/ui/Tooltip';
 import DashboardLoading from './loading';
 import OnboardingTour from '@/components/onboarding/OnboardingTour';
 
@@ -86,6 +87,7 @@ export default function DashboardClient() {
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [bellOpen, setBellOpen] = useState(false);
 
   const urlTab = searchParams.get('tab');
   // Wizard step IDs become first-class deep links; 'training' alias for 'train'
@@ -155,22 +157,31 @@ export default function DashboardClient() {
             <p className="mr-2 hidden text-sm text-muted sm:block">
               {user?.user_metadata?.username || user?.email}
             </p>
-            <NotificationBell onViewAll={() => goToTab('action')} />
+            <Tooltip label="Notifications" disabled={bellOpen}>
+              <NotificationBell
+                onViewAll={() => goToTab('action')}
+                onOpenChange={setBellOpen}
+              />
+            </Tooltip>
             <ThemeToggle />
-            <Link
-              href="/settings"
-              aria-label="Settings"
-              className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            >
-              <Settings className="h-4 w-4" />
-            </Link>
-            <button
-              onClick={handleLogout}
-              aria-label="Sign out"
-              className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+            <Tooltip label="Settings">
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+            </Tooltip>
+            <Tooltip label="Sign out">
+              <button
+                onClick={handleLogout}
+                aria-label="Sign out"
+                className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
 

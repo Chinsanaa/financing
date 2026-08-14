@@ -21,7 +21,15 @@ interface Action {
  * ActionTab — this re-reads the same cached response via useApi's shared
  * cache), and a dropdown showing that same data directly. "View all" hands
  * off to the fuller Planning -> Action plan view via `onViewAll`. */
-export default function NotificationBell({ onViewAll }: { onViewAll: () => void }) {
+export default function NotificationBell({
+  onViewAll,
+  onOpenChange,
+}: {
+  onViewAll: () => void;
+  /** Reports open/close so a wrapping Tooltip can hide itself while the
+   * dropdown is showing — a hover label would be redundant clutter then. */
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { data } = useApi<{ actions: Action[] }>('/dashboard/action');
   const actions = data?.actions || [];
   const count = actions.filter(
@@ -34,6 +42,10 @@ export default function NotificationBell({ onViewAll }: { onViewAll: () => void 
 
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
