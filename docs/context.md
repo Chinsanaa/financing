@@ -4130,3 +4130,59 @@ covering six sessions' worth of unverified UI). If the user reports the
 metro rule missing a station they use often, it's a one-line addition to
 the `DESCRIPTION_KEYWORD_RULES` Transportation tuple in
 `src/merchant_categories.py`.
+
+### Session 66 (2026-08-14) — yyyy/mm/dd date formatting + manual expense entry
+
+User asked for two changes on the Upload tab and elsewhere: (1) every
+displayed date fixed to `yyyy/mm/dd` regardless of browser locale, and
+(2) a way to manually type in a single expense on the Upload tab, with
+every field required (no blanks allowed).
+
+**1. Date formatting.** Added `formatDate`/`formatDateTime` to
+`frontend/src/utils/format.ts` (local calendar fields, `yyyy/mm/dd` and
+`yyyy/mm/dd HH:MM`). Replaced every `toLocaleDateString()`/`toLocaleString()`
+call site: `ReviewTab.tsx`, `InsightsTab.tsx`, `ReportsTab.tsx` (table +
+`toCsv()` export), `TrainingTab.tsx` (kept time-of-day for this run-history
+log), `UploadTab.tsx` (upload history table), `SettingsClient.tsx`. Backend
+XLSX export (`backend/routes/dashboard.py` `export_transactions`) now
+formats the Date column server-side with a small `_fmt_date()` helper
+instead of writing the raw ISO string. Left untouched, with reasons noted
+inline: the native `<input type="date">` filters in `ReportsTab.tsx` (already
+`yyyy-mm-dd` value format; on-screen rendering is OS/browser-controlled and
+can't be forced without a custom picker) and `formatMonthShort`/`formatMonthLong`
+chart-axis labels (month-granularity, not day-level dates).
+
+**2. Manual expense entry.** New Supabase migration
+(`20260814050000_add_manual_transaction_source.sql`) adds `'manual'` to the
+`transaction_source` enum. New backend router `backend/routes/transactions.py`
+(`POST /transactions/`, registered in `main.py`) with a `ManualTransactionCreate`
+Pydantic model — `timestamp`, `merchant`, `description`, `amount`,
+`category_id` all required, blank strings and non-positive amounts rejected
+by field validators, category ownership checked against the authenticated
+user before insert. Inserted rows get `source='manual'`, `label_source='override'`,
+`needs_review=False`, `is_manually_labeled=True`, `upload_id=None` — no ML
+classification pass, since the form requires the user to pick a category
+directly. Frontend: `api.transactions.create(...)` added to
+`frontend/src/utils/api.ts`; `UploadTab.tsx` gained a toggle-revealed "Add
+expense manually" form (date/merchant/description/amount/category, all
+required, client-side validation before submit, categories fetched the same
+way `ReviewTab.tsx` does via `useApi('/categories/')`) — no new form library,
+matches the rest of the app's plain-`useState` pattern.
+
+**Verified**: full backend suite (`backend/tests/`, 126/126, including new
+`test_transactions_manual.py` covering create/blank-field/non-positive-amount/
+category-ownership/unknown-category) passes; had to also add
+`routes.transactions` to the `fake_db` fixture's per-module monkeypatch list
+in `tests/conftest.py` (each route module binds `supabase_client` by name at
+import time, same reason every other route module is listed there) — without
+it, tests hit the real network via a stale `supabase_client` reference.
+Frontend `tsc --noEmit` clean. **Not verified**: no live browser check (no
+Supabase credentials in this sandbox) — same standing limitation as prior
+sessions.
+
+**Open**: live-browser verification backlog (unchanged from Session 65, now
+also covering this session's date formatting and manual-entry form).
+
+**Next suggested step**: apply the new migration to the live Supabase project
+(`ALTER TYPE transaction_source ADD VALUE 'manual'`) before the manual-entry
+form is used in production — it isn't applied automatically by this session.

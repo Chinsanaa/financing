@@ -208,7 +208,7 @@ verified with `npx tsc --noEmit && npm run build`.
 financing/
 ├── frontend/            # Next.js app (see frontend/README.md)
 ├── backend/             # FastAPI app (see backend/README.md)
-│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings, subscriptions
+│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings, subscriptions, transactions
 │   ├── auth_utils.py    # JWT verification against Supabase's JWKS
 │   ├── tests/           # JWT verification + cross-user isolation tests
 │   └── ml.py            # per-user model loading + bulk classification
