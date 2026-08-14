@@ -4,8 +4,9 @@ Bulk classification (rules + model + LLM fallback inference on unlabeled
 rows) lives in backend/ml.py and runs automatically after uploads and
 training runs.
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
+from alerts import check_budget_alerts
 from config import supabase_client
 from db import run_query
 from errors import internal_error, logger
@@ -55,7 +56,7 @@ async def _promote_llm_suggestion_to_rule(user_id: str, transaction: dict, categ
 
 @router.post("/{transaction_id}/label")
 @limiter.limit("60/hour")
-async def label_transaction(request: Request, transaction_id: str, req: LabelRequest):
+async def label_transaction(request: Request, transaction_id: str, req: LabelRequest, background_tasks: BackgroundTasks):
     """Label a transaction from the review queue (recategorize)."""
     user_id = request.state.user_id
 
@@ -92,6 +93,7 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         await _promote_llm_suggestion_to_rule(user_id, before, req.category_id)
+        background_tasks.add_task(check_budget_alerts, user_id)
 
         return {"transaction": response.data[0]}
     except HTTPException:
@@ -102,7 +104,7 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
 
 @router.post("/{transaction_id}/accept")
 @limiter.limit("60/hour")
-async def accept_model_suggestion(request: Request, transaction_id: str):
+async def accept_model_suggestion(request: Request, transaction_id: str, background_tasks: BackgroundTasks):
     """Accept the model's or LLM's category suggestion for a review queue
     transaction."""
     user_id = request.state.user_id
@@ -132,6 +134,7 @@ async def accept_model_suggestion(request: Request, transaction_id: str):
 
         if before.get("category_id"):
             await _promote_llm_suggestion_to_rule(user_id, before, before["category_id"])
+        background_tasks.add_task(check_budget_alerts, user_id)
 
         return {"transaction": response.data[0]}
     except HTTPException:

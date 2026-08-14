@@ -107,11 +107,14 @@ no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
 detection, and upserts into the `recurring_merchants` cache table.
 
 **Budget alerts**: the header's notification bell shows a live count of
-over-budget and approaching-budget (≥80% of a category's monthly budget)
-categories, computed on every load by `GET /dashboard/action` — no
-persistence yet, so it's an in-app-only signal for now (checked when you use
-the app, not a push notification). Clicking it jumps to **Planning → Action
-plan**, which lists both kinds of budget warnings as cards.
+over-budget and approaching-budget categories, computed on every load by
+`GET /dashboard/action`. Clicking it jumps to **Planning → Action plan**,
+which lists both kinds of budget warnings as cards. Optionally, **Settings →
+Budget alerts** turns on email notifications with a configurable
+"approaching budget" threshold (default 80%) — emails are de-duplicated per
+category/month so the same crossing is never sent twice, and are checked
+reactively (when you upload, review, or label a transaction), not on a
+schedule, since no background scheduler exists yet.
 
 ## Quick start (local)
 

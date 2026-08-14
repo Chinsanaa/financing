@@ -42,6 +42,7 @@ class FakeQueryBuilder:
         self._count_mode: Optional[str] = None
         self._payload: Optional[dict] = None
         self._on_conflict: Optional[str] = None
+        self._ignore_duplicates: bool = False
 
     # --- filters ---
     def select(self, columns: str = "*", count: Optional[str] = None):
@@ -108,10 +109,11 @@ class FakeQueryBuilder:
         self._payload = data
         return self
 
-    def upsert(self, data: dict, on_conflict: Optional[str] = None):
+    def upsert(self, data: dict, on_conflict: Optional[str] = None, ignore_duplicates: bool = False):
         self._op = "upsert"
         self._payload = data
         self._on_conflict = on_conflict
+        self._ignore_duplicates = ignore_duplicates
         return self
 
     def delete(self):
@@ -203,6 +205,13 @@ class FakeTable:
                     None,
                 )
                 if existing is not None:
+                    if qb._ignore_duplicates:
+                        # ON CONFLICT DO NOTHING: existing row is untouched
+                        # and NOT included in the returned/RETURNING rows —
+                        # callers use an empty response to detect "already
+                        # existed" vs "just inserted" (see budget_alerts
+                        # de-dup in backend/alerts.py).
+                        continue
                     existing.update(item)
                     upserted.append(existing)
                 else:
@@ -253,12 +262,28 @@ class FakeStorage:
         return self.buckets.setdefault(bucket_name, FakeBucket(bucket_name))
 
 
+class FakeUser:
+    def __init__(self, email: Optional[str]):
+        self.email = email
+
+
+class FakeUserResponse:
+    def __init__(self, user: Optional[FakeUser]):
+        self.user = user
+
+
 class FakeAuthAdmin:
     def __init__(self):
         self.deleted_user_ids: list[str] = []
+        # user_id -> email, set via seed_user_email() in tests that need
+        # get_user_by_id (e.g. budget-alert emails looking up the recipient).
+        self.emails: dict[str, str] = {}
 
     def delete_user(self, user_id: str):
         self.deleted_user_ids.append(user_id)
+
+    def get_user_by_id(self, user_id: str) -> FakeUserResponse:
+        return FakeUserResponse(FakeUser(self.emails.get(user_id)))
 
 
 class FakeAuth:
@@ -298,3 +323,7 @@ class FakeSupabaseClient:
         """Test helper: pre-populate a table with rows."""
         table = self._tables.setdefault(table_name, FakeTable(table_name))
         table.rows.extend(dict(r) for r in rows)
+
+    def seed_user_email(self, user_id: str, email: str):
+        """Test helper: make auth.admin.get_user_by_id(user_id) resolve an email."""
+        self.auth.admin.emails[user_id] = email

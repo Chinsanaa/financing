@@ -412,7 +412,62 @@ async def get_savings(request: Request):
         raise internal_error(e, "dashboard/savings")
 
 
-APPROACHING_BUDGET_THRESHOLD = 0.8  # 80% of budget; not yet user-configurable
+DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT = 80  # used when profiles.alert_threshold_pct is unset
+
+
+async def _budget_crossings(user_id: str, threshold_pct: float) -> list:
+    """Categories currently over, or approaching (>= threshold_pct%), their
+    monthly budget. Shared by `get_action` (in-app, always computed fresh) and
+    `backend/alerts.py::check_budget_alerts` (email side effect, gated by the
+    `budget_alerts` de-dup table) — kept as one function so the two never
+    drift out of sync on what counts as a crossing.
+
+    Returns dicts with `kind` ('over' | 'approaching'), `category_id`,
+    `category` (name), `current`, `limit`, and either `overage` (kind='over')
+    or `pct` (kind='approaching').
+    """
+    cat_budget_resp = await run_query(
+        lambda: supabase_client.table("budget_category_config")
+        .select("*, categories(name)")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not cat_budget_resp.data:
+        return []
+
+    # Crossings are always about the current month.
+    start, end = _month_bounds(None)
+    spending_by_cat = await _spend_by_category(user_id, start, end)
+
+    crossings = []
+    for budget_row in cat_budget_resp.data:
+        cat_name = budget_row["categories"]["name"] if budget_row["categories"] else "Unknown"
+        budget = float(budget_row["monthly_budget"]) if budget_row["monthly_budget"] else 0
+        spend = float(spending_by_cat.get(cat_name, 0))
+
+        if budget > 0 and spend > budget:
+            crossings.append({
+                "kind": "over",
+                "category_id": budget_row["category_id"],
+                "category": cat_name,
+                "current": spend,
+                "limit": budget,
+                "overage": spend - budget,
+            })
+        elif budget > 0 and spend >= (threshold_pct / 100) * budget:
+            crossings.append({
+                "kind": "approaching",
+                "category_id": budget_row["category_id"],
+                "category": cat_name,
+                "current": spend,
+                "limit": budget,
+                "pct": round(100 * spend / budget, 1),
+            })
+
+    return crossings
+
+
+_CROSSING_KIND_TO_ACTION_TYPE = {"over": "over_budget", "approaching": "approaching_budget"}
 
 
 @router.get("/action")
@@ -423,39 +478,27 @@ async def get_action(request: Request):
     try:
         actions = []
 
-        cat_budget_resp = await run_query(
-            lambda: supabase_client.table("budget_category_config")
-            .select("*, categories(name)")
-            .eq("user_id", user_id)
-            .execute()
+        profile_resp = await run_query(
+            lambda: supabase_client.table("profiles").select("alert_threshold_pct").eq("id", user_id).execute()
+        )
+        threshold_pct = (
+            float(profile_resp.data[0]["alert_threshold_pct"])
+            if profile_resp.data and profile_resp.data[0].get("alert_threshold_pct") is not None
+            else DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT
         )
 
-        if cat_budget_resp.data:
-            # Action items are always about the current month.
-            start, end = _month_bounds(None)
-            spending_by_cat = await _spend_by_category(user_id, start, end)
-
-            for budget_row in cat_budget_resp.data:
-                cat_name = budget_row["categories"]["name"] if budget_row["categories"] else "Unknown"
-                budget = float(budget_row["monthly_budget"]) if budget_row["monthly_budget"] else 0
-                spend = float(spending_by_cat.get(cat_name, 0))
-
-                if budget > 0 and spend > budget:
-                    actions.append({
-                        "type": "over_budget",
-                        "category": cat_name,
-                        "current": spend,
-                        "limit": budget,
-                        "overage": spend - budget,
-                    })
-                elif budget > 0 and spend >= APPROACHING_BUDGET_THRESHOLD * budget:
-                    actions.append({
-                        "type": "approaching_budget",
-                        "category": cat_name,
-                        "current": spend,
-                        "limit": budget,
-                        "pct": round(100 * spend / budget, 1),
-                    })
+        for crossing in await _budget_crossings(user_id, threshold_pct):
+            action = {
+                "type": _CROSSING_KIND_TO_ACTION_TYPE[crossing["kind"]],
+                "category": crossing["category"],
+                "current": crossing["current"],
+                "limit": crossing["limit"],
+            }
+            if crossing["kind"] == "over":
+                action["overage"] = crossing["overage"]
+            else:
+                action["pct"] = crossing["pct"]
+            actions.append(action)
 
         # Review queue count
         review_resp = await run_query(

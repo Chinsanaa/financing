@@ -2515,3 +2515,127 @@ upload/classify/label, and a Settings toggle) — or, if the user would rather
 see feature 3 (insights/anomalies) or feature 4 (transaction management) next,
 that's a live re-prioritization question worth asking rather than assuming
 the original order still holds.
+
+### Session 54 (2026-08-13) — Budget alerts step 2: Resend email wiring (branch `claude/feature-planning-roadmap-g74j9j`)
+
+User asked for the "next feature"; since that was ambiguous between
+finishing feature 2's email half vs. moving to feature 3/4, asked directly —
+user chose to finish budget-alert emails first. Re-grounded the plan file's
+Step 4 sketch against the real current code (fresh Explore pass) before
+building, same discipline as Sessions 52–53.
+
+- **Migration** `supabase/migrations/20260813210000_add_budget_alerts.sql`:
+  new `budget_alerts` table (user_id, category_id, month, kind, triggered_at;
+  unique on user_id+category_id+month+kind), 4-policy RLS matching
+  `recurring_merchants`'s style exactly. Plus two new `profiles` columns:
+  `alert_email_enabled boolean DEFAULT false`, `alert_threshold_pct numeric
+  DEFAULT 80`. Simplified from the original plan sketch's `threshold_pct`/
+  `channel` columns and `numeric[]` thresholds — one channel (email) and one
+  configurable "approaching" threshold per user is enough; `kind` (which of
+  `get_action`'s two crossing types already fired) is what actually needs
+  de-duping against. **Not yet applied to the live Supabase project** — same
+  as the other pending migrations noted above.
+- **`backend/routes/dashboard.py`**: extracted the over/approaching-budget
+  computation out of `get_action` into a new shared `_budget_crossings(user_id,
+  threshold_pct)` helper, so `get_action` (in-app, always fresh) and the new
+  `check_budget_alerts` (email, de-duped) can't drift out of sync on what
+  counts as a crossing. `get_action` now reads `alert_threshold_pct` from the
+  user's profile (falls back to 80 if unset) instead of the hardcoded
+  constant from Session 53.
+- **`backend/alerts.py`** (new): `check_budget_alerts(user_id)` — skips
+  entirely if the user hasn't opted in (`alert_email_enabled`); otherwise
+  gets crossings via the shared helper, inserts a `budget_alerts` row per
+  crossing with `upsert(..., ignore_duplicates=True)` (Postgres's
+  insert-or-skip), and only emails for crossings whose insert actually
+  landed (i.e. genuinely new this month). Recipient email comes from
+  `supabase_client.auth.admin.get_user_by_id` since `profiles` doesn't store
+  it.
+- **`backend/mailer.py`** (new — deliberately NOT named `email.py`, see
+  below): `send_alert_email(to_email, subject, body)`, no-ops if
+  `settings.resend_api_key` is unset (same pattern as `groq_api_key`),
+  otherwise POSTs to Resend's HTTP API via `httpx.AsyncClient`. `httpx` added
+  explicitly to `backend/requirements.txt` (was only a transitive dependency
+  of `supabase==2.4.2` before, pinned to the same range supabase already
+  requires: `>=0.24,<0.28`) — importing it directly without an explicit pin
+  would have been fragile.
+- **Real bug caught mid-build, fixed before it shipped**: the module was
+  originally named `backend/email.py`. Since `backend/` is on `sys.path`
+  (`PYTHONPATH=/app:/app/src` in the Dockerfile), that would shadow Python's
+  stdlib `email` package for the whole process — a real risk given
+  `email-validator` (a `pydantic`/`EmailStr` dependency, already used for
+  signup/login validation in `routes/auth.py`) likely touches stdlib `email`
+  internals. Renamed to `backend/mailer.py` before writing any code against
+  it. The plan file still says `backend/email.py` in one place; not fixed
+  retroactively since the plan is a historical record of intent, not living
+  documentation — this note is the correction.
+- **`backend/routes/classify.py`**: both `label_transaction` and
+  `accept_model_suggestion` gained a `background_tasks: BackgroundTasks`
+  parameter and now call `background_tasks.add_task(check_budget_alerts,
+  user_id)` right after their `.update(...)` call — chosen over the upload
+  path because `schedule_classification` (uploads.py) is fire-and-forget
+  with no completion hook, so a budget check queued there would race
+  against still-uncategorized transactions; these two handlers are
+  synchronous state transitions where `category_id` lands atomically in the
+  same request.
+- **`backend/config.py`** / **`backend/.env.example`**: `resend_api_key: str
+  | None = None` / `RESEND_API_KEY=`, same style as the existing Groq entry.
+- **`backend/routes/settings.py`**: `ProfileUpdate` gained
+  `alert_email_enabled: Optional[bool]` and `alert_threshold_pct:
+  Optional[float]` (bounded 0–100 via `pydantic.Field`) — no new endpoint,
+  reuses the existing `PATCH /profile` partial-update handler.
+- **`frontend/src/app/settings/SettingsClient.tsx`**: new "Budget alerts"
+  card (checkbox + threshold number input + save button), following the
+  file's own `Card`/`SectionHeader`/`Button`/`Alert` and local-state-plus-
+  try/catch pattern — this file had no prior PATCH-calling form to copy, so
+  this is the first one.
+- **Test infra extensions** (`backend/tests/fake_supabase.py`,
+  `conftest.py`): `FakeQueryBuilder.upsert` gained an `ignore_duplicates`
+  parameter (on conflict: skip silently, don't include the row in
+  `response.data` — mirrors real Postgres `ON CONFLICT DO NOTHING` +
+  `RETURNING` semantics, which is exactly what `check_budget_alerts` relies
+  on to detect "genuinely new this month"); `FakeAuthAdmin` gained
+  `get_user_by_id` plus a `seed_user_email()` test helper on
+  `FakeSupabaseClient`; `conftest.py`'s `fake_db` fixture now also patches
+  `alerts.supabase_client`.
+
+**Verified**:
+- `backend/tests/test_alerts.py` (5 new tests: skips when
+  `alert_email_enabled` is false, sends + records a `budget_alerts` row when
+  enabled, does not resend for the same crossing on a second call, no email
+  when nothing is crossed, and a true end-to-end test hitting `POST
+  /classify/{id}/label` through `TestClient` to confirm the `BackgroundTasks`
+  wiring itself — not just the unit-level function — actually fires) plus
+  the full existing `backend/tests/` suite: 61/61 pass, no regressions.
+- `frontend`: `npx tsc --noEmit` clean; `npm run build` compiles, typechecks,
+  and generates all routes with the new Settings card included. **Not
+  manually verified in a live browser** — same sandbox limitation as
+  Sessions 52–53 (no Supabase project credentials available to sign in as a
+  real user), and **no real email was sent** — `RESEND_API_KEY` is unset in
+  this sandbox, so `send_alert_email` no-ops by design; a live send has not
+  been verified and needs the real key set in the deploy environment first.
+- Cleaned up: removed the throwaway Python venv and `frontend/.next` build
+  output.
+
+**Decided**: simplified `budget_alerts`/`profiles` schema from the original
+sketch (single `alert_threshold_pct` instead of an array, `kind` instead of
+`threshold_pct`+`channel`) — recorded in the plan file directly, not just
+here. Also decided the module-naming fix (`mailer.py` not `email.py`)
+without asking, since it's a correctness fix for a bug that hadn't shipped
+yet, not a product/scope decision.
+
+**Open** (carried into the next session per the approved plan's build order):
+- Feature 2 is now fully built (in-app + email), but **not deployed**: the
+  new migration needs applying to the live Supabase project, and
+  `RESEND_API_KEY` needs setting in the real backend environment, before
+  any of this does anything in production.
+- No cron/scheduler exists anywhere in the backend — alerts remain
+  reactive-only (fire on upload/classify/label, not on a schedule).
+- Feature 3 (insights/anomalies) and Feature 4 (search/filter/bulk-recategorize,
+  then transaction splits last) — not yet built.
+- The `recurring_merchants` migration (Session 52) also still has not been
+  applied to the live Supabase project.
+
+**Next suggested step**: confirm with the user whether to apply both pending
+migrations (`recurring_merchants`, `budget_alerts`) and set `RESEND_API_KEY`
+in the live deploy now, then move to feature 3 (spending insights &
+anomalies) or feature 4 (transaction management) per their preference.
