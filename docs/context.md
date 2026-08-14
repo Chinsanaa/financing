@@ -2824,3 +2824,156 @@ and clear the deployment backlog (migrations + `RESEND_API_KEY`) first, or
 features 5–7 (multi-currency/net worth/tags) or something else entirely —
 rather than assuming splits is still the automatic next step now that it's
 the only remaining item.
+
+### Session 57 (2026-08-14) — Transaction splits (branch `claude/feature-planning-roadmap-g74j9j`)
+
+User chose to build transaction splits despite the flagged blast radius
+(it touches every spend-aggregation code path). This closes out the
+original 4-feature roadmap.
+
+**What changed:**
+- `supabase/migrations/20260814000000_add_transaction_splits.sql` (new):
+  `transactions.is_split boolean NOT NULL DEFAULT false`; new
+  `transaction_splits` table (`user_id`, `transaction_id` FK CASCADE,
+  `category_id` FK CASCADE, `amount`, `UNIQUE(transaction_id,
+  category_id)`), standard 4-policy RLS; new shared SQL RPC
+  `spend_by_category_for_user(p_user_id, p_start, p_end)` that UNIONs
+  non-split transactions' own category contribution with
+  `transaction_splits` line-items, re-aggregated in an outer `SELECT` so a
+  category never gets two rows. When a transaction is split, its own
+  `category_id` is set `NULL` — categorization lives in `transaction_splits`
+  instead, with `is_split=true` letting every call site branch cheaply.
+- **`backend/routes/classify.py`**: `_label_one` now deletes any existing
+  `transaction_splits` rows for a transaction and sets `is_split=False`
+  before applying a plain single-category label — applying a normal label
+  always collapses/clears a prior split (delete-then-update order matters
+  for this to hold). New `POST /{id}/split` (`{splits: [{category_id,
+  amount}]}`, validates ≥2 entries, no duplicate category, every category
+  owned by the user, amounts sum to the transaction's amount within 0.01;
+  replaces existing splits, sets `category_id=NULL, is_split=true,
+  needs_review=False`; does *not* run LLM-rule promotion — ambiguous which
+  category to promote from a multi-category split) and `DELETE
+  /{id}/split` (clears splits, `category_id=NULL, is_split=false,
+  needs_review=True` — back to the review queue, no fallback category
+  guessed).
+- **`backend/routes/dashboard.py`**, one call site at a time:
+  `_spend_by_category`/`get_by_category` now call the new RPC instead of
+  fetching rows and pandas-groupby-ing them (`get_by_category`'s
+  `transaction_count` is now documented as counting contributing line
+  items for split transactions, not distinct transactions).
+  `get_trends`'s "is labeled" gate changed from
+  `.not_.is_("category_id","null")` to
+  `.or_("category_id.not.is.null,is_split.eq.true")` so split transactions
+  (own `category_id` NULL) still count as labeled/spent. `get_insights`
+  fetches `transaction_splits` rows alongside the existing plain-transaction
+  fetch and concatenates them in pandas before the category+month groupby
+  (for `category_trends`); `flagged_transactions` (per-transaction anomaly
+  detection) now excludes `is_split=true` transactions outright — a split
+  transaction's whole amount isn't attributable to one category, so
+  anomaly-flagging it against any single category's mean would be wrong
+  (documented limitation: a large split transaction is never flagged).
+  `get_reports`/`export_transactions`/`get_review_queue` do *not* explode
+  split transactions into multiple rows — one row per transaction, category
+  column/cell shows `"Split (n)"`, amount stays the whole transaction
+  amount; `get_reports` additionally fetches each page's split line-items
+  via a new `.in_("transaction_id", ids)` query so the frontend can show/
+  edit the breakdown.
+- **Test infra** (`backend/tests/fake_supabase.py`): added `.in_()` support
+  (`FakeQueryBuilder.in_()` + a `kind == "in"` branch in `_matches`); added
+  a `.not.is.` branch to `_or_condition_matches` (checked before the
+  generic 3-way split, since naively splitting `"category_id.not.is.null"`
+  on `.` would misparse `op="not"`); fixed the `eq` branch in
+  `_or_condition_matches` to compare booleans correctly
+  (`str(True) == "true"` is `False` in Python — needed for
+  `is_split.eq.true` inside an OR clause). Gave
+  `spend_by_category_for_user` a genuine default implementation on
+  `FakeSupabaseClient` (computed from seeded `transactions`/
+  `transaction_splits`/`categories` rows, mirroring the real SQL RPC's
+  union-then-aggregate logic) rather than requiring every test that
+  touches `_spend_by_category`/`get_by_category`/`get_action` to
+  hand-register an RPC stub — those endpoints are heavily tested and
+  `sum_user_transactions`/`monthly_spend_by_user` turned out to have *no*
+  existing test coverage to establish a "hand-register per test" precedent
+  worth following here. All 88 pre-existing tests kept passing unmodified
+  because of this choice. Several dict-index reads in `dashboard.py` also
+  switched to `.get("is_split")` since the fake doesn't apply column
+  `DEFAULT`s (same known limitation documented in earlier sessions for
+  `recurring_merchants`), so older-shaped seeded rows without an
+  `is_split` key don't `KeyError`; `get_insights`'s pandas column-select
+  switched to `.reindex(...)` for the same reason (a plain `df[[...]]`
+  select raises `KeyError` on a missing column; `reindex` fills it with
+  `NaN` instead, then `.fillna(False)`).
+- **`frontend/src/utils/api.ts`**: added `split(transactionId, splits)` →
+  `POST /classify/{id}/split` and `unsplit(transactionId)` → `DELETE
+  /classify/{id}/split` to `api.classifyTx`.
+- **`frontend/src/components/tabs/SplitModal.tsx`** (new): centered overlay
+  `Card` with one `{Select category, number input amount}` row per split
+  line (add/remove-row buttons, minimum 2 rows), a running total vs. the
+  transaction's amount (red when mismatched, submit disabled until
+  balanced and every row filled), and a "Remove split" button shown only
+  when editing an already-split transaction.
+- **`frontend/src/components/tabs/ReportsTab.tsx`**: `Transaction`
+  interface gained `is_split`/`splits`; category cell now shows a
+  "Split (n)" badge (opens the modal pre-filled) instead of the editable
+  select when `is_split` is true, otherwise the existing badge/select plus
+  a small new "Split" text-button next to it. New `handleSplitSubmit`/
+  `handleUnsplit` handlers follow the existing `handleBulkApply`
+  try/catch/`invalidate('/dashboard')`/`reload()` shape.
+
+**Verified**:
+- `backend/tests/`: `test_classify_split.py` (10 new tests — split
+  success; rejects <2 entries, amount mismatch, unowned category,
+  duplicate category, another user's transaction; unsplit clears
+  splits/resets flags; `label_transaction` and `bulk_label_transactions`
+  both collapse a prior split), `test_dashboard_by_category_splits.py` (2
+  new — mixed split/non-split contributions, cross-user isolation),
+  `test_dashboard_trends_splits.py` (2 new), `test_dashboard_export_splits.py`
+  (1 new, asserts the actual generated xlsx workbook's category column),
+  `test_dashboard_review_queue_splits.py` (1 new), plus split-specific
+  cases added to `test_dashboard_insights.py` (2 new) and
+  `test_dashboard_reports_filters.py` (2 new). Full suite: 98/98 pass, ran
+  against a throwaway venv with `backend/requirements-dev.txt` installed,
+  zero regressions in the 88 pre-existing tests.
+- `frontend`: `npx tsc --noEmit` clean; `npm run build` compiles,
+  typechecks, and generates all routes with the Split modal and badge
+  included. **Not manually verified in a live browser** — same sandbox
+  limitation as every prior session this roadmap (no real Supabase
+  credentials available here).
+- Cleaned up: removed the throwaway Python venv and `frontend/.next` build
+  output.
+- **Not verified**: the migration was not hand-run against a live/local
+  Supabase project (no credentials in this sandbox) — the RPC's SQL was
+  reviewed carefully but not executed against real Postgres. This should
+  be the first thing checked when the migration is actually applied.
+
+**Decided**: gave the fake DB's new RPC a real default implementation
+(computed from seeded rows) instead of requiring per-test stub
+registration, since the endpoints it backs (`get_by_category`,
+`get_action`, budget alerts) are heavily tested and a stub-per-test
+approach would have meant editing many existing test files instead of
+none. This is a deliberate deviation from the original plan sketch (which
+assumed hand-registered stubs, following the `sum_user_transactions`/
+`monthly_spend_by_user` pattern) — flagged here since those two RPCs
+turned out to have no real test coverage to justify that pattern being
+"the" convention.
+
+**Open**:
+- This was the last item from the original 4-feature roadmap
+  (recurring detection, budget alerts, insights, transaction management)
+  — all four are now built (though not all deployed; see below).
+- Still not deployed: three pending migrations now (`recurring_merchants`,
+  `budget_alerts`, `transaction_splits`) need applying to the live
+  Supabase project, and `RESEND_API_KEY` needs setting in the real backend
+  environment. None of this roadmap's work is live yet.
+- No cron/scheduler exists anywhere in the backend — budget alerts and
+  subscription refresh remain reactive-only.
+- Multi-currency, net worth, and tags (features 5–7) remain
+  architecture-only sketches in the plan file, not started.
+- Split UI not manually tested in a browser — worth a first-look pass
+  once there's a live environment to test against.
+
+**Next suggested step**: check with the user on how to proceed now that
+the 4-feature roadmap is complete: (a) clear the deployment backlog
+(three pending migrations + `RESEND_API_KEY`) so this work actually goes
+live, (b) start on features 5–7 (multi-currency/net worth/tags), or (c)
+something else entirely.

@@ -13,6 +13,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import Input, { Select } from '@/components/ui/Input';
 import { formatCurrencyWhole } from '@/utils/format';
+import SplitModal from '@/components/tabs/SplitModal';
 
 interface Transaction {
   id: string;
@@ -22,6 +23,8 @@ interface Transaction {
   amount: number;
   category: string;
   category_id: string | null;
+  is_split: boolean;
+  splits?: { category_id: string; category_name: string; amount: number }[] | null;
   label_source: string;
 }
 
@@ -88,6 +91,10 @@ export default function ReportsTab() {
   const [bulkCategoryId, setBulkCategoryId] = useState('');
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkError, setBulkError] = useState('');
+
+  const [splitModalTxn, setSplitModalTxn] = useState<Transaction | null>(null);
+  const [splitSaving, setSplitSaving] = useState(false);
+  const [splitError, setSplitError] = useState('');
 
   const query = `/dashboard/reports?page=${page}&per_page=${PER_PAGE}${
     uncategorizedOnly ? '&uncategorized_only=true' : ''
@@ -179,6 +186,36 @@ export default function ReportsTab() {
       reload(); // roll back the optimistic write by refetching
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleSplitSubmit = async (txn: Transaction, splits: { category_id: string; amount: number }[]) => {
+    setSplitSaving(true);
+    setSplitError('');
+    try {
+      await api.classifyTx.split(txn.id, splits);
+      invalidate('/dashboard');
+      setSplitModalTxn(null);
+      reload();
+    } catch (err: any) {
+      setSplitError(err.response?.data?.detail || 'Failed to save split');
+    } finally {
+      setSplitSaving(false);
+    }
+  };
+
+  const handleUnsplit = async (txn: Transaction) => {
+    setSplitSaving(true);
+    setSplitError('');
+    try {
+      await api.classifyTx.unsplit(txn.id);
+      invalidate('/dashboard');
+      setSplitModalTxn(null);
+      reload();
+    } catch (err: any) {
+      setSplitError(err.response?.data?.detail || 'Failed to remove split');
+    } finally {
+      setSplitSaving(false);
     }
   };
 
@@ -413,7 +450,19 @@ export default function ReportsTab() {
                       {txn.description}
                     </td>
                     <td className="px-4 py-3">
-                      {editingId === txn.id ? (
+                      {txn.is_split ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSplitError('');
+                            setSplitModalTxn(txn);
+                          }}
+                          title="Click to edit split"
+                          className="group inline-flex items-center gap-1"
+                        >
+                          <Badge tone="neutral">Split ({txn.splits?.length ?? 0})</Badge>
+                        </button>
+                      ) : editingId === txn.id ? (
                         <select
                           autoFocus
                           defaultValue={txn.category_id ?? ''}
@@ -431,27 +480,40 @@ export default function ReportsTab() {
                           ))}
                         </select>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRowError(null);
-                            setEditingId(txn.id);
-                          }}
-                          disabled={savingId === txn.id}
-                          title="Click to change category"
-                          className="group inline-flex items-center gap-1 disabled:opacity-60"
-                        >
-                          {txn.category === 'Uncategorized' ? (
-                            <span className="rounded-pill border border-dashed border-edge/40 px-2 py-0.5 text-xs text-muted group-hover:border-accent-strong/50">
-                              Uncategorized
-                            </span>
-                          ) : (
-                            <Badge tone={toneFor(txn.category)}>{txn.category}</Badge>
-                          )}
-                          {savingId === txn.id && (
-                            <Check className="h-3 w-3 animate-pulse text-muted" />
-                          )}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRowError(null);
+                              setEditingId(txn.id);
+                            }}
+                            disabled={savingId === txn.id}
+                            title="Click to change category"
+                            className="group inline-flex items-center gap-1 disabled:opacity-60"
+                          >
+                            {txn.category === 'Uncategorized' ? (
+                              <span className="rounded-pill border border-dashed border-edge/40 px-2 py-0.5 text-xs text-muted group-hover:border-accent-strong/50">
+                                Uncategorized
+                              </span>
+                            ) : (
+                              <Badge tone={toneFor(txn.category)}>{txn.category}</Badge>
+                            )}
+                            {savingId === txn.id && (
+                              <Check className="h-3 w-3 animate-pulse text-muted" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSplitError('');
+                              setSplitModalTxn(txn);
+                            }}
+                            title="Split across categories"
+                            className="text-xs text-muted underline decoration-dotted hover:text-ink"
+                          >
+                            Split
+                          </button>
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-medium tabular-nums">
@@ -490,6 +552,21 @@ export default function ReportsTab() {
             Next <ChevronRight className="h-3.5 w-3.5" />
           </Button>
         </div>
+      )}
+
+      {splitModalTxn && (
+        <SplitModal
+          transaction={splitModalTxn}
+          categories={categories}
+          saving={splitSaving}
+          error={splitError}
+          onSubmit={(splits) => handleSplitSubmit(splitModalTxn, splits)}
+          onUnsplit={() => handleUnsplit(splitModalTxn)}
+          onClose={() => {
+            setSplitModalTxn(null);
+            setSplitError('');
+          }}
+        />
       )}
     </div>
   );

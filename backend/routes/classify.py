@@ -30,6 +30,16 @@ class BulkLabelRequest(BaseModel):
     category_id: str
 
 
+class SplitItem(BaseModel):
+    category_id: str
+    amount: float
+
+
+class SplitRequest(BaseModel):
+    """Request to split a transaction's amount across multiple categories."""
+    splits: List[SplitItem]
+
+
 async def _promote_llm_suggestion_to_rule(user_id: str, transaction: dict, category_id: str) -> None:
     """When a user confirms a transaction that was an LLM suggestion
     (label_source == 'llm'), write it back as a per-user merchant rule.
@@ -69,6 +79,10 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
     was found for this user. Callers are responsible for the category
     ownership check themselves — done once per request, not once per
     transaction, by both `label_transaction` and `bulk_label_transactions`.
+
+    Applying a plain single-category label always collapses/clears a prior
+    split: any existing transaction_splits rows for this transaction are
+    deleted and is_split is reset to False.
     """
     # Fetch the current row first so we know if it was an LLM suggestion.
     before_response = await run_query(
@@ -81,12 +95,17 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
     # must not retroactively change what "before" saw.
     before = dict(before_response.data[0])
 
+    await run_query(
+        lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
+    )
+
     response = await run_query(
         lambda: supabase_client.table("transactions").update({
             "category_id": category_id,
             "label_source": label_source,
             "needs_review": False,
             "is_manually_labeled": True,
+            "is_split": False,
         }).eq("id", transaction_id).eq("user_id", user_id).execute()
     )
     if not response.data:
@@ -170,6 +189,104 @@ async def bulk_label_transactions(request: Request, req: BulkLabelRequest, backg
         raise
     except Exception as e:
         raise internal_error(e, "classify/bulk_label_transactions")
+
+
+@router.post("/{transaction_id}/split")
+@limiter.limit("60/hour")
+async def split_transaction(request: Request, transaction_id: str, req: SplitRequest, background_tasks: BackgroundTasks):
+    """Split a transaction's amount across multiple categories.
+
+    Validates: at least 2 split entries, no duplicate category_id, every
+    category_id belongs to this user, and the split amounts sum to the
+    transaction's own amount (within 0.01, same sign convention as
+    transactions.amount — see src/parse.py). On success: replaces any
+    existing splits, clears the transaction's own category_id, and sets
+    is_split=True. Does NOT run _promote_llm_suggestion_to_rule — ambiguous
+    which category to promote from a multi-category split.
+    """
+    user_id = request.state.user_id
+
+    try:
+        if len(req.splits) < 2:
+            raise HTTPException(status_code=400, detail="A split requires at least 2 categories")
+
+        category_ids = [s.category_id for s in req.splits]
+        if len(set(category_ids)) != len(category_ids):
+            raise HTTPException(status_code=400, detail="Duplicate category in split")
+
+        txn_resp = await run_query(
+            lambda: supabase_client.table("transactions").select("amount").eq("id", transaction_id).eq("user_id", user_id).execute()
+        )
+        if not txn_resp.data:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        txn_amount = float(txn_resp.data[0]["amount"])
+
+        cat_resp = await run_query(
+            lambda: supabase_client.table("categories").select("id").eq("user_id", user_id).in_("id", category_ids).execute()
+        )
+        owned_ids = {c["id"] for c in (cat_resp.data or [])}
+        if owned_ids != set(category_ids):
+            raise HTTPException(status_code=404, detail="Category not found")
+
+        total = sum(s.amount for s in req.splits)
+        if abs(total - txn_amount) >= 0.01:
+            raise HTTPException(status_code=400, detail="Split amounts must sum to the transaction amount")
+
+        await run_query(
+            lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
+        )
+        await run_query(
+            lambda: supabase_client.table("transaction_splits").insert([
+                {"user_id": user_id, "transaction_id": transaction_id, "category_id": s.category_id, "amount": s.amount}
+                for s in req.splits
+            ]).execute()
+        )
+        response = await run_query(
+            lambda: supabase_client.table("transactions").update({
+                "category_id": None,
+                "is_split": True,
+                "needs_review": False,
+                "is_manually_labeled": True,
+                "label_source": "override",
+            }).eq("id", transaction_id).eq("user_id", user_id).execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+        background_tasks.add_task(check_budget_alerts, user_id)
+
+        return {"transaction": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "classify/split_transaction")
+
+
+@router.delete("/{transaction_id}/split")
+@limiter.limit("60/hour")
+async def unsplit_transaction(request: Request, transaction_id: str):
+    """Remove a transaction's splits; it goes back to needing review (no
+    fallback category is guessed)."""
+    user_id = request.state.user_id
+
+    try:
+        await run_query(
+            lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
+        )
+        response = await run_query(
+            lambda: supabase_client.table("transactions").update({
+                "category_id": None,
+                "is_split": False,
+                "needs_review": True,
+            }).eq("id", transaction_id).eq("user_id", user_id).execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        return {"transaction": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "classify/unsplit_transaction")
 
 
 @router.post("/{transaction_id}/accept")

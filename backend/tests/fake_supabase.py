@@ -79,6 +79,10 @@ class FakeQueryBuilder:
         self._filters.append(("ilike", col, pattern))
         return self
 
+    def in_(self, col: str, values: list):
+        self._filters.append(("in", col, list(values)))
+        return self
+
     @property
     def not_(self) -> "_NotFilter":
         """postgrest-py exposes `.not_` as a PROPERTY (not a method) whose
@@ -148,6 +152,8 @@ class FakeQueryBuilder:
                 return False
             if kind == "ilike" and not _ilike_matches(row.get(col), val):
                 return False
+            if kind == "in" and row.get(col) not in val:
+                return False
         if self._or_filter:
             conditions = self._or_filter.split(",")
             if not any(self._or_condition_matches(row, cond) for cond in conditions):
@@ -156,10 +162,19 @@ class FakeQueryBuilder:
 
     @staticmethod
     def _or_condition_matches(row: dict, condition: str) -> bool:
+        if ".not.is." in condition:
+            # PostgREST's negated-is inside an OR clause, e.g.
+            # "category_id.not.is.null" — must be checked before the generic
+            # 3-way split below, since naively splitting on "." would parse
+            # this as op="not" and misroute it.
+            col, val = condition.split(".not.is.")
+            return row.get(col) is not None if val == "null" else row.get(col) is None
         col, op, val = condition.split(".", 2)
         if op == "is":
             return row.get(col) is None if val == "null" else row.get(col) is not None
         if op == "eq":
+            if val in ("true", "false"):
+                return row.get(col) is (val == "true")
             return str(row.get(col)) == val
         if op == "ilike":
             return _ilike_matches(row.get(col), val)
@@ -329,11 +344,75 @@ class FakeSupabaseClient:
         self._tables: dict[str, FakeTable] = {}
         self.storage = FakeStorage()
         self.auth = FakeAuth()
-        # name -> callable(params) -> data, for supabase_client.rpc(name, params)
-        self.rpc_handlers: dict[str, Any] = {}
+        # name -> callable(params) -> data, for supabase_client.rpc(name, params).
+        # spend_by_category_for_user gets a real default (computed from seeded
+        # rows, mirroring the SQL RPC's union-then-aggregate logic) since it
+        # backs heavily-tested budget/action endpoints — every other RPC here
+        # (sum_user_transactions, monthly_spend_by_user, get_email_for_username)
+        # has no such default and tests register per-test lambdas instead,
+        # because nothing in this suite currently exercises those endpoints
+        # heavily enough to need one.
+        self.rpc_handlers: dict[str, Any] = {
+            "spend_by_category_for_user": self._default_spend_by_category_for_user,
+        }
 
     def table(self, name: str) -> FakeQueryBuilder:
         return self._tables.setdefault(name, FakeTable(name)).query()
+
+    def _default_spend_by_category_for_user(self, params: dict) -> list:
+        user_id = params.get("p_user_id")
+        start = params.get("p_start")
+        end = params.get("p_end")
+
+        def in_window(timestamp: Optional[str]) -> bool:
+            if timestamp is None:
+                return False
+            if start and timestamp < start:
+                return False
+            if end and timestamp >= end:
+                return False
+            return True
+
+        categories = self._tables.get("categories")
+        cat_name_by_id = {c["id"]: c["name"] for c in categories.rows} if categories else {}
+
+        contributions: list[tuple[str, float]] = []
+
+        transactions = self._tables.get("transactions")
+        if transactions:
+            for t in transactions.rows:
+                if t.get("user_id") != user_id or t.get("is_split") or not t.get("category_id"):
+                    continue
+                if not in_window(t.get("timestamp")):
+                    continue
+                contributions.append((t["category_id"], float(t.get("amount", 0))))
+
+            splits = self._tables.get("transaction_splits")
+            if splits:
+                txn_by_id = {t["id"]: t for t in transactions.rows}
+                for s in splits.rows:
+                    if s.get("user_id") != user_id:
+                        continue
+                    parent = txn_by_id.get(s.get("transaction_id"))
+                    if not parent or not in_window(parent.get("timestamp")):
+                        continue
+                    contributions.append((s["category_id"], float(s.get("amount", 0))))
+
+        totals: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for cat_id, amount in contributions:
+            totals[cat_id] = totals.get(cat_id, 0) + amount
+            counts[cat_id] = counts.get(cat_id, 0) + 1
+
+        return [
+            {
+                "category_id": cat_id,
+                "category_name": cat_name_by_id.get(cat_id, "Unknown"),
+                "amount": total,
+                "txn_count": counts[cat_id],
+            }
+            for cat_id, total in totals.items()
+        ]
 
     def rpc(self, name: str, params: dict) -> FakeRPCCall:
         return FakeRPCCall(self, name, params)

@@ -92,3 +92,54 @@ def test_empty_when_no_transactions(client, patch_jwks, make_token, fake_db):
 
     assert response.status_code == 200
     assert response.json() == {"category_trends": [], "flagged_transactions": []}
+
+
+def test_split_transaction_contributes_to_category_trends_per_line_item(client, patch_jwks, make_token, fake_db):
+    groceries_id = _seed_category(fake_db, "Groceries")
+    household_id = _seed_category(fake_db, "Household")
+    # Prior 3 months: steady 100/month in Groceries via plain transactions.
+    for i, months_back in enumerate([1, 2, 3]):
+        _seed_txn(fake_db, groceries_id, "Groceries", 100, months_back, f"prior-{i}")
+
+    # Current month: a split transaction contributing 250 to Groceries and
+    # 50 to Household — should count toward both categories' current totals.
+    fake_db.seed("transactions", [{
+        "id": "split-txn", "user_id": USER_A, "category_id": None, "is_split": True,
+        "merchant": "Costco", "amount": 300, "timestamp": _month_offset_date(0),
+    }])
+    split_timestamp = _month_offset_date(0)
+    fake_db.seed("transaction_splits", [
+        {"id": "s1", "user_id": USER_A, "transaction_id": "split-txn", "category_id": groceries_id,
+         "categories": {"name": "Groceries"}, "transactions": {"timestamp": split_timestamp}, "amount": 250},
+        {"id": "s2", "user_id": USER_A, "transaction_id": "split-txn", "category_id": household_id,
+         "categories": {"name": "Household"}, "transactions": {"timestamp": split_timestamp}, "amount": 50},
+    ])
+
+    response = client.get("/dashboard/insights", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    trends = {t["category"]: t for t in response.json()["category_trends"]}
+    assert trends["Groceries"]["current"] == 250
+
+
+def test_split_transaction_never_appears_in_flagged_transactions(client, patch_jwks, make_token, fake_db):
+    cat_id = _seed_category(fake_db, "Groceries")
+    for i in range(6):
+        _seed_txn(fake_db, cat_id, "Groceries", 20 + i, 1, f"normal-{i}")
+
+    # A split transaction whose own amount would clear the anomaly threshold
+    # by a wide margin — must never be flagged (is_split=True is excluded).
+    fake_db.seed("transactions", [{
+        "id": "split-outlier", "user_id": USER_A, "category_id": None, "is_split": True,
+        "merchant": "Costco", "amount": 5000, "timestamp": _month_offset_date(1),
+    }])
+    fake_db.seed("transaction_splits", [
+        {"id": "s1", "user_id": USER_A, "transaction_id": "split-outlier", "category_id": cat_id,
+         "categories": {"name": "Groceries"}, "transactions": {"timestamp": _month_offset_date(1)}, "amount": 5000},
+    ])
+
+    response = client.get("/dashboard/insights", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    flagged_ids = {t["id"] for t in response.json()["flagged_transactions"]}
+    assert "split-outlier" not in flagged_ids

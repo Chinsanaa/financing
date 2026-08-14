@@ -89,3 +89,41 @@ def test_filters_combine(client, patch_jwks, make_token, fake_db):
     body = response.json()
     assert body["total_count"] == 1
     assert body["transactions"][0]["id"] == "t1"
+
+
+def test_split_transaction_shows_split_badge_and_breakdown(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("categories", [
+        {"id": "cat-1", "user_id": USER_A, "name": "Groceries"},
+        {"id": "cat-2", "user_id": USER_A, "name": "Household"},
+    ])
+    fake_db.seed("transactions", [{
+        "id": "t1", "user_id": USER_A, "merchant": "Costco", "description": "",
+        "amount": 120.0, "timestamp": "2026-06-01T00:00:00", "category_id": None,
+        "categories": None, "is_split": True, "label_source": "override",
+    }])
+    fake_db.seed("transaction_splits", [
+        {"id": "s1", "user_id": USER_A, "transaction_id": "t1", "category_id": "cat-1",
+         "categories": {"name": "Groceries"}, "amount": 80.0},
+        {"id": "s2", "user_id": USER_A, "transaction_id": "t1", "category_id": "cat-2",
+         "categories": {"name": "Household"}, "amount": 40.0},
+    ])
+
+    response = client.get("/dashboard/reports", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    txn = response.json()["transactions"][0]
+    assert txn["category"] == "Split (2)"
+    assert txn["is_split"] is True
+    assert txn["amount"] == 120.0
+    assert {s["category_name"] for s in txn["splits"]} == {"Groceries", "Household"}
+
+
+def test_non_split_transaction_has_null_splits_field(client, patch_jwks, make_token, fake_db):
+    _seed_txn(fake_db, "t1", "Shop", "x", 30, "2026-06-01T00:00:00")
+
+    response = client.get("/dashboard/reports", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    txn = response.json()["transactions"][0]
+    assert txn["is_split"] is False
+    assert txn["splits"] is None

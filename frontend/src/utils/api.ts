@@ -86,6 +86,10 @@ export const api = {
       apiClient.post(`/classify/${transactionId}/accept`, {}),
     bulkLabel: (transactionIds: string[], categoryId: string) =>
       apiClient.post('/classify/bulk-label', { transaction_ids: transactionIds, category_id: categoryId }),
+    split: (transactionId: string, splits: { category_id: string; amount: number }[]) =>
+      apiClient.post(`/classify/${transactionId}/split`, { splits }),
+    unsplit: (transactionId: string) =>
+      apiClient.delete(`/classify/${transactionId}/split`),
   },
 
   categories: {
