@@ -13,6 +13,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import { AnimatedNumber } from '@/components/ui/motion';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole, formatNumber, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
+import RuleBreakdown, { useRuleData } from './RuleBreakdown';
 
 interface BudgetInfo {
   budget_config: {
@@ -49,6 +50,10 @@ export default function BudgetTab() {
   );
   const { data: categoriesData } = useApi<{ categories: Category[] }>('/categories/');
   const { toneFor, chartColorFor } = useCategoryColors();
+
+  // Same selected month as the budget list above, so the 50/30/20 breakdown
+  // below always reflects what's currently on screen.
+  const ruleQ = useRuleData(month);
 
   // Options for the selector: the resolved current month is always first, then
   // any other months that have transactions.
@@ -262,6 +267,15 @@ export default function BudgetTab() {
           </div>
         )}
       </Card>
+
+      {!editing && (
+        <div>
+          <p className="section-label mb-4">
+            50/30/20 breakdown — {selectedMonth ? formatMonthLong(selectedMonth) : 'this month'}
+          </p>
+          <RuleBreakdown data={ruleQ.data} loading={ruleQ.loading} error={ruleQ.error} />
+        </div>
+      )}
     </div>
   );
 }

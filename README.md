@@ -92,9 +92,12 @@ Supabase Auth's own project-level rate limits.
 click any category (including uncategorized rows) to reassign it; the change is
 saved immediately and flows through to the Overview and Budget views. A
 "Filters" button toggles a panel with search (merchant/description), date
-range, amount range, sort (by date or category), and rows-per-page (10/20/50/100),
-all combinable; pagination has first/previous/page-number/next/last controls.
-Select multiple rows with the checkbox column to
+range, amount range, sort (by date or category), rows-per-page (10/20/50/100),
+and a Need/Want/Savings bucket filter, all combinable; pagination has
+first/previous/page-number/next/last controls. Each row also shows a
+Need/Want/Savings badge (blank for split or uncategorized rows) using the
+same static category-bucket mapping as the 50/30/20 rule. Select multiple
+rows with the checkbox column to
 re-categorize them all at once via the bulk action bar. **Split
 transactions**: any transaction can be split across multiple categories
 (e.g. a Costco run: groceries + household) via the "Split" action next to
@@ -106,7 +109,10 @@ can be removed at any time, which sends the transaction back to the
 review queue uncategorized. **Per-month
 budgets**: the **Budget** tab has a month selector so you can see how each past
 month tracked against your budget (budgets are global, so past months compare
-against your current budget). **Category colors**: pick a color per category in
+against your current budget). Below the category list, the same month's
+50/30/20 breakdown (donut chart, actual-vs-target per bucket, guidance card —
+see below) is shown for context, hidden while the budget edit form is open.
+**Category colors**: pick a color per category in
 **Model → Categories** (12 design-system choices, hex shown, no duplicates) — the
 same color follows that category everywhere: the Overview pie chart, badges in
 Budget/Review/Label, and Reports. Categories without a chosen color get a stable

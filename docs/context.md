@@ -3831,3 +3831,100 @@ browser (ideally the deployed Render/Vercel app) — rows-per-page, sort,
 the Filters toggle, pagination edge cases, and whether the one-screen
 height budget (`calc(100vh-22rem)`) actually fits without page scroll at
 common viewport sizes; tune that value if not.
+
+### Session 61 (2026-08-14) — Budget tab: add 50/30/20 pie chart + breakdown below the category list
+
+User asked for "the pie chart and the other boxes" below the Budget tab's
+category list. Clarified via AskUserQuestion: pie chart = Needs/Wants/Savings
+split (not budget-allocation or plain spend-by-category), and the boxes =
+current % of income spent on each bucket vs the 50/30/20 targets, plus a
+guidance/advice box. This is exactly what the existing standalone 50/30/20
+tab (`RuleTab.tsx`, backed by `GET /dashboard/rule-503020`) already builds —
+so rather than duplicate ~150 lines of chart/logic, extracted it into a
+shared component and reused it in both places. Placement decision (made
+independently, not asked): kept the advice box as a full-width box below the
+chart card, matching the existing pattern in `RuleTab`, rather than the
+alternative the user floated of squeezing it into the same row — simpler and
+consistent with how the app already reads elsewhere.
+
+**What changed:**
+- New `frontend/src/components/tabs/RuleBreakdown.tsx`: extracted from the
+  old `RuleTab.tsx` — the `RuleData`/`Bucket` types, `useRuleData(month)`
+  hook (wraps `useApi` on `/dashboard/rule-503020`), and the presentational
+  piece (pie chart + per-bucket actual-vs-target rows + the advice box).
+  Takes `data`/`loading`/`error` plus an optional `header` slot (a ReactNode
+  rendered inside the top card, e.g. a month selector) so callers can attach
+  their own header without the component needing to know about it.
+- `frontend/src/components/tabs/RuleTab.tsx`: now just owns its own month
+  state/selector and delegates rendering to `<RuleBreakdown header={...} />`
+  — same visual output as before, ~100 fewer lines.
+- `frontend/src/components/tabs/BudgetTab.tsx`: added `useRuleData(month)`
+  (reusing the same `month` state the budget list already has, so both
+  sections always show the same selected month) and renders
+  `<RuleBreakdown />` below the existing "Budget by category" `Card`,
+  under a `50/30/20 breakdown — <month>` label, hidden while the budget
+  edit form (`editing`) is open to keep that form focused.
+
+**Decided**: no backend changes — `/dashboard/rule-503020` already returns
+everything needed (income, per-bucket spent/target, top categories per
+bucket for the advice text); this was purely a frontend reuse/composition
+task.
+
+**Verified**: frontend `tsc --noEmit` passes clean. No ESLint config exists
+in this repo (confirmed again this session — `next lint` only offers the
+interactive first-run setup prompt), so no lint step. **Not verified**: no
+live browser check — this sandbox still has no Supabase credentials
+configured, same limitation as Session 60.
+
+**Open**:
+- Live browser verification of both the Budget tab's new section and the
+  refactored 50/30/20 tab (make sure the extraction didn't visually regress
+  either) is still pending, alongside the Reports tab check from Session 60.
+- Everything else open from Sessions 59–60 is unchanged.
+
+**Next suggested step**: do the live-browser pass covering both this
+session's Budget tab addition and Session 60's Reports redesign together,
+since neither has been checked in a running browser yet.
+
+### Session 62 (2026-08-14) — Reports tab: Need/Want/Savings bucket column + filter
+
+User asked to add Need/Want/Savings to the Reports tab too. Clarified via
+AskUserQuestion: a badge column (reusing the same sky/amber/emerald colors
+as the 50/30/20 breakdown) plus a Bucket filter dropdown in the existing
+Filters panel — no sort-by-bucket. Uncategorized/split rows show blank
+(no badge) rather than guessing, since `CATEGORY_BUCKET` maps a single
+category name to a bucket and neither of those rows has exactly one.
+
+**What changed:**
+- `backend/routes/dashboard.py` `GET /reports`: new optional `bucket`
+  query param (`Need`/`Want`/`Savings`, unrecognized values ignored). When
+  set, looks up the user's category ids whose name falls in that bucket
+  (via `CATEGORY_BUCKET`, already imported for the 50/30/20 endpoint) and
+  filters `.in_("category_id", ids)`; short-circuits to an empty page if
+  the user has none of that bucket's categories (avoids passing an empty
+  list to `.in_()`). Each returned row now also carries a `bucket` field
+  (`None` for split rows, uncategorized rows, and categories not in the
+  static mapping).
+- `backend/tests/test_dashboard_reports_filters.py`: four new tests —
+  bucket field correctness (including the split/uncategorized None cases),
+  the `?bucket=` filter narrowing results, the empty-match short-circuit,
+  and an unrecognized bucket value being ignored rather than erroring.
+- `frontend/src/components/tabs/ReportsTab.tsx`: `Transaction.bucket`
+  added to the interface; new `bucketFilter` state feeding a `Bucket`
+  `<Select>` (All/Need/Want/Savings) in the filters panel next to Sort
+  by/Rows per page; new table column rendering a `Badge` with
+  `toneForKey('sky'|'amber'|'emerald')` (same palette as
+  `RuleBreakdown.tsx`) via a small `BUCKET_TONE` map, blank when
+  `txn.bucket` is `null`.
+
+**Verified**: full backend suite (116/116) and frontend `tsc --noEmit`
+pass. **Not verified**: no live browser check (still no Supabase
+credentials in this sandbox) — same open item as Sessions 60–61.
+
+**Open**: the live-browser verification backlog now covers three things —
+Session 60's Reports redesign, Session 61's Budget-tab 50/30/20 section,
+and this session's bucket column/filter. All three should be checked
+together in one pass once real credentials are available.
+
+**Next suggested step**: the live-browser pass (unchanged ask from
+Session 61, now with one more item to check).

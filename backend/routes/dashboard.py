@@ -858,6 +858,7 @@ async def get_reports(
     max_amount: Optional[float] = None,
     sort_by: Optional[str] = "date",
     sort_dir: Optional[str] = "desc",
+    bucket: Optional[str] = None,
 ):
     """Detailed reports: paginated transaction list.
 
@@ -870,7 +871,10 @@ async def get_reports(
     independent of each other and of the category filters, so any
     combination can apply at once. `sort_by` (`date`/`category`) and
     `sort_dir` (`asc`/`desc`) control ordering; unrecognized values fall back
-    to the defaults (date, newest first) rather than erroring.
+    to the defaults (date, newest first) rather than erroring. `bucket`
+    (`Need`/`Want`/`Savings`) filters to categories in that CATEGORY_BUCKET
+    group (see the 50/30/20 endpoint below for what that mapping is/isn't);
+    unrecognized values are ignored rather than erroring.
     """
     user_id = request.state.user_id
     page = max(1, page)
@@ -879,6 +883,8 @@ async def get_reports(
         sort_by = "date"
     if sort_dir not in ("asc", "desc"):
         sort_dir = "desc"
+    if bucket not in ("Need", "Want", "Savings"):
+        bucket = None
 
     try:
         start = (page - 1) * per_page
@@ -903,6 +909,22 @@ async def get_reports(
             query = query.gte("amount", min_amount)
         if max_amount is not None:
             query = query.lte("amount", max_amount)
+
+        if bucket:
+            bucket_category_names = [name for name, b in CATEGORY_BUCKET.items() if b == bucket]
+            bucket_cat_resp = await run_query(
+                lambda: supabase_client.table("categories")
+                .select("id")
+                .eq("user_id", user_id)
+                .in_("name", bucket_category_names)
+                .execute()
+            )
+            bucket_category_ids = [c["id"] for c in (bucket_cat_resp.data or [])]
+            if not bucket_category_ids:
+                # None of this user's categories fall in the requested bucket —
+                # short-circuit rather than pass an empty list to .in_().
+                return {"transactions": [], "total_count": 0, "page": page, "per_page": per_page}
+            query = query.in_("category_id", bucket_category_ids)
 
         if sort_by == "category":
             query = query.order("name", desc=(sort_dir == "desc"), foreign_table="categories")
@@ -940,11 +962,12 @@ async def get_reports(
             rows = []
             for txn in (response.data or []):
                 is_split = bool(txn.get("is_split"))
+                category_name = txn["categories"]["name"] if txn["categories"] else None
                 if is_split:
                     n = split_counts.get(txn["id"], 0)
                     category_label = f"Split ({n})"
                 else:
-                    category_label = txn["categories"]["name"] if txn["categories"] else "Uncategorized"
+                    category_label = category_name or "Uncategorized"
                 rows.append({
                     "id": txn["id"],
                     "date": txn["timestamp"],
@@ -956,6 +979,10 @@ async def get_reports(
                     "is_split": is_split,
                     "splits": splits_by_txn.get(txn["id"], []) if is_split else None,
                     "label_source": txn["label_source"],
+                    # No single bucket for a split (spans categories) or an
+                    # uncategorized row (no category at all); custom
+                    # categories not in CATEGORY_BUCKET also fall back to None.
+                    "bucket": None if is_split or category_name is None else CATEGORY_BUCKET.get(category_name),
                 })
             return rows
 

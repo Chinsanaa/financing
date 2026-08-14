@@ -18,6 +18,7 @@ import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import { useCategoryColors } from '@/utils/useCategoryColors';
+import { toneForKey } from '@/utils/categoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import Input, { Select } from '@/components/ui/Input';
@@ -35,6 +36,7 @@ interface Transaction {
   is_split: boolean;
   splits?: { category_id: string; category_name: string; amount: number }[] | null;
   label_source: string;
+  bucket: 'Need' | 'Want' | 'Savings' | null;
 }
 
 interface ReportsData {
@@ -57,6 +59,15 @@ const SORT_OPTIONS: { value: string; sortBy: 'date' | 'category'; sortDir: 'asc'
   { value: 'category-asc', sortBy: 'category', sortDir: 'asc', label: 'Category (A–Z)' },
   { value: 'category-desc', sortBy: 'category', sortDir: 'desc', label: 'Category (Z–A)' },
 ];
+
+// Same fixed sky/amber/emerald palette as the 50/30/20 breakdown
+// (RuleBreakdown.tsx) — these are aggregate buckets, not per-category
+// identities, so they stay constant rather than going through useCategoryColors().
+const BUCKET_TONE: Record<'Need' | 'Want' | 'Savings', string> = {
+  Need: toneForKey('sky'),
+  Want: toneForKey('amber'),
+  Savings: toneForKey('emerald'),
+};
 
 const LABEL_SOURCES: Record<string, string> = {
   rule: 'Rule',
@@ -105,6 +116,7 @@ export default function ReportsTab() {
   const [dateTo, setDateTo] = useState('');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
+  const [bucketFilter, setBucketFilter] = useState('');
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState('');
@@ -123,7 +135,7 @@ export default function ReportsTab() {
     dateFrom ? `&date_from=${dateFrom}` : ''
   }${dateTo ? `&date_to=${dateTo}` : ''}${minAmount ? `&min_amount=${minAmount}` : ''}${
     maxAmount ? `&max_amount=${maxAmount}` : ''
-  }`;
+  }${bucketFilter ? `&bucket=${bucketFilter}` : ''}`;
   const { data: reports, loading, error, setData, reload } = useApi<ReportsData>(query);
   const { data: cats } = useApi<{ categories: Category[] }>('/categories/');
   const { toneFor } = useCategoryColors();
@@ -433,6 +445,21 @@ export default function ReportsTab() {
                 ))}
               </Select>
             </div>
+            <div className="w-[140px]">
+              <Select
+                label="Bucket"
+                value={bucketFilter}
+                onChange={(e) => {
+                  setBucketFilter(e.target.value);
+                  resetPageAndSelection();
+                }}
+              >
+                <option value="">All</option>
+                <option value="Need">Need</option>
+                <option value="Want">Want</option>
+                <option value="Savings">Savings</option>
+              </Select>
+            </div>
             <label className="flex cursor-pointer items-center gap-2 pb-2.5 text-sm text-muted">
               <input
                 type="checkbox"
@@ -502,6 +529,7 @@ export default function ReportsTab() {
                   <th className="px-4 py-3 text-left font-medium text-muted">Merchant</th>
                   <th className="px-4 py-3 text-left font-medium text-muted">Description</th>
                   <th className="px-4 py-3 text-left font-medium text-muted">Category</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted">Bucket</th>
                   <th className="px-4 py-3 text-right font-medium text-muted">Amount</th>
                   <th className="px-4 py-3 text-center font-medium text-muted">Source</th>
                 </tr>
@@ -591,6 +619,9 @@ export default function ReportsTab() {
                           </button>
                         </div>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {txn.bucket && <Badge tone={BUCKET_TONE[txn.bucket]}>{txn.bucket}</Badge>}
                     </td>
                     <td className="px-4 py-3 text-right font-medium tabular-nums">
                       {formatCurrencyWhole(txn.amount)}
