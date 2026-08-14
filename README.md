@@ -68,7 +68,7 @@ Two very different questions:
 The ten original tabs are grouped into five compact sections with sub-tabs:
 **Overview** (a monthly-spending line chart + category split), **Transactions**
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
-(Budget / Savings / Subscriptions / Action plan), and **Reports**. A dismissible onboarding
+(Budget / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible onboarding
 checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
 separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
@@ -115,6 +115,13 @@ Budget alerts** turns on email notifications with a configurable
 category/month so the same crossing is never sent twice, and are checked
 reactively (when you upload, review, or label a transaction), not on a
 schedule, since no background scheduler exists yet.
+
+**Insights**: **Planning → Insights** compares each category's current-month
+spend to its trailing 3-month average (flagging notable swings either way)
+and lists individual transactions whose amount is unusually large for their
+category (more than 2 standard deviations above that category's mean,
+skipped for categories with too little history to judge). Both are computed
+fresh on every load — nothing is persisted.
 
 ## Quick start (local)
 

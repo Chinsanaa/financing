@@ -2639,3 +2639,86 @@ yet, not a product/scope decision.
 migrations (`recurring_merchants`, `budget_alerts`) and set `RESEND_API_KEY`
 in the live deploy now, then move to feature 3 (spending insights &
 anomalies) or feature 4 (transaction management) per their preference.
+
+### Session 55 (2026-08-14) — Spending insights & anomalies (branch `claude/feature-planning-roadmap-g74j9j`)
+
+User said "next feature" with feature 2 fully shipped; per the roadmap
+order this meant feature 3. Re-grounded the plan file's feature-3 sketch
+against the real `backend/routes/dashboard.py` (822 lines as of Session 54)
+via a fresh Explore pass before building, same discipline as prior sessions.
+
+- **`backend/routes/dashboard.py`**: extracted the trailing-3-month cutoff
+  calc that `get_savings` already had inline (`three_months_ago = ...`) into
+  a new shared `_months_ago_start(n, now=None)` helper next to `_month_start`
+  — `get_savings` now calls it too, behavior unchanged, just no longer
+  duplicated. New `GET /insights` endpoint: one query for `transactions`
+  joined to `categories(name)` over the trailing 3-month window (not N calls
+  to the existing single-month `_spend_by_category`, following `get_trends`'s
+  "one query, group in pandas" style instead), producing two things:
+  - `category_trends`: this month's spend vs. the mean of that category's
+    spend in the prior (up to 3) months, sorted by `abs(pct_change)`
+    descending. Categories with no prior-month baseline are omitted
+    entirely (not shown as "0% change" — there's nothing to compare).
+  - `flagged_transactions`: per category, transactions whose amount exceeds
+    `mean + 2*std` for that category within the window — skipped entirely
+    for categories with fewer than 5 transactions (`MIN_TRANSACTIONS_FOR_ANOMALY`),
+    since 2-std on a tiny sample isn't a meaningful signal. This is
+    genuinely new logic; confirmed via grep that no anomaly/outlier/std/
+    z-score code existed anywhere in the repo before this.
+  This is a *per-category* extension of the same idea `get_savings` already
+  does in aggregate (whole-account spend vs. 3-month average, 1.3x
+  threshold) — `get_savings` itself is untouched apart from reusing the
+  extracted helper.
+- **`frontend/src/components/tabs/InsightsTab.tsx`** (new): trend cards
+  (amber `--chart-5` for increases matching Session 53's approaching-budget
+  convention, `text-success` for decreases) plus a flagged-transactions
+  list. `ReportsTab.tsx` has no extractable row component to reuse (fully
+  inline JSX table) — this list is small, read-only, and simpler than
+  Reports' editable rows, so it got its own minimal inline rendering
+  instead of forcing reuse of heavier markup that doesn't fit.
+- Wired in as a new "Insights" sub-tab under Planning (between Subscriptions
+  and Action plan) in `DashboardClient.tsx` — same `dynamic()` import +
+  `SECTIONS`/`TAB_SECTION` + render-line pattern as every prior tab addition
+  this roadmap.
+
+**Verified**:
+- `backend/tests/test_dashboard_insights.py` (5 new tests: a category trend
+  is flagged correctly with real numbers checked — not just "some result
+  came back", a category with no prior-month history is correctly omitted,
+  a single outlier transaction is flagged while five normal ones aren't, a
+  too-small category is never flagged even with an extreme value present,
+  and the empty-data shape is correct) — dates are computed relative to the
+  real `_now_cn()`/`_month_start()` clock via helper functions imported
+  from `routes.dashboard`, not hardcoded, so the tests aren't fragile to
+  which month they happen to run in. Full existing `backend/tests/` suite:
+  66/66 pass, no regressions (the `_months_ago_start` extraction didn't
+  change `get_savings`' behavior for any existing test).
+- `frontend`: `npx tsc --noEmit` clean; `npm run build` compiles,
+  typechecks, and generates all routes with the new Insights tab included.
+  **Not manually verified in a live browser** — same sandbox limitation as
+  every prior session this roadmap (no Supabase project credentials
+  available to sign in as a real user).
+- Cleaned up: removed the throwaway Python venv and `frontend/.next` build
+  output.
+
+**Decided**: nothing new decided beyond what's already recorded in the plan
+file — this session executed feature 3 as planned with no scope changes.
+
+**Open** (carried into the next session per the approved plan's build order):
+- Feature 4 (transaction search/filter/bulk-recategorize, then transaction
+  splits last) — not yet built; splits in particular is flagged in the plan
+  as the highest-blast-radius item in the whole roadmap (touches four
+  existing aggregation endpoints).
+- Still not deployed: two pending migrations (`recurring_merchants`,
+  `budget_alerts`) need applying to the live Supabase project, and
+  `RESEND_API_KEY` needs setting in the real backend environment, before
+  any of Sessions 52–54's work does anything in production.
+- No cron/scheduler exists anywhere in the backend — budget alerts and
+  subscription refresh remain reactive-only.
+
+**Next suggested step**: continue the approved plan's build order with
+feature 4 (search/filter/bulk-recategorize on `GET /dashboard/reports` and
+a new `POST /classify/bulk-label`, building transaction splits last and
+separately given its blast radius) — or confirm with the user first whether
+to pause and address the deployment backlog (migrations + `RESEND_API_KEY`)
+before adding more undeployed features on top.

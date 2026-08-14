@@ -32,6 +32,13 @@ def _month_start(now: datetime = None) -> datetime:
     return datetime(now.year, now.month, 1)
 
 
+def _months_ago_start(n: int, now: datetime = None) -> datetime:
+    """First-of-month, n months before `now` (or the current month)."""
+    now = now or _now_cn()
+    total_months = now.year * 12 + (now.month - 1) - n
+    return datetime(total_months // 12, total_months % 12 + 1, 1)
+
+
 @router.get("/summary")
 async def get_summary(request: Request):
     """Overall summary: total transactions, labeled%, total spend."""
@@ -377,8 +384,7 @@ async def get_savings(request: Request):
         current_spend = float(spend_resp.data or 0)
 
         # Simple anomaly detection: compare to average of last 3 months
-        three_months_ago = datetime(now.year if now.month >= 4 else now.year - 1,
-                                    now.month - 3 if now.month >= 4 else now.month + 9, 1)
+        three_months_ago = _months_ago_start(3, now)
 
         # Per-month totals computed in Postgres — a handful of rows (one per
         # month) instead of every raw transaction in the window.
@@ -521,6 +527,89 @@ async def get_action(request: Request):
         raise
     except Exception as e:
         raise internal_error(e, "dashboard/action")
+
+
+MIN_TRANSACTIONS_FOR_ANOMALY = 5  # per category, within the trailing window
+ANOMALY_STD_MULTIPLIER = 2
+
+
+@router.get("/insights")
+async def get_insights(request: Request):
+    """Per-category spending trend (this month vs. trailing 3-month average)
+    and per-transaction amount anomalies within that same window.
+
+    Read-only, nothing persisted — same "compute fresh every call" approach
+    as `get_action`/`_budget_crossings`, just per-category and per-transaction
+    instead of per-budget-limit.
+    """
+    user_id = request.state.user_id
+
+    try:
+        now = _now_cn()
+        month_start = _month_start(now)
+        window_start = _months_ago_start(3, now)
+
+        rows = await fetch_all_async(
+            lambda: supabase_client.table("transactions")
+            .select("id, merchant, amount, timestamp, categories(name)")
+            .eq("user_id", user_id)
+            .not_.is_("category_id", "null")
+            .gte("timestamp", window_start.isoformat())
+        )
+        if not rows:
+            return {"category_trends": [], "flagged_transactions": []}
+
+        df = pd.DataFrame(rows)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df["category_name"] = df["categories"].apply(lambda x: x["name"] if x else "Unknown")
+        df["month"] = df["timestamp"].dt.to_period("M")
+
+        current_period = pd.Period(month_start, freq="M")
+        current_df = df[df["month"] == current_period]
+        prior_df = df[df["month"] != current_period]
+
+        current_by_cat = current_df.groupby("category_name")["amount"].sum()
+        prior_avg_by_cat = (
+            prior_df.groupby(["category_name", "month"])["amount"].sum().groupby("category_name").mean()
+        )
+
+        category_trends = []
+        for cat in set(current_by_cat.index) | set(prior_avg_by_cat.index):
+            avg = float(prior_avg_by_cat.get(cat, 0))
+            if avg <= 0:
+                continue  # no prior-month baseline to compare against
+            current = float(current_by_cat.get(cat, 0))
+            category_trends.append({
+                "category": cat,
+                "current": round(current, 2),
+                "avg_3mo": round(avg, 2),
+                "pct_change": round(100 * (current - avg) / avg, 1),
+            })
+        category_trends.sort(key=lambda t: abs(t["pct_change"]), reverse=True)
+
+        flagged_transactions = []
+        for cat, group in df.groupby("category_name"):
+            if len(group) < MIN_TRANSACTIONS_FOR_ANOMALY:
+                continue
+            std = group["amount"].std()
+            if not std or pd.isna(std):
+                continue
+            threshold = group["amount"].mean() + ANOMALY_STD_MULTIPLIER * std
+            for _, txn in group[group["amount"] > threshold].iterrows():
+                flagged_transactions.append({
+                    "id": txn["id"],
+                    "merchant": txn["merchant"],
+                    "category": cat,
+                    "amount": float(txn["amount"]),
+                    "timestamp": txn["timestamp"].isoformat(),
+                })
+        flagged_transactions.sort(key=lambda t: t["amount"], reverse=True)
+
+        return {"category_trends": category_trends, "flagged_transactions": flagged_transactions}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/insights")
 
 
 @router.get("/reports")
