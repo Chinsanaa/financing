@@ -124,15 +124,20 @@ re-detection runs. Detection logic lives in `src/recurring.py` (pure pandas,
 no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
 detection, and upserts into the `recurring_merchants` cache table.
 
-**Budget alerts**: the header's notification bell shows a live count of
-over-budget and approaching-budget categories, computed on every load by
-`GET /dashboard/action`. Clicking it jumps to **Planning → Action plan**,
-which lists both kinds of budget warnings as cards. Optionally, **Settings →
-Budget alerts** turns on email notifications with a configurable
-"approaching budget" threshold (default 80%) — emails are de-duplicated per
-category/month so the same crossing is never sent twice, and are checked
-reactively (when you upload, review, or label a transaction), not on a
-schedule, since no background scheduler exists yet.
+**Notifications**: the header's notification bell shows a live count of
+over-budget and approaching-budget categories and opens a dropdown with
+those items plus any pending-review reminder, computed on every load by
+`GET /dashboard/action` — no separate notifications table, it's the same
+live data **Planning → Action plan** shows, just reachable without leaving
+the page ("View all in Planning" in the dropdown links there for the fuller
+view). **Settings → Notification preferences** has three categories: Budget
+alerts (in-app + email, with a configurable "approaching budget" threshold,
+default 80%), Pending review reminders (in-app only), and Monthly spending
+overview (email only — a settings toggle today, sending isn't built yet).
+Budget alert emails are de-duplicated per category/month so the same
+crossing is never sent twice, and are checked reactively (when you upload,
+review, or label a transaction), not on a schedule, since no background
+scheduler exists yet.
 
 **Insights**: **Planning → Insights** compares each category's current-month
 spend to its trailing 3-month average (flagging notable swings either way)

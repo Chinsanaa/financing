@@ -64,21 +64,35 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 53): added the 50/30/20 Planning tab, fixed the Budget
-tab's progress-bar/status coloring, changed the Overview stat tiles
-(Transactions → Monthly income, Labeled → labeled/total fraction), and
-added the missing insurance merchant rule. See Session 53 log for full
-detail.
+Current (Session 54): reworked the notification system — Settings gained a
+3-category "Notification preferences" section (Budget alerts, Pending
+review reminders, Monthly spending overview), the header bell is now a
+real dropdown instead of pure navigation, and `GET /dashboard/action`
+respects the new in-app toggles. See Session 54 log for full detail.
 
 Next:
-1. **Live UI verification not done.** All of this session's frontend work
-   (new RuleTab, Budget tab color fix, StatsTab tile changes) was verified
-   via `tsc --noEmit` + `next build` + backend pytest only — no live browser
-   session against the real account to visually confirm the 50/30/20 pie
-   chart, the advice card's wording with real numbers, or that the Budget
-   bar colors actually look right against each category's chosen color.
-   **Do this first** before trusting the feature is done.
-2. **Retrain the live model — deliberately deferred, not just blocked.**
+1. **Live UI verification not done — same gap as Session 53, now covering
+   more surface area.** Verified via `tsc --noEmit` + `next build` +
+   `pytest` (203 passing) only. No live browser session to confirm: the
+   bell dropdown opens/closes/positions correctly (right-aligned panel,
+   click-outside/Escape dismissal), the new `Switch` components render and
+   toggle correctly, the Settings page's 3 new sub-sections read well, or
+   that Session 53's 50/30/20 tab / Budget bar colors actually look right
+   — **two sessions of unverified frontend work have now stacked up**.
+   Strongly recommend an actual browser pass (or Playwright session with
+   test credentials) before adding more UI on top.
+2. **Monthly spending overview is a settings toggle only — no delivery
+   exists.** Confirmed with the user this session (`AskUserQuestion`):
+   ship the toggle now, build real sending later. To make it real: a new
+   backend endpoint that computes each user's prior-month summary (total
+   spend, top categories, budget performance — reuse
+   `sum_user_transactions`/`spend_by_category_for_user` RPCs already used
+   elsewhere) + a new mailer function + a dedup table (same pattern as
+   `budget_alerts`, keyed on user+month) + an actual monthly trigger (a
+   Render Cron Job hitting the new endpoint, since there's no cron/scheduler
+   anywhere in this backend today — everything alert-related is reactive,
+   fired from `classify.py`'s label-setting endpoints).
+3. **Retrain the live model — deliberately deferred, not just blocked.**
    Investigated this properly same-session (user asked "next task" →
    retrain): checked live labeled-transaction counts per category and found
    **zero** labeled samples in all 5 of the truly-new categories (Housing,
@@ -100,15 +114,21 @@ Next:
    retrains themselves via Model → Training in their own browser session.
    Nothing to build here — this is a "wait for data" state, not a "blocked
    on tooling" state.
-3. The 50/30/20 Need/Want/Savings bucket mapping
+4. The 50/30/20 Need/Want/Savings bucket mapping
    (`src/categories.py::CATEGORY_BUCKET`) is a first-pass judgment call
    confirmed with the user in the abstract (e.g. Education→Need, Transfers &
    Gifts→Want) — worth revisiting once the user has looked at a real month's
    breakdown and has opinions about specific categories.
-4. Session 52's still-open items remain open: no live `classify_all()` run
+5. Session 52's still-open items remain open: no live `classify_all()` run
    against real transaction text for the Watsons/NYU Shanghai rule moves;
    "Investments" category rules are unconfirmed against real merchant
    strings; new-category merchant rules generally are first-pass guesses.
+
+Previous (Session 53): added the 50/30/20 Planning tab, fixed the Budget
+tab's progress-bar/status coloring, changed the Overview stat tiles
+(Transactions → Monthly income, Labeled → labeled/total fraction), and
+added the missing insurance merchant rule. See Session 53 log for full
+detail.
 
 Previous (Session 52): expanded the ML category taxonomy from 7 to 13
 categories (added Housing, Personal Care & Health, Entertainment, Travel,
@@ -210,7 +230,7 @@ Next:
    limiting (Session 49's lockout is client-side only — see that session's
    log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 53, 2026-08-14)
+## Current State (Session 54, 2026-08-14)
 
 | Item | Status |
 |---|---|
@@ -252,8 +272,108 @@ Next:
 | 50/30/20 budgeting rule | **NEW** (Session 53): Planning → "50/30/20" tab. `src/categories.py::CATEGORY_BUCKET` maps all 13 ML categories to Need/Want/Savings (independent of the pre-existing `budget_category_config.type` Need/Want enum, which only covers categories a user has set a $ budget for — this new mapping buckets ALL of a month's spend). `GET /dashboard/rule-503020?month=` (new) returns per-bucket target ($=income×50/30/20%) vs actual spend; Savings = Investments-category spend + unspent income (`max(income − total_spend, 0)`), confirmed with the user since Investments-only would read ~0% most months. Frontend `RuleTab.tsx`: donut chart (3 fixed bucket colors, not per-category) + per-bucket progress rows + a rule-based advice card (prioritizes a savings shortfall, then whichever spend bucket runs hottest, names the top offending category; "on track" success state within ±3pp of all three targets) |
 | Budget tab colors | **FIXED** (Session 53): progress bars were a 3-way status color (danger red / amber `--chart-5` / accent) that ignored category identity — the amber especially read as "neon yellow" to the user. `ProgressBar` (`ui-feedback.tsx`) gained an optional `fillColor` prop (raw CSS color, additive — 3 other call sites unaffected) so the bar now always shows the category's own `chartColorFor()` color; over/approaching-budget status moved to the spend-amount TEXT color only (red when over, amber above 80%) instead of changing the bar |
 | Overview stat tiles | **CHANGED** (Session 53): the "Transactions" tile (raw count) replaced with "Monthly income" (`profiles.monthly_income`, reused via the existing `_monthly_income()` helper — now also returned by `GET /dashboard/summary`). Labeled explicitly as *monthly* rather than "Total income" since the parser drops all 收入/income transaction rows at parse time (`src/parse.py` keeps `收/支 == '支出'` only) — there's no real lifetime income figure to pair with the all-time "Total spend" tile next to it. The "Labeled" tile now shows a `labeled / total` fraction (e.g. "742 / 900") instead of just the labeled count, so the removed transaction total still surfaces |
+| Notification system | **REWORKED** (Session 54): `profiles` gained 3 new booleans (`budget_inapp_enabled`, `pending_review_inapp_enabled` — both default `true`, preserving prior always-on behavior; `monthly_overview_email_enabled` — default `false`, preference-only, no sending logic exists yet). `GET /dashboard/action` now filters its `over_budget`/`approaching_budget`/`pending_review` items by these toggles (single source of truth — both the bell and the Action plan tab read it). Settings' single flat "Budget alerts" card became a 3-category "Notification preferences" section (Budget alerts, Pending review reminders, Monthly spending overview) using a new reusable `Switch` component. The header bell (`NotificationBell.tsx`) is no longer pure navigation — it's a real dropdown (reusing `CategoryColorPicker`'s ref/mousedown/Escape popover pattern) showing the same live `GET /dashboard/action` data inline, with a "View all in Planning" footer link into the unchanged `ActionTab`. No persisted notifications table was built — deliberately out of scope, nothing needed it (see Session 54 log) |
 
 ## Session Log
+
+### Session 54 (2026-08-14) — Notification system rework
+
+**Scope**: user asked to "remake the notification area of the app" —
+Settings should get a proper Notifications section organized by category
+(each with in-app/email switches), and the header bell should show
+in-app notifications directly instead of just navigating to Planning
+("shows something on planning which I don't want"), with the content that
+used to live behind that navigation still reachable from Planning. The
+user explicitly delegated which extra categories to add ("give multiple
+sections that you think the project may need like monthly overview or
+something") and told me to make the design decisions generally.
+
+**Process**: used plan mode with two parallel Explore agents (frontend:
+`NotificationBell`, `ActionTab`, Settings' existing alert card, dropdown
+patterns to reuse; backend: `alerts.py`/Resend integration, `_budget_crossings`,
+whether any persisted notifications table exists, `profiles` schema). Key
+finding from research: there is **no persisted notifications table
+anywhere** — the in-app side has always been 100% computed live on every
+`GET /dashboard/action` call, and the bell was pure navigation with zero
+dropdown/open state of its own. Confirmed one real scope decision with the
+user via `AskUserQuestion`: whether to build actual scheduled delivery for
+a new "Monthly overview" email category (would need a new backend endpoint
++ a Render Cron Job, since this backend has no cron/scheduler at all —
+everything alert-related is reactive) or ship it as a settings toggle only
+for now. **User chose toggle-only** — avoids the new feature silently
+half-existing (a toggle with no delivery would be worse if left
+unexplained, so the UI copy says so explicitly).
+
+**Design decisions**:
+- **Three notification categories**: Budget alerts (existing, extended
+  with a real in-app toggle — previously in-app was always-on with no way
+  to turn it off at all), Pending review reminders (new, in-app only — no
+  email path exists for this so didn't add a switch that would lie),
+  Monthly spending overview (new, email only — an in-app toggle wouldn't
+  mean anything for a periodic digest; explicit "hasn't shipped yet" copy
+  in the UI since the toggle is honestly a no-op today).
+- **No new notifications table.** The bell dropdown reuses the exact same
+  live `GET /dashboard/action` data `ActionTab` already renders — building
+  a persisted history/read-state table would have been speculative
+  infrastructure with nothing concrete asking for it (the user's ask was
+  "show it directly on click", not "let me see past notifications").
+- **In-app toggles get real enforcement**, not just UI placeholders: they
+  filter `GET /dashboard/action`'s response server-side, so the bell badge,
+  the bell dropdown, and the Action plan tab all stay in sync automatically
+  (single source of truth, same "never let two things drift" principle the
+  codebase already uses for `_budget_crossings` between in-app and email).
+
+**Code changes**:
+- New migration `supabase/migrations/20260814030000_notification_prefs.sql`,
+  applied live to project `pxxqqffwummhkohnrvtz`: `profiles` gains
+  `budget_inapp_enabled`/`pending_review_inapp_enabled` (both default
+  `true`, preserving existing always-on behavior for every current user)
+  and `monthly_overview_email_enabled` (default `false`, since nothing
+  should silently opt existing users into a feature that doesn't send
+  anything yet). Verified live via `execute_sql`.
+- `backend/routes/settings.py`: `ProfileUpdate` gained the 3 new optional
+  fields — the existing generic `PATCH /settings/profile`
+  (`exclude_unset=True`) handles them with no other backend change needed.
+- `backend/routes/dashboard.py`, `GET /dashboard/action`: now fetches the
+  2 new in-app columns alongside the existing `alert_threshold_pct` read
+  (no extra round trip), and skips computing/including
+  `over_budget`/`approaching_budget` entirely when `budget_inapp_enabled`
+  is false, and skips the `pending_review` query+item when
+  `pending_review_inapp_enabled` is false. New tests in
+  `backend/tests/test_dashboard_action.py`: each toggle disabled
+  independently (confirms the other type still shows), plus a
+  no-profile-row case confirming both default to enabled.
+- New `frontend/src/components/ui/Switch.tsx` — small reusable on/off
+  switch (no such component existed before; Settings' only prior "switch"
+  was a raw styled checkbox), used throughout the reworked section.
+- `frontend/src/app/settings/SettingsClient.tsx`: replaced the single flat
+  "Budget alerts" card with a "Notification preferences" section
+  containing the 3 categories described above, each with `Switch`
+  toggles; save button/logic unchanged in shape (one combined
+  `PATCH /settings/profile` call, renamed "Save notification preferences").
+- `frontend/src/components/ui/NotificationBell.tsx`: rewritten from a
+  34-line plain button into a real dropdown, reusing
+  `CategoryColorPicker.tsx`'s existing ref + `mousedown`/`Escape` listener
+  popover pattern (no new library). Panel renders the same
+  `over_budget`/`approaching_budget`/`pending_review` items `ActionTab`
+  shows, styled compactly with the same color tokens; a "View all in
+  Planning" footer button closes the dropdown and hands off to the
+  unchanged `ActionTab` via a renamed `onViewAll` prop (was `onClick`,
+  which used to be the bell's ONLY behavior — clicking the bell no longer
+  means "navigate away").
+- `frontend/src/app/dashboard/DashboardClient.tsx`: prop rename only
+  (`onClick` → `onViewAll`) to match the bell's new signature; `ActionTab`
+  itself and the Action-plan sub-tab are otherwise untouched.
+
+**Verified**: `pytest tests/ backend/tests/` → 203 passing (99 src + 104
+backend, up from 200 — the 3 new toggle-filtering tests). `npx tsc --noEmit`
+and `npm run build` both clean. Live-verified the 3 new `profiles` columns
+via `execute_sql` post-migration. **Not verified**: no live browser session
+— the dropdown's open/close/positioning behavior, the new `Switch`
+components' look, and the reworked Settings layout were not visually
+confirmed. Combined with Session 53's similarly-unverified frontend work,
+this is now two sessions of UI changes without a real browser pass — see
+Next Suggested Step.
 
 ### Session 53 (2026-08-14) — 50/30/20 Planning tab, Budget bar colors, stat tiles
 

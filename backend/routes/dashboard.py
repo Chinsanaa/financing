@@ -547,42 +547,52 @@ async def get_action(request: Request):
         actions = []
 
         profile_resp = await run_query(
-            lambda: supabase_client.table("profiles").select("alert_threshold_pct").eq("id", user_id).execute()
-        )
-        threshold_pct = (
-            float(profile_resp.data[0]["alert_threshold_pct"])
-            if profile_resp.data and profile_resp.data[0].get("alert_threshold_pct") is not None
-            else DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT
-        )
-
-        for crossing in await _budget_crossings(user_id, threshold_pct):
-            action = {
-                "type": _CROSSING_KIND_TO_ACTION_TYPE[crossing["kind"]],
-                "category": crossing["category"],
-                "current": crossing["current"],
-                "limit": crossing["limit"],
-            }
-            if crossing["kind"] == "over":
-                action["overage"] = crossing["overage"]
-            else:
-                action["pct"] = crossing["pct"]
-            actions.append(action)
-
-        # Review queue count
-        review_resp = await run_query(
-            lambda: supabase_client.table("transactions")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .eq("needs_review", True)
+            lambda: supabase_client.table("profiles")
+            .select("alert_threshold_pct, budget_inapp_enabled, pending_review_inapp_enabled")
+            .eq("id", user_id)
             .execute()
         )
-        review_count = review_resp.count if review_resp.count is not None else len(review_resp.data)
-        if review_count > 0:
-            actions.append({
-                "type": "pending_review",
-                "count": review_count,
-                "message": f"{review_count} transactions need review",
-            })
+        profile_row = profile_resp.data[0] if profile_resp.data else {}
+        threshold_pct = (
+            float(profile_row["alert_threshold_pct"])
+            if profile_row.get("alert_threshold_pct") is not None
+            else DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT
+        )
+        # Both default true (Settings > Notifications) — preserves the
+        # always-on behavior these items had before the toggles existed.
+        budget_inapp_enabled = profile_row.get("budget_inapp_enabled", True)
+        pending_review_inapp_enabled = profile_row.get("pending_review_inapp_enabled", True)
+
+        if budget_inapp_enabled:
+            for crossing in await _budget_crossings(user_id, threshold_pct):
+                action = {
+                    "type": _CROSSING_KIND_TO_ACTION_TYPE[crossing["kind"]],
+                    "category": crossing["category"],
+                    "current": crossing["current"],
+                    "limit": crossing["limit"],
+                }
+                if crossing["kind"] == "over":
+                    action["overage"] = crossing["overage"]
+                else:
+                    action["pct"] = crossing["pct"]
+                actions.append(action)
+
+        if pending_review_inapp_enabled:
+            # Review queue count
+            review_resp = await run_query(
+                lambda: supabase_client.table("transactions")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .eq("needs_review", True)
+                .execute()
+            )
+            review_count = review_resp.count if review_resp.count is not None else len(review_resp.data)
+            if review_count > 0:
+                actions.append({
+                    "type": "pending_review",
+                    "count": review_count,
+                    "message": f"{review_count} transactions need review",
+                })
 
         return {"actions": actions}
     except HTTPException:

@@ -10,6 +10,7 @@ import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
+import Switch from '@/components/ui/Switch';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
 import PasswordInput from '@/components/auth/PasswordInput';
@@ -22,6 +23,9 @@ interface Profile {
   created_at: string;
   alert_email_enabled: boolean;
   alert_threshold_pct: number;
+  budget_inapp_enabled: boolean;
+  pending_review_inapp_enabled: boolean;
+  monthly_overview_email_enabled: boolean;
 }
 
 export default function SettingsClient() {
@@ -40,6 +44,9 @@ export default function SettingsClient() {
 
   const [alertEmailEnabled, setAlertEmailEnabled] = useState(false);
   const [alertThresholdPct, setAlertThresholdPct] = useState(80);
+  const [budgetInappEnabled, setBudgetInappEnabled] = useState(true);
+  const [pendingReviewInappEnabled, setPendingReviewInappEnabled] = useState(true);
+  const [monthlyOverviewEmailEnabled, setMonthlyOverviewEmailEnabled] = useState(false);
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertError, setAlertError] = useState('');
   const [alertSuccess, setAlertSuccess] = useState('');
@@ -75,6 +82,9 @@ export default function SettingsClient() {
         setProfile(res.data.profile);
         setAlertEmailEnabled(!!res.data.profile.alert_email_enabled);
         setAlertThresholdPct(res.data.profile.alert_threshold_pct ?? 80);
+        setBudgetInappEnabled(res.data.profile.budget_inapp_enabled ?? true);
+        setPendingReviewInappEnabled(res.data.profile.pending_review_inapp_enabled ?? true);
+        setMonthlyOverviewEmailEnabled(!!res.data.profile.monthly_overview_email_enabled);
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load profile');
       } finally {
@@ -104,7 +114,7 @@ export default function SettingsClient() {
     }
   };
 
-  const handleSaveAlertPreferences = async () => {
+  const handleSaveNotificationPreferences = async () => {
     setAlertSaving(true);
     setAlertError('');
     setAlertSuccess('');
@@ -112,10 +122,13 @@ export default function SettingsClient() {
       await api.patch('/settings/profile', {
         alert_email_enabled: alertEmailEnabled,
         alert_threshold_pct: alertThresholdPct,
+        budget_inapp_enabled: budgetInappEnabled,
+        pending_review_inapp_enabled: pendingReviewInappEnabled,
+        monthly_overview_email_enabled: monthlyOverviewEmailEnabled,
       });
-      setAlertSuccess('Alert preferences saved');
+      setAlertSuccess('Notification preferences saved');
     } catch (err: any) {
-      setAlertError(err.response?.data?.detail || 'Failed to save alert preferences');
+      setAlertError(err.response?.data?.detail || 'Failed to save notification preferences');
     } finally {
       setAlertSaving(false);
     }
@@ -233,43 +246,82 @@ export default function SettingsClient() {
         </Card>
 
         <Card className="p-6">
-          <SectionHeader label="Notifications" title="Budget alerts" />
-          <div className="space-y-4">
-            <p className="text-sm text-muted">
-              Get an email when a category goes over budget, or crosses your
-              chosen "approaching budget" threshold. Checked when you use the
-              app (upload, review, label) — not a continuous background
-              check.
-            </p>
+          <SectionHeader label="Notifications" title="Notification preferences" />
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-ink">Budget alerts</p>
+              <p className="text-sm text-muted">
+                When a category goes over budget, or crosses your chosen
+                "approaching budget" threshold. Checked when you use the app
+                (upload, review, label) — not a continuous background check.
+              </p>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-ink">Show in the notification bell</span>
+                <Switch
+                  checked={budgetInappEnabled}
+                  onChange={setBudgetInappEnabled}
+                  label="Show budget alerts in the notification bell"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-ink">Email me budget alerts</span>
+                <Switch
+                  checked={alertEmailEnabled}
+                  onChange={setAlertEmailEnabled}
+                  label="Email me budget alerts"
+                />
+              </div>
+              <div className="max-w-[180px]">
+                <Input
+                  type="number"
+                  label="Approaching-budget threshold (%)"
+                  min={0}
+                  max={100}
+                  value={alertThresholdPct}
+                  onChange={(e) => setAlertThresholdPct(Number(e.target.value))}
+                  disabled={!alertEmailEnabled && !budgetInappEnabled}
+                />
+              </div>
+            </div>
 
-            <label className="flex items-center gap-2.5 text-sm font-medium text-ink">
-              <input
-                type="checkbox"
-                checked={alertEmailEnabled}
-                onChange={(e) => setAlertEmailEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-edge/30 accent-accent"
-              />
-              Email me budget alerts
-            </label>
+            <div className="space-y-3 border-t border-edge/8 pt-6">
+              <p className="text-sm font-semibold text-ink">Pending review reminders</p>
+              <p className="text-sm text-muted">
+                A reminder when transactions are waiting in your review queue.
+              </p>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-ink">Show in the notification bell</span>
+                <Switch
+                  checked={pendingReviewInappEnabled}
+                  onChange={setPendingReviewInappEnabled}
+                  label="Show pending review reminders in the notification bell"
+                />
+              </div>
+            </div>
 
-            <div className="max-w-[180px]">
-              <Input
-                type="number"
-                label="Approaching-budget threshold (%)"
-                min={0}
-                max={100}
-                value={alertThresholdPct}
-                onChange={(e) => setAlertThresholdPct(Number(e.target.value))}
-                disabled={!alertEmailEnabled}
-              />
+            <div className="space-y-3 border-t border-edge/8 pt-6">
+              <p className="text-sm font-semibold text-ink">Monthly spending overview</p>
+              <p className="text-sm text-muted">
+                A monthly email summarizing your spending. This feature hasn't
+                shipped yet — your preference is saved now so we can start
+                sending these as soon as it does.
+              </p>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-ink">Email me a monthly overview</span>
+                <Switch
+                  checked={monthlyOverviewEmailEnabled}
+                  onChange={setMonthlyOverviewEmailEnabled}
+                  label="Email me a monthly spending overview"
+                />
+              </div>
             </div>
 
             {alertError && <Alert kind="error">{alertError}</Alert>}
             {alertSuccess && <Alert kind="success">{alertSuccess}</Alert>}
 
-            <Button variant="outline" onClick={handleSaveAlertPreferences} loading={alertSaving}>
+            <Button variant="outline" onClick={handleSaveNotificationPreferences} loading={alertSaving}>
               <Bell className="h-4 w-4" />
-              {alertSaving ? 'Saving' : 'Save alert preferences'}
+              {alertSaving ? 'Saving' : 'Save notification preferences'}
             </Button>
           </div>
         </Card>

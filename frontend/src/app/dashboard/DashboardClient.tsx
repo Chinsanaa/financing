@@ -154,7 +154,7 @@ export default function DashboardClient() {
             <p className="mr-2 hidden text-sm text-muted sm:block">
               {user?.user_metadata?.username || user?.email}
             </p>
-            <NotificationBell onClick={() => goToTab('action')} />
+            <NotificationBell onViewAll={() => goToTab('action')} />
             <ThemeToggle />
             <Link
               href="/settings"
