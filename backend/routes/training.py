@@ -270,6 +270,20 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
         logger.info("[Training %s] Succeeded (accuracy: %.1f%%)",
                     model_run_id, results['accuracy'] * 100)
 
+        try:
+            supabase_client.table("notifications").upsert(
+                {
+                    "user_id": user_id,
+                    "type": "training_complete",
+                    "dedup_key": f"training:{model_run_id}",
+                    "payload": {"cv_accuracy": round(results['accuracy'], 4)},
+                },
+                on_conflict="user_id,dedup_key",
+                ignore_duplicates=True,
+            ).execute()
+        except Exception as e:
+            logger.warning("[Training %s] Failed to insert notification: %s", model_run_id, e)
+
         # A fresh model exists: re-classify this user's still-unlabeled rows
         # so suggestions show up without another upload.
         try:

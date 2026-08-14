@@ -43,6 +43,7 @@ class FakeQueryBuilder:
         self._payload: Optional[dict] = None
         self._on_conflict: Optional[str] = None
         self._ignore_duplicates: bool = False
+        self._order: Optional[tuple] = None
 
     # --- filters ---
     def select(self, columns: str = "*", count: Optional[str] = None):
@@ -98,7 +99,8 @@ class FakeQueryBuilder:
         self._or_filter = filter_str
         return self
 
-    def order(self, col: str, desc: bool = False):
+    def order(self, col: str, desc: bool = False, foreign_table: Optional[str] = None):
+        self._order = (col, desc, foreign_table)
         return self
 
     def range(self, start: int, end: int):
@@ -204,6 +206,14 @@ class FakeTable:
         if qb._op == "select":
             matched = [r for r in self.rows if qb._matches(r)]
             count = len(matched) if qb._count_mode == "exact" else None
+            if qb._order:
+                col, desc, foreign_table = qb._order
+
+                def sort_key(row):
+                    value = (row.get(foreign_table) or {}).get(col) if foreign_table else row.get(col)
+                    return (value is None, value)
+
+                matched = sorted(matched, key=sort_key, reverse=desc)
             return FakeResponse(data=matched, count=count)
 
         if qb._op == "insert":

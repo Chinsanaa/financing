@@ -158,10 +158,7 @@ export default function DashboardClient() {
               {user?.user_metadata?.username || user?.email}
             </p>
             <Tooltip label="Notifications" disabled={bellOpen}>
-              <NotificationBell
-                onViewAll={() => goToTab('action')}
-                onOpenChange={setBellOpen}
-              />
+              <NotificationBell onOpenChange={setBellOpen} />
             </Tooltip>
             <ThemeToggle />
             <Tooltip label="Settings">

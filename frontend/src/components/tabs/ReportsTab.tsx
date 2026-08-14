@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, FileText, Check } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Download,
+  FileText,
+  Check,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { useApi, invalidate } from '@/utils/useApi';
 import { api } from '@/utils/api';
 import { Alert } from '@/components/ui-feedback';
@@ -40,7 +49,14 @@ interface Category {
   name: string;
 }
 
-const PER_PAGE = 100;
+const PER_PAGE_OPTIONS = [10, 20, 50, 100];
+
+const SORT_OPTIONS: { value: string; sortBy: 'date' | 'category'; sortDir: 'asc' | 'desc'; label: string }[] = [
+  { value: 'date-desc', sortBy: 'date', sortDir: 'desc', label: 'Date (Newest)' },
+  { value: 'date-asc', sortBy: 'date', sortDir: 'asc', label: 'Date (Oldest)' },
+  { value: 'category-asc', sortBy: 'category', sortDir: 'asc', label: 'Category (A–Z)' },
+  { value: 'category-desc', sortBy: 'category', sortDir: 'desc', label: 'Category (Z–A)' },
+];
 
 const LABEL_SOURCES: Record<string, string> = {
   rule: 'Rule',
@@ -64,6 +80,9 @@ function toCsv(transactions: Transaction[]): string {
 
 export default function ReportsTab() {
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
+  const [sortValue, setSortValue] = useState('date-desc');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
   // Which row's category dropdown is open, and which row is mid-save / errored.
@@ -96,7 +115,9 @@ export default function ReportsTab() {
   const [splitSaving, setSplitSaving] = useState(false);
   const [splitError, setSplitError] = useState('');
 
-  const query = `/dashboard/reports?page=${page}&per_page=${PER_PAGE}${
+  const activeSort = SORT_OPTIONS.find((s) => s.value === sortValue) || SORT_OPTIONS[0];
+
+  const query = `/dashboard/reports?page=${page}&per_page=${perPage}&sort_by=${activeSort.sortBy}&sort_dir=${activeSort.sortDir}${
     uncategorizedOnly ? '&uncategorized_only=true' : ''
   }${search ? `&search=${encodeURIComponent(search)}` : ''}${
     dateFrom ? `&date_from=${dateFrom}` : ''
@@ -108,7 +129,15 @@ export default function ReportsTab() {
   const { toneFor } = useCategoryColors();
   const categories = cats?.categories || [];
 
-  const totalPages = reports ? Math.max(1, Math.ceil(reports.total_count / PER_PAGE)) : 1;
+  const totalPages = reports ? Math.max(1, Math.ceil(reports.total_count / perPage)) : 1;
+  const pageNumbers = (() => {
+    const nums: number[] = [];
+    let start = Math.max(1, page - 1);
+    const end = Math.min(totalPages, start + 2);
+    start = Math.max(1, end - 2);
+    for (let n = start; n <= end; n++) nums.push(n);
+    return nums;
+  })();
 
   const resetPageAndSelection = () => {
     setPage(1);
@@ -298,77 +327,124 @@ export default function ReportsTab() {
         <Alert kind="error">Couldn&apos;t save the category for {rowError}. Please try again.</Alert>
       )}
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[200px] flex-1">
-          <Input
-            label="Search"
-            placeholder="Merchant or description…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </div>
-        <div className="w-[150px]">
-          <Input
-            type="date"
-            label="From"
-            value={dateFrom}
-            onChange={(e) => {
-              setDateFrom(e.target.value);
-              resetPageAndSelection();
-            }}
-          />
-        </div>
-        <div className="w-[150px]">
-          <Input
-            type="date"
-            label="To"
-            value={dateTo}
-            onChange={(e) => {
-              setDateTo(e.target.value);
-              resetPageAndSelection();
-            }}
-          />
-        </div>
-        <div className="w-[120px]">
-          <Input
-            type="number"
-            label="Min amount"
-            value={minAmount}
-            onChange={(e) => {
-              setMinAmount(e.target.value);
-              resetPageAndSelection();
-            }}
-          />
-        </div>
-        <div className="w-[120px]">
-          <Input
-            type="number"
-            label="Max amount"
-            value={maxAmount}
-            onChange={(e) => {
-              setMaxAmount(e.target.value);
-              resetPageAndSelection();
-            }}
-          />
-        </div>
-      </div>
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         {reports && (
           <p className="text-sm text-muted">
             Showing {reports.transactions.length} of {reports.total_count} transactions
           </p>
         )}
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-          <input
-            type="checkbox"
-            checked={uncategorizedOnly}
-            onChange={(e) => changeFilter(e.target.checked)}
-            className="h-4 w-4 rounded border-edge/30 accent-accent"
-          />
-          Uncategorized only
-        </label>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+        </Button>
       </div>
+
+      {filtersOpen && (
+        <Card className="space-y-4 p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[200px] flex-1">
+              <Input
+                label="Search"
+                placeholder="Merchant or description…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+            </div>
+            <div className="w-[150px]">
+              <Input
+                type="date"
+                label="From"
+                value={dateFrom}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  resetPageAndSelection();
+                }}
+              />
+            </div>
+            <div className="w-[150px]">
+              <Input
+                type="date"
+                label="To"
+                value={dateTo}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  resetPageAndSelection();
+                }}
+              />
+            </div>
+            <div className="w-[120px]">
+              <Input
+                type="number"
+                label="Min amount"
+                value={minAmount}
+                onChange={(e) => {
+                  setMinAmount(e.target.value);
+                  resetPageAndSelection();
+                }}
+              />
+            </div>
+            <div className="w-[120px]">
+              <Input
+                type="number"
+                label="Max amount"
+                value={maxAmount}
+                onChange={(e) => {
+                  setMaxAmount(e.target.value);
+                  resetPageAndSelection();
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-[170px]">
+              <Select
+                label="Sort by"
+                value={sortValue}
+                onChange={(e) => {
+                  setSortValue(e.target.value);
+                  resetPageAndSelection();
+                }}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="w-[130px]">
+              <Select
+                label="Rows per page"
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  resetPageAndSelection();
+                }}
+              >
+                {PER_PAGE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 pb-2.5 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={uncategorizedOnly}
+                onChange={(e) => changeFilter(e.target.checked)}
+                className="h-4 w-4 rounded border-edge/30 accent-accent"
+              />
+              Uncategorized only
+            </label>
+          </div>
+        </Card>
+      )}
 
       {selectedIds.size > 0 && (
         <Card className="flex flex-wrap items-center gap-3 border-accent/25 p-4">
@@ -395,7 +471,7 @@ export default function ReportsTab() {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
+      <Card className="flex max-h-[calc(100vh-22rem)] flex-col overflow-hidden">
         {!reports || reports.transactions.length === 0 ? (
           <div className="p-6">
             <EmptyState
@@ -409,9 +485,9 @@ export default function ReportsTab() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto">
             <table className="w-full text-sm">
-              <thead className="border-b border-edge/8 bg-surface-2/60">
+              <thead className="sticky top-0 z-10 border-b border-edge/8 bg-surface-2/95 backdrop-blur">
                 <tr>
                   <th className="w-10 px-4 py-3">
                     <input
@@ -531,25 +607,53 @@ export default function ReportsTab() {
       </Card>
 
       {reports && totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(1)}
+            disabled={page <= 1}
+            aria-label="First page"
+          >
+            <ChevronsLeft className="h-3.5 w-3.5" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
+            aria-label="Previous page"
           >
-            <ChevronLeft className="h-3.5 w-3.5" /> Previous
+            <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
-          <p className="text-sm text-muted tabular-nums">
-            Page {page} of {totalPages}
-          </p>
+          {pageNumbers.map((n) => (
+            <Button
+              key={n}
+              variant={n === page ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setPage(n)}
+              aria-current={n === page ? 'page' : undefined}
+            >
+              {n}
+            </Button>
+          ))}
           <Button
             variant="outline"
             size="sm"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
+            aria-label="Next page"
           >
-            Next <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(totalPages)}
+            disabled={page >= totalPages}
+            aria-label="Last page"
+          >
+            <ChevronsRight className="h-3.5 w-3.5" />
           </Button>
         </div>
       )}

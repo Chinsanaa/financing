@@ -174,3 +174,12 @@ code {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Keeps overflow-x-auto containers scrollable without showing the scrollbar track. */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

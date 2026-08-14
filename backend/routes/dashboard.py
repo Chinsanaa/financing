@@ -492,7 +492,6 @@ async def get_savings(request: Request):
 
 DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT = 80  # used when profiles.alert_threshold_pct is unset
 WELCOME_WINDOW = timedelta(hours=48)
-TRAINING_COMPLETE_WINDOW = timedelta(minutes=30)
 
 
 async def _budget_crossings(user_id: str, threshold_pct: float) -> list:
@@ -560,7 +559,7 @@ async def get_action(request: Request):
 
         profile_resp = await run_query(
             lambda: supabase_client.table("profiles")
-            .select("alert_threshold_pct, budget_inapp_enabled, pending_review_inapp_enabled, created_at")
+            .select("alert_threshold_pct, budget_inapp_enabled, pending_review_inapp_enabled")
             .eq("id", user_id)
             .execute()
         )
@@ -574,43 +573,6 @@ async def get_action(request: Request):
         # always-on behavior these items had before the toggles existed.
         budget_inapp_enabled = profile_row.get("budget_inapp_enabled", True)
         pending_review_inapp_enabled = profile_row.get("pending_review_inapp_enabled", True)
-
-        # Welcome message for brand-new accounts. profiles.onboarding_phase
-        # is dead (nothing ever advances it past its 'upload' default — see
-        # docs/context.md Session 55), so created_at is the only reliable
-        # "new user" signal. No dedicated toggle: always-on, same as
-        # pending_review.
-        if profile_row.get("created_at"):
-            account_age = datetime.now(timezone.utc) - _parse_utc(profile_row["created_at"])
-            if account_age <= WELCOME_WINDOW:
-                actions.append({
-                    "type": "welcome",
-                    "message": "Welcome to Financing! Upload your first Alipay or WeChat "
-                                "statement to get started.",
-                })
-
-        # Training-finished notification. Momentary, not a standing state
-        # like a budget crossing — a short time window (not a persisted
-        # read/dismissed marker) keeps this consistent with the rest of
-        # this endpoint's "always computed live" design.
-        run_resp = await run_query(
-            lambda: supabase_client.table("model_runs")
-            .select("cv_accuracy, finished_at")
-            .eq("user_id", user_id)
-            .eq("status", "succeeded")
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        if run_resp.data and run_resp.data[0].get("finished_at"):
-            latest_run = run_resp.data[0]
-            since_finished = datetime.now(timezone.utc) - _parse_utc(latest_run["finished_at"])
-            if since_finished <= TRAINING_COMPLETE_WINDOW:
-                actions.append({
-                    "type": "training_complete",
-                    "message": "Your model finished training.",
-                    "cv_accuracy": latest_run.get("cv_accuracy"),
-                })
 
         if budget_inapp_enabled:
             for crossing in await _budget_crossings(user_id, threshold_pct):
@@ -648,6 +610,112 @@ async def get_action(request: Request):
         raise
     except Exception as e:
         raise internal_error(e, "dashboard/action")
+
+
+async def _ensure_welcome_notification(user_id: str) -> None:
+    """Lazily insert the one-time 'welcome' notification on first fetch,
+    if the account is still within WELCOME_WINDOW of signup. Avoids
+    touching the signup trigger/migration for a single row; the
+    (user_id, dedup_key) unique constraint means this only ever inserts
+    once per account regardless of how many times it's called."""
+    profile_resp = await run_query(
+        lambda: supabase_client.table("profiles").select("created_at").eq("id", user_id).execute()
+    )
+    if not profile_resp.data or not profile_resp.data[0].get("created_at"):
+        return
+    account_age = datetime.now(timezone.utc) - _parse_utc(profile_resp.data[0]["created_at"])
+    if account_age > WELCOME_WINDOW:
+        return
+    await run_query(
+        lambda: supabase_client.table("notifications")
+        .upsert(
+            {
+                "user_id": user_id,
+                "type": "welcome",
+                "dedup_key": "welcome",
+                "payload": {
+                    "message": "Welcome to Financing! Upload your first Alipay or WeChat "
+                               "statement to get started.",
+                },
+            },
+            on_conflict="user_id,dedup_key",
+            ignore_duplicates=True,
+        )
+        .execute()
+    )
+
+
+@router.get("/notifications")
+async def get_notifications(request: Request):
+    """Persisted notification history for the header bell: over_budget /
+    approaching_budget / welcome / training_complete. Distinct from
+    GET /dashboard/action (Planning -> Action plan), which stays fully
+    live-computed and unaffected by read/cleared state."""
+    user_id = request.state.user_id
+
+    try:
+        await _ensure_welcome_notification(user_id)
+
+        resp = await run_query(
+            lambda: supabase_client.table("notifications")
+            .select("*")
+            .eq("user_id", user_id)
+            .is_("cleared_at", "null")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        notifications = resp.data or []
+        unread_count = sum(1 for n in notifications if not n.get("read_at"))
+
+        return {"notifications": notifications, "unread_count": unread_count}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/notifications")
+
+
+@router.post("/notifications/read")
+async def mark_notifications_read(request: Request):
+    """Mark every active, unread notification as read — called when the
+    bell dropdown opens."""
+    user_id = request.state.user_id
+
+    try:
+        await run_query(
+            lambda: supabase_client.table("notifications")
+            .update({"read_at": datetime.now(timezone.utc).isoformat()})
+            .eq("user_id", user_id)
+            .is_("cleared_at", "null")
+            .is_("read_at", "null")
+            .execute()
+        )
+        return {"message": "Notifications marked read"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/notifications/read")
+
+
+@router.post("/notifications/clear")
+async def clear_notifications(request: Request):
+    """Remove every active notification from the bell — a cleared
+    notification never reappears; only a genuinely new event does."""
+    user_id = request.state.user_id
+
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        await run_query(
+            lambda: supabase_client.table("notifications")
+            .update({"cleared_at": now, "read_at": now})
+            .eq("user_id", user_id)
+            .is_("cleared_at", "null")
+            .execute()
+        )
+        return {"message": "Notifications cleared"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/notifications/clear")
 
 
 MIN_TRANSACTIONS_FOR_ANOMALY = 5  # per category, within the trailing window
@@ -788,6 +856,8 @@ async def get_reports(
     date_to: Optional[str] = None,
     min_amount: Optional[float] = None,
     max_amount: Optional[float] = None,
+    sort_by: Optional[str] = "date",
+    sort_dir: Optional[str] = "desc",
 ):
     """Detailed reports: paginated transaction list.
 
@@ -798,11 +868,17 @@ async def get_reports(
     `search` (merchant/description substring), a `date_from`/`date_to`
     (`YYYY-MM-DD`) range, and a `min_amount`/`max_amount` range — all
     independent of each other and of the category filters, so any
-    combination can apply at once.
+    combination can apply at once. `sort_by` (`date`/`category`) and
+    `sort_dir` (`asc`/`desc`) control ordering; unrecognized values fall back
+    to the defaults (date, newest first) rather than erroring.
     """
     user_id = request.state.user_id
     page = max(1, page)
     per_page = min(max(1, per_page), 500)
+    if sort_by not in ("date", "category"):
+        sort_by = "date"
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
 
     try:
         start = (page - 1) * per_page
@@ -828,9 +904,13 @@ async def get_reports(
         if max_amount is not None:
             query = query.lte("amount", max_amount)
 
+        if sort_by == "category":
+            query = query.order("name", desc=(sort_dir == "desc"), foreign_table="categories")
+        else:
+            query = query.order("timestamp", desc=(sort_dir != "asc"))
+
         response = await run_query(
             lambda: query
-            .order("timestamp", desc=True)
             .range(start, start + per_page - 1)
             .execute()
         )
