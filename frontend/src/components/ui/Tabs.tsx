@@ -4,7 +4,7 @@ import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { LucideIcon } from 'lucide-react';
 
-export type TabItem = { id: string; label: string; icon?: LucideIcon };
+export type TabItem = { id: string; label: string; icon?: LucideIcon; tourId?: string };
 
 /** Compact top-level tab bar with a sliding active indicator. */
 export function TabBar({
@@ -29,6 +29,7 @@ export function TabBar({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
+            data-tour-id={tab.tourId}
             className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
               isActive ? 'text-ink font-medium' : 'text-muted hover:text-ink'
             }`}

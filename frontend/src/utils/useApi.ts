@@ -16,7 +16,7 @@ import { api } from './api';
 const cache = new Map<string, unknown>();
 // Mounted useApi(path) instances register a background-revalidate callback here,
 // keyed by their exact path, so invalidate() can reach components that never
-// unmount (e.g. OnboardingChecklist) and not just the caller that mutated data.
+// unmount (e.g. OnboardingTour) and not just the caller that mutated data.
 const subscribers = new Map<string, Set<() => void>>();
 
 export function invalidate(prefix = ''): void {

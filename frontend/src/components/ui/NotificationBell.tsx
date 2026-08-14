@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bell, CheckCircle2, ClipboardList, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Bell, Brain, CheckCircle2, ClipboardList, Sparkles, TriangleAlert } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
-import { formatCurrencyWhole } from '@/utils/format';
+import { formatCurrencyWhole, formatNumber } from '@/utils/format';
 
 interface Action {
   type: string;
@@ -14,6 +14,7 @@ interface Action {
   pct?: number;
   count?: number;
   message?: string;
+  cv_accuracy?: number;
 }
 
 /** Header bell: badge count from GET /dashboard/action (already polled by
@@ -24,7 +25,11 @@ export default function NotificationBell({ onViewAll }: { onViewAll: () => void 
   const { data } = useApi<{ actions: Action[] }>('/dashboard/action');
   const actions = data?.actions || [];
   const count = actions.filter(
-    (a) => a.type === 'over_budget' || a.type === 'approaching_budget'
+    (a) =>
+      a.type === 'over_budget' ||
+      a.type === 'approaching_budget' ||
+      a.type === 'welcome' ||
+      a.type === 'training_complete'
   ).length;
 
   const [open, setOpen] = useState(false);
@@ -79,6 +84,29 @@ export default function NotificationBell({ onViewAll }: { onViewAll: () => void 
           ) : (
             <ul className="space-y-1.5">
               {actions.map((action, idx) => {
+                if (action.type === 'welcome') {
+                  return (
+                    <li key={idx} className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">
+                      <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" />
+                      <p className="text-sm text-muted">{action.message}</p>
+                    </li>
+                  );
+                }
+                if (action.type === 'training_complete') {
+                  return (
+                    <li key={idx} className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">
+                      <Brain className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-muted">{action.message}</p>
+                        {action.cv_accuracy != null && (
+                          <p className="text-xs text-success">
+                            {formatNumber(action.cv_accuracy * 100, 0)}% accuracy
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                }
                 if (action.type === 'over_budget') {
                   return (
                     <li key={idx} className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">

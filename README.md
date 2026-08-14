@@ -68,8 +68,10 @@ Two very different questions:
 The ten original tabs are grouped into five compact sections with sub-tabs:
 **Overview** (a monthly-spending line chart + category split), **Transactions**
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
-(Budget / 50/30/20 / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible onboarding
-checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
+(Budget / 50/30/20 / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible
+bottom-right onboarding guide (Upload → Categories → Label → Train) walks new
+accounts through each step, spotlighting the specific button to press next
+with a dimmed backdrop and an arrow. Plus a
 separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
 skeleton loading states, and a marketing landing page at `/` for signed-out
@@ -125,8 +127,10 @@ no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
 detection, and upserts into the `recurring_merchants` cache table.
 
 **Notifications**: the header's notification bell shows a live count of
-over-budget and approaching-budget categories and opens a dropdown with
-those items plus any pending-review reminder, computed on every load by
+over-budget/approaching-budget categories, a welcome message for the first
+48 hours of a new account, and a training-finished note for 30 minutes
+after a model run succeeds, opening a dropdown with those items plus any
+pending-review reminder — all computed on every load by
 `GET /dashboard/action` — no separate notifications table, it's the same
 live data **Planning → Action plan** shows, just reachable without leaving
 the page ("View all in Planning" in the dropdown links there for the fuller

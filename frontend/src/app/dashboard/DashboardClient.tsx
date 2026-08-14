@@ -18,7 +18,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import NotificationBell from '@/components/ui/NotificationBell';
 import DashboardLoading from './loading';
-import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
+import OnboardingTour from '@/components/onboarding/OnboardingTour';
 
 // Each dashboard tab is code-split: only the active tab's JS (and its deps,
 // e.g. StatsTab's recharts) loads, instead of shipping all of them upfront.
@@ -40,6 +40,7 @@ const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
     id: 'transactions-model',
     label: 'Transactions & Model',
     icon: Workflow,
+    tourId: 'nav-transactions-model',
     subs: [],
   },
   {
@@ -187,7 +188,7 @@ export default function DashboardClient() {
       {/* Content */}
       {/* Fluid shell: fills large screens (1920 included), caps only on ultrawides. */}
       <main className="mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 2xl:px-12">
-        <OnboardingChecklist
+        <OnboardingTour
           onNavigate={goToTab}
           activeTab={isWizardStep ? resolvedTab! : activeTab}
         />

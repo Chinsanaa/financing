@@ -12,7 +12,7 @@ from config import supabase_client
 from db import fetch_all_async, run_query
 from errors import internal_error
 from limiter import limiter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
 from translate import merchant_label_english, description_label_english
@@ -31,6 +31,16 @@ def _now_cn() -> datetime:
 def _month_start(now: datetime = None) -> datetime:
     now = now or _now_cn()
     return datetime(now.year, now.month, 1)
+
+
+def _parse_utc(ts: str) -> datetime:
+    """Parse a `timestamp with time zone` column's ISO string into an
+    aware UTC datetime — for comparing against `datetime.now(timezone.utc)`
+    (never `_now_cn()`, which is naive and on a different clock)."""
+    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _months_ago_start(n: int, now: datetime = None) -> datetime:
@@ -481,6 +491,8 @@ async def get_savings(request: Request):
 
 
 DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT = 80  # used when profiles.alert_threshold_pct is unset
+WELCOME_WINDOW = timedelta(hours=48)
+TRAINING_COMPLETE_WINDOW = timedelta(minutes=30)
 
 
 async def _budget_crossings(user_id: str, threshold_pct: float) -> list:
@@ -548,7 +560,7 @@ async def get_action(request: Request):
 
         profile_resp = await run_query(
             lambda: supabase_client.table("profiles")
-            .select("alert_threshold_pct, budget_inapp_enabled, pending_review_inapp_enabled")
+            .select("alert_threshold_pct, budget_inapp_enabled, pending_review_inapp_enabled, created_at")
             .eq("id", user_id)
             .execute()
         )
@@ -562,6 +574,43 @@ async def get_action(request: Request):
         # always-on behavior these items had before the toggles existed.
         budget_inapp_enabled = profile_row.get("budget_inapp_enabled", True)
         pending_review_inapp_enabled = profile_row.get("pending_review_inapp_enabled", True)
+
+        # Welcome message for brand-new accounts. profiles.onboarding_phase
+        # is dead (nothing ever advances it past its 'upload' default — see
+        # docs/context.md Session 55), so created_at is the only reliable
+        # "new user" signal. No dedicated toggle: always-on, same as
+        # pending_review.
+        if profile_row.get("created_at"):
+            account_age = datetime.now(timezone.utc) - _parse_utc(profile_row["created_at"])
+            if account_age <= WELCOME_WINDOW:
+                actions.append({
+                    "type": "welcome",
+                    "message": "Welcome to Financing! Upload your first Alipay or WeChat "
+                                "statement to get started.",
+                })
+
+        # Training-finished notification. Momentary, not a standing state
+        # like a budget crossing — a short time window (not a persisted
+        # read/dismissed marker) keeps this consistent with the rest of
+        # this endpoint's "always computed live" design.
+        run_resp = await run_query(
+            lambda: supabase_client.table("model_runs")
+            .select("cv_accuracy, finished_at")
+            .eq("user_id", user_id)
+            .eq("status", "succeeded")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if run_resp.data and run_resp.data[0].get("finished_at"):
+            latest_run = run_resp.data[0]
+            since_finished = datetime.now(timezone.utc) - _parse_utc(latest_run["finished_at"])
+            if since_finished <= TRAINING_COMPLETE_WINDOW:
+                actions.append({
+                    "type": "training_complete",
+                    "message": "Your model finished training.",
+                    "cv_accuracy": latest_run.get("cv_accuracy"),
+                })
 
         if budget_inapp_enabled:
             for crossing in await _budget_crossings(user_id, threshold_pct):

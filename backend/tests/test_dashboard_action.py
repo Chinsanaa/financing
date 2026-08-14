@@ -123,6 +123,56 @@ def test_pending_review_inapp_disabled_hides_review_but_not_budget(
     assert any(a["type"] == "over_budget" for a in actions)
 
 
+def test_welcome_shows_for_a_brand_new_account(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("profiles", [{"id": USER_A, "created_at": _now_iso()}])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert any(a["type"] == "welcome" for a in actions)
+
+
+def test_welcome_does_not_show_for_an_old_account(client, patch_jwks, make_token, fake_db):
+    old = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+    fake_db.seed("profiles", [{"id": USER_A, "created_at": old}])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert not any(a["type"] == "welcome" for a in actions)
+
+
+def test_training_complete_shows_for_a_recently_succeeded_run(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("model_runs", [{
+        "id": "run-1", "user_id": USER_A, "status": "succeeded",
+        "cv_accuracy": 0.87, "finished_at": _now_iso(), "created_at": _now_iso(),
+    }])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    matches = [a for a in actions if a["type"] == "training_complete"]
+    assert len(matches) == 1
+    assert matches[0]["cv_accuracy"] == 0.87
+
+
+def test_training_complete_does_not_show_for_an_old_run(client, patch_jwks, make_token, fake_db):
+    old = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+    fake_db.seed("model_runs", [{
+        "id": "run-1", "user_id": USER_A, "status": "succeeded",
+        "cv_accuracy": 0.87, "finished_at": old, "created_at": old,
+    }])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert not any(a["type"] == "training_complete" for a in actions)
+
+
 def test_both_notification_types_default_enabled_with_no_profile_row(
     client, patch_jwks, make_token, fake_db
 ):

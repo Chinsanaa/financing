@@ -253,6 +253,7 @@ export default function UploadTab() {
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
+        data-tour-id="upload-choose-files"
         className={`rounded-card border-2 border-dashed p-12 text-center transition-all duration-200 ${
           running ? 'pointer-events-none opacity-60' : ''
         } ${
