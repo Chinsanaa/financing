@@ -17,14 +17,16 @@ import { TabBar, TabPanel, TabItem } from '@/components/ui/Tabs';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import NotificationBell from '@/components/ui/NotificationBell';
+import Tooltip from '@/components/ui/Tooltip';
 import DashboardLoading from './loading';
-import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
+import OnboardingTour from '@/components/onboarding/OnboardingTour';
 
 // Each dashboard tab is code-split: only the active tab's JS (and its deps,
 // e.g. StatsTab's recharts) loads, instead of shipping all of them upfront.
 const tabLoading = () => <SkeletonRows rows={6} />;
 const StatsTab = dynamic(() => import('@/components/tabs/StatsTab'), { loading: tabLoading, ssr: false });
 const BudgetTab = dynamic(() => import('@/components/tabs/BudgetTab'), { loading: tabLoading, ssr: false });
+const RuleTab = dynamic(() => import('@/components/tabs/RuleTab'), { loading: tabLoading, ssr: false });
 const SavingsTab = dynamic(() => import('@/components/tabs/SavingsTab'), { loading: tabLoading, ssr: false });
 const ActionTab = dynamic(() => import('@/components/tabs/ActionTab'), { loading: tabLoading, ssr: false });
 const ReportsTab = dynamic(() => import('@/components/tabs/ReportsTab'), { loading: tabLoading, ssr: false });
@@ -39,6 +41,7 @@ const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
     id: 'transactions-model',
     label: 'Transactions & Model',
     icon: Workflow,
+    tourId: 'nav-transactions-model',
     subs: [],
   },
   {
@@ -47,6 +50,7 @@ const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
     icon: ChartPie,
     subs: [
       { id: 'budget', label: 'Budget' },
+      { id: 'rule-503020', label: '50/30/20' },
       { id: 'savings', label: 'Savings' },
       { id: 'subscriptions', label: 'Subscriptions' },
       { id: 'insights', label: 'Insights' },
@@ -61,6 +65,7 @@ const TAB_SECTION: Record<string, string> = {
   overview: 'overview',
   'transactions-model': 'transactions-model',
   budget: 'planning',
+  'rule-503020': 'planning',
   savings: 'planning',
   subscriptions: 'planning',
   insights: 'planning',
@@ -82,6 +87,7 @@ export default function DashboardClient() {
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [bellOpen, setBellOpen] = useState(false);
 
   const urlTab = searchParams.get('tab');
   // Wizard step IDs become first-class deep links; 'training' alias for 'train'
@@ -151,22 +157,31 @@ export default function DashboardClient() {
             <p className="mr-2 hidden text-sm text-muted sm:block">
               {user?.user_metadata?.username || user?.email}
             </p>
-            <NotificationBell onClick={() => goToTab('action')} />
+            <Tooltip label="Notifications" disabled={bellOpen}>
+              <NotificationBell
+                onViewAll={() => goToTab('action')}
+                onOpenChange={setBellOpen}
+              />
+            </Tooltip>
             <ThemeToggle />
-            <Link
-              href="/settings"
-              aria-label="Settings"
-              className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            >
-              <Settings className="h-4 w-4" />
-            </Link>
-            <button
-              onClick={handleLogout}
-              aria-label="Sign out"
-              className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+            <Tooltip label="Settings">
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+            </Tooltip>
+            <Tooltip label="Sign out">
+              <button
+                onClick={handleLogout}
+                aria-label="Sign out"
+                className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -184,7 +199,7 @@ export default function DashboardClient() {
       {/* Content */}
       {/* Fluid shell: fills large screens (1920 included), caps only on ultrawides. */}
       <main className="mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 2xl:px-12">
-        <OnboardingChecklist
+        <OnboardingTour
           onNavigate={goToTab}
           activeTab={isWizardStep ? resolvedTab! : activeTab}
         />
@@ -198,6 +213,7 @@ export default function DashboardClient() {
             />
           )}
           {activeTab === 'budget' && <BudgetTab />}
+          {activeTab === 'rule-503020' && <RuleTab />}
           {activeTab === 'savings' && <SavingsTab />}
           {activeTab === 'subscriptions' && <SubscriptionsTab />}
           {activeTab === 'insights' && <InsightsTab />}

@@ -12,10 +12,11 @@ from config import supabase_client
 from db import fetch_all_async, run_query
 from errors import internal_error
 from limiter import limiter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
 from translate import merchant_label_english, description_label_english
+from src.categories import CATEGORY_BUCKET
 
 router = APIRouter()
 
@@ -30,6 +31,16 @@ def _now_cn() -> datetime:
 def _month_start(now: datetime = None) -> datetime:
     now = now or _now_cn()
     return datetime(now.year, now.month, 1)
+
+
+def _parse_utc(ts: str) -> datetime:
+    """Parse a `timestamp with time zone` column's ISO string into an
+    aware UTC datetime — for comparing against `datetime.now(timezone.utc)`
+    (never `_now_cn()`, which is naive and on a different clock)."""
+    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _months_ago_start(n: int, now: datetime = None) -> datetime:
@@ -75,6 +86,7 @@ async def get_summary(request: Request):
             "labeled_transactions": labeled_count,
             "labeling_percentage": round(100 * labeled_count / total_count, 1) if total_count > 0 else 0,
             "total_spend": total_spend,
+            "monthly_income": await _monthly_income(user_id),
         }
     except HTTPException:
         raise
@@ -355,6 +367,73 @@ async def put_category_budgets(request: Request, data: CategoryBudgetsUpdate):
         raise internal_error(e, "dashboard/put_category_budgets")
 
 
+@router.get("/rule-503020")
+async def get_rule_503020(request: Request, month: Optional[str] = None):
+    """50/30/20 rule breakdown: Needs/Wants/Savings vs income-derived targets.
+
+    Buckets every categorized transaction for the month via the static
+    `CATEGORY_BUCKET` mapping (src/categories.py) — unlike
+    `budget_category_config.type`, this covers ALL spend, not just categories
+    the user happened to set a $ budget for, and it's the only place a
+    'Savings' bucket exists (that table's enum is still just Need/Want).
+
+    Savings = money spent in the Investments category + unspent income
+    (income minus everything actually spent that month, floored at 0) — the
+    standard "what you didn't spend also counts as saved" definition.
+    """
+    user_id = request.state.user_id
+
+    try:
+        start, end = _month_bounds(month)
+        resolved_month = f"{start.year:04d}-{start.month:02d}"
+        available_months = await _available_months(user_id)
+
+        income = await _monthly_income(user_id)
+        spend_by_cat = await _spend_by_category(user_id, start, end)
+
+        bucket_totals = {"Need": 0.0, "Want": 0.0, "Savings": 0.0}
+        bucket_categories: dict = {"Need": [], "Want": [], "Savings": []}
+        for cat_name, amount in spend_by_cat.items():
+            bucket = CATEGORY_BUCKET.get(cat_name)
+            if not bucket or amount <= 0:
+                continue
+            bucket_totals[bucket] += amount
+            bucket_categories[bucket].append({"category": cat_name, "amount": amount})
+
+        total_spend = sum(spend_by_cat.values())
+        unspent = max(income - total_spend, 0.0)
+        if unspent > 0:
+            bucket_totals["Savings"] += unspent
+            bucket_categories["Savings"].append({"category": "Unspent income", "amount": unspent})
+
+        for cats in bucket_categories.values():
+            cats.sort(key=lambda c: c["amount"], reverse=True)
+
+        def _bucket(name: str, target_pct: int) -> dict:
+            key = {"Need": "Need", "Want": "Want", "Savings": "Savings"}[name]
+            return {
+                "target_pct": target_pct,
+                "target_amount": round(income * target_pct / 100, 2) if income > 0 else None,
+                "spent": round(bucket_totals[key], 2),
+                "categories": bucket_categories[key],
+            }
+
+        return {
+            "month": resolved_month,
+            "available_months": available_months,
+            "income": income,
+            "buckets": {
+                "needs": _bucket("Need", 50),
+                "wants": _bucket("Want", 30),
+                "savings": _bucket("Savings", 20),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/rule-503020")
+
+
 @router.get("/savings")
 async def get_savings(request: Request):
     """Savings info: goals, current savings, anomalies."""
@@ -412,6 +491,8 @@ async def get_savings(request: Request):
 
 
 DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT = 80  # used when profiles.alert_threshold_pct is unset
+WELCOME_WINDOW = timedelta(hours=48)
+TRAINING_COMPLETE_WINDOW = timedelta(minutes=30)
 
 
 async def _budget_crossings(user_id: str, threshold_pct: float) -> list:
@@ -478,42 +559,89 @@ async def get_action(request: Request):
         actions = []
 
         profile_resp = await run_query(
-            lambda: supabase_client.table("profiles").select("alert_threshold_pct").eq("id", user_id).execute()
-        )
-        threshold_pct = (
-            float(profile_resp.data[0]["alert_threshold_pct"])
-            if profile_resp.data and profile_resp.data[0].get("alert_threshold_pct") is not None
-            else DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT
-        )
-
-        for crossing in await _budget_crossings(user_id, threshold_pct):
-            action = {
-                "type": _CROSSING_KIND_TO_ACTION_TYPE[crossing["kind"]],
-                "category": crossing["category"],
-                "current": crossing["current"],
-                "limit": crossing["limit"],
-            }
-            if crossing["kind"] == "over":
-                action["overage"] = crossing["overage"]
-            else:
-                action["pct"] = crossing["pct"]
-            actions.append(action)
-
-        # Review queue count
-        review_resp = await run_query(
-            lambda: supabase_client.table("transactions")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .eq("needs_review", True)
+            lambda: supabase_client.table("profiles")
+            .select("alert_threshold_pct, budget_inapp_enabled, pending_review_inapp_enabled, created_at")
+            .eq("id", user_id)
             .execute()
         )
-        review_count = review_resp.count if review_resp.count is not None else len(review_resp.data)
-        if review_count > 0:
-            actions.append({
-                "type": "pending_review",
-                "count": review_count,
-                "message": f"{review_count} transactions need review",
-            })
+        profile_row = profile_resp.data[0] if profile_resp.data else {}
+        threshold_pct = (
+            float(profile_row["alert_threshold_pct"])
+            if profile_row.get("alert_threshold_pct") is not None
+            else DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT
+        )
+        # Both default true (Settings > Notifications) — preserves the
+        # always-on behavior these items had before the toggles existed.
+        budget_inapp_enabled = profile_row.get("budget_inapp_enabled", True)
+        pending_review_inapp_enabled = profile_row.get("pending_review_inapp_enabled", True)
+
+        # Welcome message for brand-new accounts. profiles.onboarding_phase
+        # is dead (nothing ever advances it past its 'upload' default — see
+        # docs/context.md Session 55), so created_at is the only reliable
+        # "new user" signal. No dedicated toggle: always-on, same as
+        # pending_review.
+        if profile_row.get("created_at"):
+            account_age = datetime.now(timezone.utc) - _parse_utc(profile_row["created_at"])
+            if account_age <= WELCOME_WINDOW:
+                actions.append({
+                    "type": "welcome",
+                    "message": "Welcome to Financing! Upload your first Alipay or WeChat "
+                                "statement to get started.",
+                })
+
+        # Training-finished notification. Momentary, not a standing state
+        # like a budget crossing — a short time window (not a persisted
+        # read/dismissed marker) keeps this consistent with the rest of
+        # this endpoint's "always computed live" design.
+        run_resp = await run_query(
+            lambda: supabase_client.table("model_runs")
+            .select("cv_accuracy, finished_at")
+            .eq("user_id", user_id)
+            .eq("status", "succeeded")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if run_resp.data and run_resp.data[0].get("finished_at"):
+            latest_run = run_resp.data[0]
+            since_finished = datetime.now(timezone.utc) - _parse_utc(latest_run["finished_at"])
+            if since_finished <= TRAINING_COMPLETE_WINDOW:
+                actions.append({
+                    "type": "training_complete",
+                    "message": "Your model finished training.",
+                    "cv_accuracy": latest_run.get("cv_accuracy"),
+                })
+
+        if budget_inapp_enabled:
+            for crossing in await _budget_crossings(user_id, threshold_pct):
+                action = {
+                    "type": _CROSSING_KIND_TO_ACTION_TYPE[crossing["kind"]],
+                    "category": crossing["category"],
+                    "current": crossing["current"],
+                    "limit": crossing["limit"],
+                }
+                if crossing["kind"] == "over":
+                    action["overage"] = crossing["overage"]
+                else:
+                    action["pct"] = crossing["pct"]
+                actions.append(action)
+
+        if pending_review_inapp_enabled:
+            # Review queue count
+            review_resp = await run_query(
+                lambda: supabase_client.table("transactions")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .eq("needs_review", True)
+                .execute()
+            )
+            review_count = review_resp.count if review_resp.count is not None else len(review_resp.data)
+            if review_count > 0:
+                actions.append({
+                    "type": "pending_review",
+                    "count": review_count,
+                    "message": f"{review_count} transactions need review",
+                })
 
         return {"actions": actions}
     except HTTPException:

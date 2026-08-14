@@ -85,3 +85,107 @@ def test_over_budget_takes_priority_over_approaching(client, patch_jwks, make_to
     actions = [a for a in response.json()["actions"] if a["category"] == "Transportation"]
     assert len(actions) == 1
     assert actions[0]["type"] == "over_budget"
+
+
+def test_budget_inapp_disabled_hides_over_and_approaching_but_not_pending_review(
+    client, patch_jwks, make_token, fake_db
+):
+    fake_db.seed("profiles", [{"id": USER_A, "budget_inapp_enabled": False}])
+    _seed_budget(fake_db, USER_A, "Shopping", monthly_budget=100, spend=150)
+    fake_db.seed("transactions", [{
+        "id": "txn-review", "user_id": USER_A, "category_id": None,
+        "needs_review": True, "timestamp": _now_iso(),
+    }])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert not any(a["type"] in ("over_budget", "approaching_budget") for a in actions)
+    assert any(a["type"] == "pending_review" for a in actions)
+
+
+def test_pending_review_inapp_disabled_hides_review_but_not_budget(
+    client, patch_jwks, make_token, fake_db
+):
+    fake_db.seed("profiles", [{"id": USER_A, "pending_review_inapp_enabled": False}])
+    _seed_budget(fake_db, USER_A, "Shopping", monthly_budget=100, spend=150)
+    fake_db.seed("transactions", [{
+        "id": "txn-review", "user_id": USER_A, "category_id": None,
+        "needs_review": True, "timestamp": _now_iso(),
+    }])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert not any(a["type"] == "pending_review" for a in actions)
+    assert any(a["type"] == "over_budget" for a in actions)
+
+
+def test_welcome_shows_for_a_brand_new_account(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("profiles", [{"id": USER_A, "created_at": _now_iso()}])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert any(a["type"] == "welcome" for a in actions)
+
+
+def test_welcome_does_not_show_for_an_old_account(client, patch_jwks, make_token, fake_db):
+    old = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+    fake_db.seed("profiles", [{"id": USER_A, "created_at": old}])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert not any(a["type"] == "welcome" for a in actions)
+
+
+def test_training_complete_shows_for_a_recently_succeeded_run(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("model_runs", [{
+        "id": "run-1", "user_id": USER_A, "status": "succeeded",
+        "cv_accuracy": 0.87, "finished_at": _now_iso(), "created_at": _now_iso(),
+    }])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    matches = [a for a in actions if a["type"] == "training_complete"]
+    assert len(matches) == 1
+    assert matches[0]["cv_accuracy"] == 0.87
+
+
+def test_training_complete_does_not_show_for_an_old_run(client, patch_jwks, make_token, fake_db):
+    old = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+    fake_db.seed("model_runs", [{
+        "id": "run-1", "user_id": USER_A, "status": "succeeded",
+        "cv_accuracy": 0.87, "finished_at": old, "created_at": old,
+    }])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert not any(a["type"] == "training_complete" for a in actions)
+
+
+def test_both_notification_types_default_enabled_with_no_profile_row(
+    client, patch_jwks, make_token, fake_db
+):
+    """No seeded profile row at all -> both toggles default to enabled."""
+    _seed_budget(fake_db, USER_A, "Shopping", monthly_budget=100, spend=150)
+    fake_db.seed("transactions", [{
+        "id": "txn-review", "user_id": USER_A, "category_id": None,
+        "needs_review": True, "timestamp": _now_iso(),
+    }])
+
+    response = client.get("/dashboard/action", headers=_headers(make_token))
+
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert any(a["type"] == "over_budget" for a in actions)
+    assert any(a["type"] == "pending_review" for a in actions)

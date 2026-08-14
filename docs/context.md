@@ -44,6 +44,7 @@ A pipeline that:
 | Peer-to-peer transfers (转账/红包) | Left as expense (not auto-excluded) | Ambiguous — could be a real gift/spend; user can extend `_TRANSFER_KEYWORDS` if they want these excluded too |
 | Semantic classifier | Model2Vec static embeddings + LogisticRegression, LSA fallback when weights unavailable | Numpy-only (no torch), captures merchant meaning TF-IDF can't (Session 31) |
 | Auto-apply threshold | Derived from grouped-CV data (target precision 90%, min support 30); no threshold saved if unreachable | Never invent a trust boundary — honest "stays in review" beats a guessed number (Session 31) |
+| Category taxonomy size | Expanded 7 → 13 ML categories (Housing, Personal Care & Health, Entertainment, Travel, Education, Investments added) | User wanted fuller spending coverage; trimmed from a much longer list (Insurance, Debt payments, separate Personal Care/Health, etc.) to keep per-category sample counts viable for the classifier (Session 52) |
 
 ## Key Terms
 
@@ -63,7 +64,86 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 51, updated same session): added an LLM fallback
+Current (Session 55): added `welcome`/`training_complete` notifications and
+replaced the top-of-page onboarding banner with a bottom-right step box +
+a spotlight/arrow tour overlay (`OnboardingTour.tsx` + `TourSpotlight.tsx`).
+See Session 55 log for full detail.
+
+Next:
+1. **Live UI verification not done — THREE sessions of unverified frontend
+   work have now stacked up (53, 54, 55).** Verified via `tsc --noEmit` +
+   `next build` + `pytest` (207 passing) only, every session. This
+   session's tour overlay is the highest-risk piece yet to ship unverified:
+   spotlight positioning math (`TourSpotlight.tsx`'s `getBoundingClientRect`
+   + bubble-flip + caret-offset logic), the `data-tour-id` target
+   resolution actually finding the right elements at the right times, and
+   whether the whole thing looks intentional rather than glitchy have ZERO
+   real-browser confirmation. **This is the strongest recommendation yet
+   to get an actual browser pass (or a Playwright session with test
+   credentials) before building more UI on top** — the risk of a visually
+   broken but type-safe feature is real and compounding.
+2. **Monthly spending overview is a settings toggle only — no delivery
+   exists.** Confirmed with the user in Session 54 (`AskUserQuestion`):
+   ship the toggle now, build real sending later. To make it real: a new
+   backend endpoint that computes each user's prior-month summary (total
+   spend, top categories, budget performance — reuse
+   `sum_user_transactions`/`spend_by_category_for_user` RPCs already used
+   elsewhere) + a new mailer function + a dedup table (same pattern as
+   `budget_alerts`, keyed on user+month) + an actual monthly trigger (a
+   Render Cron Job hitting the new endpoint, since there's no cron/scheduler
+   anywhere in this backend today — everything alert-related is reactive,
+   fired from `classify.py`'s label-setting endpoints).
+3. **Retrain the live model — deliberately deferred, not just blocked.**
+   Investigated this properly same-session (user asked "next task" →
+   retrain): checked live labeled-transaction counts per category and found
+   **zero** labeled samples in all 5 of the truly-new categories (Housing,
+   Personal Care & Health, Travel, Education, Investments) and zero rows
+   currently sitting in the review queue — so retraining today would be a
+   no-op for those 5 categories regardless (`retrain_model()`'s own
+   sparse-class filter drops any category with `<2` samples). Separately,
+   confirmed there's genuinely no way to trigger `POST /training/retrain`
+   from this sandbox at all — it's the ONLY path that touches production
+   data and strictly requires a real Supabase JWT via `AuthMiddleware`; no
+   CLI/bootstrap/standalone-script alternative exists anywhere in the repo,
+   even though `backend/config.py`'s Supabase client does hold the
+   service-role key (a new script *could* be built to bypass the JWT
+   requirement, but doesn't exist today and wasn't built — asked the user
+   via `AskUserQuestion` whether to build one, retrain now anyway despite
+   the 0-sample issue, or wait; **user chose to wait**). Correct next step:
+   once real transactions land in the new categories (via the merchant
+   rules already live, or manual labeling) and get labeled, the user
+   retrains themselves via Model → Training in their own browser session.
+   Nothing to build here — this is a "wait for data" state, not a "blocked
+   on tooling" state.
+4. The 50/30/20 Need/Want/Savings bucket mapping
+   (`src/categories.py::CATEGORY_BUCKET`) is a first-pass judgment call
+   confirmed with the user in the abstract (e.g. Education→Need, Transfers &
+   Gifts→Want) — worth revisiting once the user has looked at a real month's
+   breakdown and has opinions about specific categories.
+5. Session 52's still-open items remain open: no live `classify_all()` run
+   against real transaction text for the Watsons/NYU Shanghai rule moves;
+   "Investments" category rules are unconfirmed against real merchant
+   strings; new-category merchant rules generally are first-pass guesses.
+
+Previous (Session 54): reworked the notification system — Settings gained a
+3-category "Notification preferences" section (Budget alerts, Pending
+review reminders, Monthly spending overview), the header bell is now a
+real dropdown instead of pure navigation, and `GET /dashboard/action`
+respects the new in-app toggles. See Session 54 log for full detail.
+
+Previous (Session 53): added the 50/30/20 Planning tab, fixed the Budget
+tab's progress-bar/status coloring, changed the Overview stat tiles
+(Transactions → Monthly income, Labeled → labeled/total fraction), and
+added the missing insurance merchant rule. See Session 53 log for full
+detail.
+
+Previous (Session 52): expanded the ML category taxonomy from 7 to 13
+categories (added Housing, Personal Care & Health, Entertainment, Travel,
+Education, Investments). See Session 52 log for full detail — decision
+history (user's first proposal, several rounds of trimming/merging via
+AskUserQuestion), the merchant-rule remapping, and the live migration.
+
+Previous (Session 51, updated same session): added an LLM fallback
 classification tier for transactions no rule or trained model can place,
 plus a fix so renamed categories don't silently orphan existing merchant
 rules. See Session 51 log for full detail. **Provider changed mid-session**:
@@ -157,7 +237,7 @@ Next:
    limiting (Session 49's lockout is client-side only — see that session's
    log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 51, 2026-08-13)
+## Current State (Session 55, 2026-08-14)
 
 | Item | Status |
 |---|---|
@@ -187,7 +267,7 @@ Next:
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
 | Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
 | JWT verification | **FIXED** (Session 45): `AuthMiddleware` verified `sub`/`aud` claims but never the ES256 signature itself (`verify_signature: False`, a Session 40 leftover) — any self-crafted token with an arbitrary `sub` was accepted as a valid session. Now verifies against Supabase's real JWKS via `backend/auth_utils.py::decode_supabase_jwt` (`jwt.PyJWKClient`); unused `supabase_jwt_secret` config removed |
-| Tests | 74 (`pytest tests/`, src/ pipeline) + 27 (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings, classification-coalescer threading tests, and — new this session — `routes/uploads.py` coverage: extension rejection, duplicate-hash 409, a failing file not blocking its neighbors, and sequential overlapping-date-range dedup) = 101 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
+| Tests | 99 (`pytest tests/`, src/ pipeline) + 101 (`pytest backend/tests/`, incl. new `test_dashboard_rule_503020.py`) = 200 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 | Legal pages | **NEW** (Session 47): `/privacy` and `/terms`, static public App Router pages, drafted from the real data model; linked from the landing page footer and Settings |
 | Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections. **CHANGED** (Session 48): change-password form now gated by the shared `PasswordChecklist`; Account card shows `username`. **CHANGED** (Session 50): removed the "Onboarding status" row (raw `profiles.onboarding_phase`) from the Account card — user-facing noise, not something users act on |
@@ -195,8 +275,466 @@ Next:
 | Password rules + consent | **NEW** (Session 48): shared `PasswordChecklist` component (9+ chars/A-Z/a-z/0-9/special) gates both signup and Settings change-password; signup requires a checked "I agree to Terms & Conditions and Privacy Policy" box (links to Session 47's pages) |
 | Forgot password | **NEW** (Session 48): `AuthClient` gained a third `'forgot'` mode calling `resetPasswordForEmail`; `/auth/verify` now branches on `type=recovery` to show a "set new password" form (`supabase.auth.updateUser`) instead of auto-redirecting to the dashboard |
 | Auth flow polish | **NEW** (Session 49): shared `PasswordInput` (show/hide eye toggle) used on all 6 password fields across signup/signin/Settings/recovery; live confirm-password mismatch text added to the two forms that lacked it (Settings change-password, recovery set-password — signup already had it); email/username/identifier trimmed before use; client-side soft lockout on sign-in after 5 failed attempts (escalating 30s→300s cooldown, resets on success). Two Supabase security-advisor findings fixed: `handle_new_user()`/`initialize_default_categories()`/`reassign_deleted_category_transactions()` (trigger-only functions) had EXECUTE revoked from `anon`/`authenticated` (harmless as direct RPC calls today, but needlessly public); "Leaked Password Protection" is disabled project-wide — flagged for the user, not fixable via any available tool (Dashboard-only setting) |
+| Category taxonomy | **CHANGED** (Session 52): 7 → 13 categories. `src/categories.py::ML_CATEGORIES` now: Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Housing, Personal Care & Health, Entertainment, Travel, Education, Investments, Other. `EXTRA_LABEL_CATEGORIES` removed (Entertainment/Travel/Health & Wellness are now real ML categories instead of deferred labels normalized to Other); `CATEGORY_NORMALIZE` now maps legacy `'Health & Wellness'` → `'Personal Care & Health'`. `initialize_default_categories()` trigger creates all 13 for new signups; existing users backfilled via migration `20260814010000_expand_category_taxonomy.sql`. **Classifier still NOT retrained on the new classes** — see Next Suggested Step. **FIXED** (Session 53): `insurance`/`保险` had no merchant rule at all — added, mapped to Utilities & Services (migration `20260814020000_insurance_rule.sql`) |
+| 50/30/20 budgeting rule | **NEW** (Session 53): Planning → "50/30/20" tab. `src/categories.py::CATEGORY_BUCKET` maps all 13 ML categories to Need/Want/Savings (independent of the pre-existing `budget_category_config.type` Need/Want enum, which only covers categories a user has set a $ budget for — this new mapping buckets ALL of a month's spend). `GET /dashboard/rule-503020?month=` (new) returns per-bucket target ($=income×50/30/20%) vs actual spend; Savings = Investments-category spend + unspent income (`max(income − total_spend, 0)`), confirmed with the user since Investments-only would read ~0% most months. Frontend `RuleTab.tsx`: donut chart (3 fixed bucket colors, not per-category) + per-bucket progress rows + a rule-based advice card (prioritizes a savings shortfall, then whichever spend bucket runs hottest, names the top offending category; "on track" success state within ±3pp of all three targets) |
+| Budget tab colors | **FIXED** (Session 53): progress bars were a 3-way status color (danger red / amber `--chart-5` / accent) that ignored category identity — the amber especially read as "neon yellow" to the user. `ProgressBar` (`ui-feedback.tsx`) gained an optional `fillColor` prop (raw CSS color, additive — 3 other call sites unaffected) so the bar now always shows the category's own `chartColorFor()` color; over/approaching-budget status moved to the spend-amount TEXT color only (red when over, amber above 80%) instead of changing the bar |
+| Overview stat tiles | **CHANGED** (Session 53): the "Transactions" tile (raw count) replaced with "Monthly income" (`profiles.monthly_income`, reused via the existing `_monthly_income()` helper — now also returned by `GET /dashboard/summary`). Labeled explicitly as *monthly* rather than "Total income" since the parser drops all 收入/income transaction rows at parse time (`src/parse.py` keeps `收/支 == '支出'` only) — there's no real lifetime income figure to pair with the all-time "Total spend" tile next to it. The "Labeled" tile now shows a `labeled / total` fraction (e.g. "742 / 900") instead of just the labeled count, so the removed transaction total still surfaces |
+| Notification system | **REWORKED** (Session 54): `profiles` gained 3 new booleans (`budget_inapp_enabled`, `pending_review_inapp_enabled` — both default `true`, preserving prior always-on behavior; `monthly_overview_email_enabled` — default `false`, preference-only, no sending logic exists yet). `GET /dashboard/action` now filters its `over_budget`/`approaching_budget`/`pending_review` items by these toggles (single source of truth — both the bell and the Action plan tab read it). Settings' single flat "Budget alerts" card became a 3-category "Notification preferences" section (Budget alerts, Pending review reminders, Monthly spending overview) using a new reusable `Switch` component. The header bell (`NotificationBell.tsx`) is no longer pure navigation — it's a real dropdown (reusing `CategoryColorPicker`'s ref/mousedown/Escape popover pattern) showing the same live `GET /dashboard/action` data inline, with a "View all in Planning" footer link into the unchanged `ActionTab`. No persisted notifications table was built — deliberately out of scope, nothing needed it (see Session 54 log). **EXTENDED** (Session 55): 2 more `GET /dashboard/action` item types, same live-computed pattern — `welcome` (shows for the first 48h of an account's life, keyed off `profiles.created_at` since `onboarding_phase` is confirmed dead/unused — see below) and `training_complete` (shows for 30 minutes after a `model_runs` row's `finished_at`, a deliberately-flagged exception to "derived from persistent state" since a training run finishing is momentary, not standing — a time-window heuristic instead of a new read/dismissed table) |
+| Onboarding UI | **REWORKED** (Session 55): the bulky full-width `OnboardingChecklist` top banner is gone, replaced by `OnboardingTour` — the same real-data-derived completion logic (upload/categories/label/train), now in a small `fixed bottom-right` step box, plus a new `TourSpotlight` overlay: dims the page and spotlights (via a `box-shadow: 0 0 0 9999px` cutout) whichever button the current step needs next, with an arrow-bubble instruction pointing at it. Deliberately non-blocking — every overlay layer is `pointer-events: none` except the bubble's own "Skip tour" link, so the real button underneath stays clickable and a user can never get stuck if the target-resolution logic is wrong. New `data-tour-id` attributes added to 4 elements (`Tabs.tsx`'s `TabItem.tourId`, `TransactionsModelTab.tsx`'s step-pills, `UploadTab.tsx`'s dropzone) — none existed anywhere in the frontend before this. Confirmed `profiles.onboarding_phase` (the enum-based `upload/categories/labeling/complete` column from the original schema) is fully dead: nothing ever calls `POST /dashboard/onboarding-complete`, so every account sits at the `'upload'` default forever — not used for either this rework or the welcome notification above |
+| Header icon tooltips | **NEW** (Session 55, same session): new `frontend/src/components/ui/Tooltip.tsx` — CSS-only (`group-hover`/`group-focus-within`, no JS state, no portal) hover/focus label wrapping a single child. Applied to the 4 header icon-only buttons (Notifications, theme toggle, Settings, Sign out) — none had a visible label before, only `aria-label` for screen readers. The bell's tooltip suppresses itself while its own dropdown is open (`NotificationBell` gained an `onOpenChange` callback) to avoid showing a redundant hover label next to an already-open panel |
 
 ## Session Log
+
+### Session 55 (2026-08-14) — Welcome/training notifications + guided onboarding tour
+
+**Scope**: two related asks. (1) Show a "Welcome to Financing" in-app
+notification via the bell as soon as a new signup loads the dashboard,
+plus the user explicitly asked me to think of and implement other
+notification types that might be needed. (2) Rework onboarding: the
+top-of-page checklist banner is "very bulky" — shrink it into a small
+bottom-right step box, and build a real guided-tour experience (dimmed
+background spotlighting the relevant button, an arrow pointing at it, the
+step box highlighting the active step). User explicitly delegated all
+design judgment on both.
+
+**Process**: plan mode, two parallel Explore agents (frontend: the
+existing `OnboardingChecklist`'s completion-derivation logic and
+positioning, `Tabs.tsx`/wizard step DOM structure for spotlight targeting,
+existing modal/overlay patterns to reuse; backend: whether
+`profiles.onboarding_phase` reliably signals a new user, `model_runs`
+status/polling for a possible training-complete notification, and
+`GET /dashboard/action`'s shape for adding new item types consistently).
+Key finding: **`profiles.onboarding_phase` is fully dead** — an enum
+column (`upload/categories/labeling/complete`) from the original schema
+that nothing has ever advanced past its `'upload'` default, since the only
+endpoint that could set it forward (`POST /dashboard/onboarding-complete`)
+is never called from anywhere in the frontend (confirmed via repo-wide
+grep — zero callers). It was superseded at some point by
+`OnboardingChecklist`'s real-data-derived completion logic
+(`total_transactions`, `labeled_transactions`, training runs,
+localStorage), but the dead column and its two backend endpoints were
+never cleaned up. **Neither this session's welcome notification nor the
+onboarding tour rework uses it** — both needed a genuinely reliable
+signal instead: `profiles.created_at` (always populated, never updated)
+for "new account," and the checklist's existing real-data derivation for
+step completion.
+
+**Design decisions**:
+- **Two new notification types**, both following `GET /dashboard/action`'s
+  established "computed live, no persistence" pattern (Session 54's
+  documented philosophy): `welcome` (shows for 48h after `created_at`,
+  no dedicated settings toggle — always-on like `pending_review`) and
+  `training_complete` (shows for 30 minutes after a succeeded
+  `model_runs` row's `finished_at`). The latter is a deliberately flagged
+  exception: a training run finishing is a momentary event, not a
+  standing condition like a budget crossing, so a naive "most recent run
+  succeeded" check would show the notification forever. A time-window
+  heuristic keeps it consistent with "no new persisted state" rather than
+  building the first read/dismissed marker in this codebase — chosen
+  because no user has asked for exact-once delivery yet; only build that
+  if the reappear-within-window behavior turns out to actually bother
+  someone.
+- **Onboarding tour is deliberately non-blocking.** The spotlight overlay
+  dims the page and visually highlights the target, but every layer has
+  `pointer-events: none` except the instruction bubble's own "Skip tour"
+  link — the real button underneath the highlight stays fully clickable
+  throughout. This was a judgment call favoring safety over polish: if the
+  `data-tour-id` target-resolution logic ever points at the wrong element,
+  a blocking modal-style tour could trap a user behind a highlight on
+  nothing useful; a non-blocking one degrades to "slightly odd visual"
+  instead of "stuck."
+- **Spotlight positioning uses the `box-shadow: 0 0 0 9999px` technique**
+  (a single absolutely-positioned transparent box sized to the target's
+  `getBoundingClientRect()`, with a huge shadow spread punching the
+  "hole") rather than an SVG mask or 4-div quadrant layout — simpler, no
+  new dependency, and this codebase already leans on plain `fixed
+  inset-0` divs for its one existing modal (`SplitModal.tsx`) rather than
+  a portal or overlay library.
+
+**Code changes**:
+- `backend/routes/dashboard.py`: new `_parse_utc()` helper (parses a
+  `timestamp with time zone` column into an aware UTC datetime — `_now_cn()`
+  is naive and on a different clock, so comparing against it directly
+  would raise `TypeError`, same fix pattern `training.py`'s existing
+  `_with_stale_flag` already uses). `GET /dashboard/action` gains the
+  `welcome` block (added `created_at` to the existing `profiles` select,
+  no extra query) and the `training_complete` block (new query against
+  `model_runs`, `status='succeeded'` ordered by `created_at desc limit 1`,
+  no schema change — `finished_at` already existed). New constants
+  `WELCOME_WINDOW` (48h) / `TRAINING_COMPLETE_WINDOW` (30min). 4 new
+  tests in `backend/tests/test_dashboard_action.py`.
+- `frontend/src/components/ui/NotificationBell.tsx`: dropdown gains
+  rendering cases for both new types (Sparkles icon for welcome, Brain
+  icon + accuracy% for training_complete); both now count toward the
+  badge number alongside the existing budget crossing types.
+- `frontend/src/components/onboarding/OnboardingChecklist.tsx` **deleted**,
+  replaced by two new files:
+  - `OnboardingTour.tsx` — same completion-derivation logic as the old
+    file (kept byte-for-byte in spirit, same `STEPS`/localStorage keys),
+    repackaged as a `fixed bottom-right` compact step box instead of a
+    full-width top banner. Adds `resolveTargetId(stepId, activeTab)`,
+    mapping the current incomplete step to a `data-tour-id` string aware
+    of where the user currently is (e.g. "upload" points at the top-level
+    nav tab until the user has actually navigated into the upload wizard
+    step, then points at the dropzone itself).
+  - `TourSpotlight.tsx` — the overlay: tracks the target element's
+    bounding rect (recomputed on resize/scroll/a short interval poll for
+    async-mounted targets), renders the box-shadow cutout + a
+    position-flipping instruction bubble with a CSS-triangle caret.
+    Renders nothing if the target isn't currently in the DOM — the tour
+    "resumes" naturally once the user navigates to the right place.
+- `data-tour-id` plumbing (none of these attributes existed anywhere
+  before this session): `Tabs.tsx`'s `TabItem` gained an optional
+  `tourId` field spread onto `TabBar`'s button; `DashboardClient.tsx`'s
+  `SECTIONS` array tags the Transactions & Model entry with
+  `tourId: 'nav-transactions-model'`; `TransactionsModelTab.tsx`'s 5
+  step-pill buttons each get `data-tour-id="wizard-step-${id}"`;
+  `UploadTab.tsx`'s dropzone gets `data-tour-id="upload-choose-files"`.
+
+**Verified**: `pytest tests/ backend/tests/` → 207 passing (99 src + 108
+backend, up from 203 — the 4 new tests). `npx tsc --noEmit` and
+`npm run build` both clean. **Not verified — and this is the riskiest
+unverified piece across all three recent UI-heavy sessions**: no live
+browser session to confirm the spotlight's positioning math actually
+works (bubble placement, viewport-edge flipping, caret alignment), that
+`data-tour-id` targets resolve correctly as the user navigates around,
+or that the whole experience reads as a coherent guided tour rather than
+a glitchy overlay. See Next Suggested Step — this is now flagged as the
+strongest recommendation yet for an actual browser/Playwright pass before
+more UI work stacks on top.
+
+### Session 54 (2026-08-14) — Notification system rework
+
+**Scope**: user asked to "remake the notification area of the app" —
+Settings should get a proper Notifications section organized by category
+(each with in-app/email switches), and the header bell should show
+in-app notifications directly instead of just navigating to Planning
+("shows something on planning which I don't want"), with the content that
+used to live behind that navigation still reachable from Planning. The
+user explicitly delegated which extra categories to add ("give multiple
+sections that you think the project may need like monthly overview or
+something") and told me to make the design decisions generally.
+
+**Process**: used plan mode with two parallel Explore agents (frontend:
+`NotificationBell`, `ActionTab`, Settings' existing alert card, dropdown
+patterns to reuse; backend: `alerts.py`/Resend integration, `_budget_crossings`,
+whether any persisted notifications table exists, `profiles` schema). Key
+finding from research: there is **no persisted notifications table
+anywhere** — the in-app side has always been 100% computed live on every
+`GET /dashboard/action` call, and the bell was pure navigation with zero
+dropdown/open state of its own. Confirmed one real scope decision with the
+user via `AskUserQuestion`: whether to build actual scheduled delivery for
+a new "Monthly overview" email category (would need a new backend endpoint
++ a Render Cron Job, since this backend has no cron/scheduler at all —
+everything alert-related is reactive) or ship it as a settings toggle only
+for now. **User chose toggle-only** — avoids the new feature silently
+half-existing (a toggle with no delivery would be worse if left
+unexplained, so the UI copy says so explicitly).
+
+**Design decisions**:
+- **Three notification categories**: Budget alerts (existing, extended
+  with a real in-app toggle — previously in-app was always-on with no way
+  to turn it off at all), Pending review reminders (new, in-app only — no
+  email path exists for this so didn't add a switch that would lie),
+  Monthly spending overview (new, email only — an in-app toggle wouldn't
+  mean anything for a periodic digest; explicit "hasn't shipped yet" copy
+  in the UI since the toggle is honestly a no-op today).
+- **No new notifications table.** The bell dropdown reuses the exact same
+  live `GET /dashboard/action` data `ActionTab` already renders — building
+  a persisted history/read-state table would have been speculative
+  infrastructure with nothing concrete asking for it (the user's ask was
+  "show it directly on click", not "let me see past notifications").
+- **In-app toggles get real enforcement**, not just UI placeholders: they
+  filter `GET /dashboard/action`'s response server-side, so the bell badge,
+  the bell dropdown, and the Action plan tab all stay in sync automatically
+  (single source of truth, same "never let two things drift" principle the
+  codebase already uses for `_budget_crossings` between in-app and email).
+
+**Code changes**:
+- New migration `supabase/migrations/20260814030000_notification_prefs.sql`,
+  applied live to project `pxxqqffwummhkohnrvtz`: `profiles` gains
+  `budget_inapp_enabled`/`pending_review_inapp_enabled` (both default
+  `true`, preserving existing always-on behavior for every current user)
+  and `monthly_overview_email_enabled` (default `false`, since nothing
+  should silently opt existing users into a feature that doesn't send
+  anything yet). Verified live via `execute_sql`.
+- `backend/routes/settings.py`: `ProfileUpdate` gained the 3 new optional
+  fields — the existing generic `PATCH /settings/profile`
+  (`exclude_unset=True`) handles them with no other backend change needed.
+- `backend/routes/dashboard.py`, `GET /dashboard/action`: now fetches the
+  2 new in-app columns alongside the existing `alert_threshold_pct` read
+  (no extra round trip), and skips computing/including
+  `over_budget`/`approaching_budget` entirely when `budget_inapp_enabled`
+  is false, and skips the `pending_review` query+item when
+  `pending_review_inapp_enabled` is false. New tests in
+  `backend/tests/test_dashboard_action.py`: each toggle disabled
+  independently (confirms the other type still shows), plus a
+  no-profile-row case confirming both default to enabled.
+- New `frontend/src/components/ui/Switch.tsx` — small reusable on/off
+  switch (no such component existed before; Settings' only prior "switch"
+  was a raw styled checkbox), used throughout the reworked section.
+- `frontend/src/app/settings/SettingsClient.tsx`: replaced the single flat
+  "Budget alerts" card with a "Notification preferences" section
+  containing the 3 categories described above, each with `Switch`
+  toggles; save button/logic unchanged in shape (one combined
+  `PATCH /settings/profile` call, renamed "Save notification preferences").
+- `frontend/src/components/ui/NotificationBell.tsx`: rewritten from a
+  34-line plain button into a real dropdown, reusing
+  `CategoryColorPicker.tsx`'s existing ref + `mousedown`/`Escape` listener
+  popover pattern (no new library). Panel renders the same
+  `over_budget`/`approaching_budget`/`pending_review` items `ActionTab`
+  shows, styled compactly with the same color tokens; a "View all in
+  Planning" footer button closes the dropdown and hands off to the
+  unchanged `ActionTab` via a renamed `onViewAll` prop (was `onClick`,
+  which used to be the bell's ONLY behavior — clicking the bell no longer
+  means "navigate away").
+- `frontend/src/app/dashboard/DashboardClient.tsx`: prop rename only
+  (`onClick` → `onViewAll`) to match the bell's new signature; `ActionTab`
+  itself and the Action-plan sub-tab are otherwise untouched.
+
+**Verified**: `pytest tests/ backend/tests/` → 203 passing (99 src + 104
+backend, up from 200 — the 3 new toggle-filtering tests). `npx tsc --noEmit`
+and `npm run build` both clean. Live-verified the 3 new `profiles` columns
+via `execute_sql` post-migration. **Not verified**: no live browser session
+— the dropdown's open/close/positioning behavior, the new `Switch`
+components' look, and the reworked Settings layout were not visually
+confirmed. Combined with Session 53's similarly-unverified frontend work,
+this is now two sessions of UI changes without a real browser pass — see
+Next Suggested Step.
+
+### Session 53 (2026-08-14) — 50/30/20 Planning tab, Budget bar colors, stat tiles
+
+**Scope**: follow-on to Session 52. Four independent asks in one session:
+(1) two merchant-rule corrections after the user compared the app's
+categories against Alipay/WeChat's own native category pickers (screenshots
+supplied) — landed on "no new categories, just fix the rules" after some
+back-and-forth (first said pets→Entertainment/insurance→Personal Care &
+Health, then corrected to pets staying Shopping/insurance→Utilities &
+Services); (2) a new 50/30/20 budgeting-rule view on the Planning tab;
+(3) two Budget-tab color bugs — bars using a hardcoded amber/"neon yellow"
+status color instead of the category's own color, and no text-only
+indicator for "approaching budget"; (4) Overview stat tiles: swap the raw
+"Transactions" count tile for income info, and change "Labeled" to a
+labeled/total fraction.
+
+**Process**: used plan mode. Two Explore agents in parallel researched the
+frontend (Planning tab structure, `BudgetTab`'s exact bar-color bug,
+existing category-color utilities, existing pie-chart/advice-box UI
+patterns) and the backend (budget endpoints, `budget_category_config`'s
+existing Need/Want-only enum, income plumbing) before designing. Confirmed
+two real design decisions with the user via `AskUserQuestion` before
+writing code: how to define the Savings bucket (Investments-category spend
+alone would read ~0% most months, since not every month has an investment
+transaction — went with spend + unspent income, confirmed), and the
+Need/Want/Savings mapping for all 13 categories (user accepted the proposed
+split as-is). Mid-plan, the user added two more requests (text-only
+approaching-budget color; the income/labeled-fraction stat tile change) —
+folded into the plan before exiting plan mode, including a flagged honesty
+tradeoff (see below) rather than silently picking an approach.
+
+**Key design choices**:
+- **No `budget_type` enum change.** `budget_category_config.type`
+  ('Need'/'Want' only) is a separate, pre-existing per-category-budget
+  feature that only covers categories the user has set a $ budget for —
+  wrong data source for bucketing ALL spend. Instead added a static
+  `CATEGORY_BUCKET` dict in `src/categories.py` mapping all 13
+  `ML_CATEGORIES` to Need/Want/Savings, applied to every dollar of a
+  month's categorized spend via the existing `_spend_by_category()` helper
+  (no new RPC/SQL).
+- **Savings = Investments-category spend + unspent income**
+  (`max(income − total_spend, 0)`) — confirmed with the user, matches the
+  standard "what you didn't spend also counts as saved" framing.
+- **Income tile honesty**: `total_spend` on the Overview tab is an
+  all-time sum; the only income figure anywhere is `profiles.monthly_income`
+  (a manually-entered monthly value) — real income transactions don't
+  exist in this app's data at all, since `src/parse.py` explicitly filters
+  to `收/支 == '支出'` (expense) only and drops all 收入 (income) rows at
+  parse time. Labeled the new tile "Monthly income", not "Total income", so
+  it doesn't imply the same timeframe as the all-time spend tile next to it
+  — flagged to the user in the plan rather than silently picking a label.
+
+**Code changes**:
+- `src/merchant_categories.py`: added `insurance`/`保险` →
+  Utilities & Services (previously had no rule at all); confirmed
+  `宠物`/`pet store` already correctly mapped to Shopping, no change needed
+  there despite the back-and-forth.
+- `src/categories.py`: new `CATEGORY_BUCKET` dict (Needs: Groceries,
+  Transportation, Utilities & Services, Housing, Personal Care & Health,
+  Education; Wants: Eating Out, Shopping, Entertainment, Travel, Transfers &
+  Gifts, Other; Savings: Investments).
+- `backend/routes/dashboard.py`: new `GET /dashboard/rule-503020?month=`
+  endpoint (reuses `_monthly_income()`, `_spend_by_category()`,
+  `_available_months()` — no new SQL). Returns per-bucket
+  `{target_pct, target_amount, spent, categories[]}`; `target_amount` is
+  `null` when income is unset (0) instead of dividing by zero or showing a
+  misleading 0% target. `GET /dashboard/summary` gained `monthly_income`.
+  New test file `backend/tests/test_dashboard_rule_503020.py` (3 cases:
+  basic bucketing, zero-income null-target handling, overspend-beyond-income
+  flooring unspent at 0).
+- `frontend/src/components/tabs/RuleTab.tsx` (new): donut chart (3 fixed
+  bucket colors via `chartFillColorForKey`, not per-category — these are
+  aggregate buckets, not category identities) + a legend/progress-bar
+  comparison list (actual $/% vs target $/% per bucket) + a rule-based
+  advice card. Advice logic (client-side, no LLM/backend text generation):
+  within ±3pp of all three targets → "on track" success card; else
+  prioritizes a savings shortfall first (the rule's aspirational goal),
+  then whichever spend bucket runs hottest over target, naming that
+  bucket's top-spend category by name.
+- `frontend/src/app/dashboard/DashboardClient.tsx`: wired in the new
+  `rule-503020` sub-tab under Planning, right after Budget.
+- `frontend/src/components/ui-feedback.tsx`: `ProgressBar` gained an
+  optional `fillColor` prop (raw CSS color value) — additive, the 3 other
+  existing call sites (`SavingsTab`, `LabelTab`, `UploadQueueItem`) pass
+  neither `color` nor `fillColor` and are unaffected.
+- `frontend/src/components/tabs/BudgetTab.tsx`: bar now always uses
+  `chartColorFor(cat.category)` via `fillColor` (was a 3-way status
+  Tailwind class — danger red / amber `--chart-5` / accent — that ignored
+  category identity entirely, which is what the user saw as "neon
+  yellow"). Over/approaching-budget status moved to the spend-amount TEXT
+  color only (danger red when over budget, amber above 80%, applied to both
+  the amount line and the caption line below it) — the bar itself no longer
+  changes color based on budget status.
+- `frontend/src/components/tabs/StatsTab.tsx`: "Transactions" tile →
+  "Monthly income" tile; "Labeled" tile now renders `labeled / total`
+  (e.g. "742 / 900") via a new optional `denominator` field on the stat-tile
+  entry type, instead of just the labeled count.
+- New migration `supabase/migrations/20260814020000_insurance_rule.sql`,
+  applied live to project `pxxqqffwummhkohnrvtz`: inserts the
+  `insurance`/`保险` global merchant rules (verified via `execute_sql`
+  after applying).
+
+**Verified**: `pytest tests/ backend/tests/` → 200 passing (99 src + 101
+backend, up from 197 — the 3 new rule-503020 tests). `npx tsc --noEmit` and
+`npm run build` both clean. Live-verified the new merchant_rules insert via
+`execute_sql`. **Not verified**: no live browser/Playwright session against
+the real account — the new Planning tab, the pie chart rendering, the
+Budget tab's actual color output, and the new stat tiles were not visually
+confirmed this session. See Next Suggested Step.
+
+### Session 52 (2026-08-14) — Category taxonomy expanded 7 → 13
+
+**Scope**: user wanted a fuller/more standard personal-budget category list —
+supplied several published category-list references (bank/finance blog
+"recommended budgeting categories" style lists, 15-40+ items each spanning
+Housing/Insurance/Debt/Retirement/etc.) and asked me to research and decide
+on a final set myself, given "minimal categories but full coverage of
+spendings" as the guiding constraint.
+
+**Process**: pulled real category-distribution data from the live Supabase
+project (`pxxqqffwummhkohnrvtz`) first rather than working from the pasted
+reference lists alone — 683 categorized transactions across the 7 existing
+categories, heavily skewed (Eating Out 47%, Groceries 31%, everything else
+single digits), plus discovered a live user had already manually created an
+8th category ("Entertainment") that was silently getting folded into "Other"
+at classify time — `EXTRA_LABEL_CATEGORIES`/`CATEGORY_NORMALIZE` in
+`src/categories.py` treated it as a deferred label, not a real ML class, a
+pre-existing bug surfaced (not caused) this session. Pushed back on adopting
+the user's full pasted list wholesale (would have meant 15-20+ categories
+against only 683 labeled transactions — several existing categories already
+sit at 7-9 samples, and `MIN_SAMPLES_PER_CLASS=2` means the classifier would
+technically train but most classes would never clear the 90%-precision
+auto-apply threshold, defeating the point of the ML layer). Went through
+several rounds of `AskUserQuestion` narrowing: trimmed-set vs full-list vs
+manual-label-only scoping, then merged Personal Care into Health (per user's
+explicit ask, "minimal categories but full coverage"), then a final lock-in
+confirmation.
+
+**Final 13**: Groceries, Transportation, Utilities & Services, Eating Out,
+Shopping, Transfers & Gifts (unchanged) + Housing, Personal Care & Health,
+Entertainment, Travel, Education, Investments (new) + Other. Explicitly
+**not** added: Insurance, Debt payments/loans (rare-to-absent in Alipay/
+WeChat exports specifically — those get paid via bank autopay, not through
+the apps this pipeline ingests); Hobbies (merged into Entertainment); Gifts &
+donations (merged into existing Transfers & Gifts).
+
+**Code changes**:
+- `src/categories.py`: `ML_CATEGORIES` now 13 entries. Removed
+  `EXTRA_LABEL_CATEGORIES` (Entertainment/Travel/Health & Wellness are now
+  real ML categories, not deferred labels) — `LABEL_CATEGORIES` is now just
+  `ML_CATEGORIES`. `CATEGORY_NORMALIZE` keeps `'Health & Wellness' →
+  'Personal Care & Health'` for old labeled data, drops the Travel/
+  Entertainment → Other mappings (no longer needed, they're identity now).
+  `ACTIVE_CATEGORIES` simplified from `ML_CATEGORIES + ['Saving', 'Investing']`
+  to just `ML_CATEGORIES` — that extension was dead code (grepped, zero
+  references anywhere else in the codebase) superseded by the real
+  `'Investments'` category.
+- `src/merchant_categories.py`: moved patterns whose real category changed —
+  airline/airport/flight-ticket patterns (中国东方航空 etc., flight/airport/
+  airline keywords) Transportation → Travel; video-streaming platforms
+  (爱奇艺/腾讯视频/优酷/芒果TV/汽水音乐/哔哩哔哩/B站/网易) Utilities & Services
+  → Entertainment; Wanda cinema (万达影城/万达) Shopping → Entertainment;
+  drugstores (屈臣氏/万宁 Watsons) Shopping → Personal Care & Health. Added
+  new pattern blocks for all 6 new categories (Travel: Ctrip/Qunar/Fliggy/
+  Booking.com/Airbnb/hotel chains + keywords; Housing: rent/mortgage/property
+  management keywords; Personal Care & Health: pharmacy/hospital/clinic/gym/
+  salon keywords; Entertainment: Netflix/Spotify/Steam/PlayStation/Xbox +
+  cinema/concert keywords; Education: tuition/university/textbook keywords;
+  Investments: 余额宝/基金/理财/股票/brokerage keywords). NYU Shanghai's
+  "Tuition and Fees"/"NYUCard Print Fee" special-case
+  (`special_category()`) moved from Utilities & Services to Education —
+  better fit now that Education exists. `DESCRIPTION_KEYWORD_RULES` updated
+  to match (moved flight/airport/ticket disambiguation keywords out of
+  Transportation into a new Travel entry, added entries for the other 5 new
+  categories). Four short bare patterns (`HOA`, `gym`, `spa`, `KTV`) were
+  caught and removed by the existing
+  `test_no_dangerously_short_unallowlisted_patterns` regression test — too
+  generic/collision-prone for a never-reviewed rule (e.g. "spa" inside
+  "space"); relies on the longer/Chinese alternatives instead. Regenerated
+  `data/templates/merchant_rules_starter.csv` (690 rules, up from 554) via
+  `python3 src/merchant_categories.py`.
+- New migration `supabase/migrations/20260814010000_expand_category_taxonomy.sql`,
+  applied live to project `pxxqqffwummhkohnrvtz`: (1) `initialize_default_categories()`
+  now creates all 13 categories for new signups with sort_order 1-13 and a
+  color per category (see below); (2) backfills the 6 new categories onto
+  every existing user via `ON CONFLICT (user_id, name) DO NOTHING` (existing
+  7 untouched; the live user's manually-created "Entertainment" — already
+  'pink' — was left alone rather than duplicated); (3) syncs the global
+  `merchant_rules` seed (554 rows from the original `20260703000001`
+  migration, never auto-synced since) with the code changes above: 25
+  `UPDATE`s remapping patterns to their new category, 84 `INSERT`s for the
+  new category patterns (`ON CONFLICT DO NOTHING`) — deliberately excludes
+  `LOCAL_MERCHANT_RULES` (personal contact names like "Tara"/"Steve"), which
+  the original seed migration never synced to the DB either, since global
+  rules fire for every account and personal names aren't something that
+  should auto-categorize other users' transactions; (4) re-sequences
+  `sort_order` to the canonical 1-13 order for every user (the backfill step
+  appends new rows at whatever position a user's existing rows already used,
+  which left the live user's manually-created "Entertainment" at sort_order
+  0 instead of 9). **Color assignment**: the 12-key design-system palette
+  (`categories_color_allowed` CHECK) has one fewer slot than 13 categories,
+  so `Investments` intentionally gets `color = NULL` (falls back to the
+  frontend's deterministic hash, per the existing Session 44 "auto" design) —
+  every other category got a distinct key matching what the live account
+  already had for its original 8.
+
+**Verified**: `pytest tests/ backend/tests/` → 197 passing (99 src + 98
+backend, no regressions; also fixed this session's incidental sandbox
+environment issue — `numpy>=2` installed by an unpinned `pip install -r
+backend/requirements.txt` broke `scipy`/sklearn imports, pinned back to
+`numpy<2` to match `pandas==2.1.3`'s constraint, not a code change).
+Re-queried the live `categories` and `merchant_rules` tables after applying
+the migration to confirm the expected end state (13 categories with correct
+colors/sort_order; spot-checked several remapped merchant_rules rows).
+
+**Not done / open**:
+1. **The trained classifier was not retrained** — it still only outputs the
+   old 7 classes. No way to trigger `POST /training/retrain` from this
+   sandbox (needs an authenticated browser session against the live
+   account). Until the user retrains via Model → Training, the new
+   categories are reachable only through the merchant-rule layer, not ML
+   predictions.
+2. No live `classify_all()` run against real transaction text to confirm the
+   remapped/new rules behave as expected on actual merchant strings — only
+   verified at the rule-table level (SQL) and via the existing pytest
+   regression suite (synthetic/decoy merchants, not this user's real data).
+3. The new categories' merchant rules are first-pass guesses (generic
+   English/Chinese keywords for Housing/Personal Care & Health/Education/
+   Investments especially) — expect to refine them once real transactions
+   start landing in the review queue under these categories.
+4. Didn't touch `data/labeled/merchant_rules_expanded.csv` beyond the
+   `write_rules_csv()` regeneration already covered above (that path is
+   gitignored, so nothing to commit there, but worth noting the working
+   tree's copy is now also 690 rows).
 
 ### Session 51 (2026-08-13) — LLM fallback classifier + category-rename rule sync
 

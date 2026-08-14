@@ -132,6 +132,7 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
             <button
               key={step.id}
               onClick={() => handleStepClick(index)}
+              data-tour-id={`wizard-step-${step.id}`}
               className={`h-8 px-3 rounded-full text-sm font-medium transition-all ${
                 index === currentStep
                   ? 'bg-accent-strong text-white'

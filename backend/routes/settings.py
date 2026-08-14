@@ -15,6 +15,13 @@ class ProfileUpdate(BaseModel):
     # "Approaching budget" threshold, e.g. 80 = warn/email at 80% of a
     # category's monthly budget. "Over budget" (100%) is not configurable.
     alert_threshold_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    # Notification preferences (Settings > Notifications). In-app toggles
+    # control GET /dashboard/action item visibility (bell + Action plan
+    # tab); monthly_overview_email_enabled is preference-only today — no
+    # sending logic exists yet.
+    budget_inapp_enabled: Optional[bool] = None
+    pending_review_inapp_enabled: Optional[bool] = None
+    monthly_overview_email_enabled: Optional[bool] = None
 
 
 class BudgetSettingsUpdate(BaseModel):

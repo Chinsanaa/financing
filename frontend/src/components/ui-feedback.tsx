@@ -41,17 +41,26 @@ export function Loading({ label }: { label?: string }) {
 export function ProgressBar({
   percent,
   color = 'bg-accent',
+  fillColor,
   height = 'h-2',
 }: {
   percent: number;
+  /** Tailwind class for the fill. Ignored when `fillColor` is set. */
   color?: string;
+  /** Raw CSS color (e.g. `rgb(var(--chart-cat-sky))`) for the fill — takes
+   *  priority over `color` when a caller needs a value outside the fixed
+   *  Tailwind palette (e.g. a category's own identity color). */
+  fillColor?: string;
   height?: string;
 }) {
   return (
     <div className={`w-full overflow-hidden rounded-full bg-edge/10 ${height}`}>
       <div
-        className={`${color} ${height} rounded-full transition-all duration-500`}
-        style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
+        className={`${fillColor ? '' : color} ${height} rounded-full transition-all duration-500`}
+        style={{
+          width: `${Math.min(Math.max(percent, 0), 100)}%`,
+          ...(fillColor ? { backgroundColor: fillColor } : {}),
+        }}
       />
     </div>
   );

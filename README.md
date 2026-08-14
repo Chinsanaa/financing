@@ -68,8 +68,10 @@ Two very different questions:
 The ten original tabs are grouped into five compact sections with sub-tabs:
 **Overview** (a monthly-spending line chart + category split), **Transactions**
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
-(Budget / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible onboarding
-checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
+(Budget / 50/30/20 / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible
+bottom-right onboarding guide (Upload → Categories → Label → Train) walks new
+accounts through each step, spotlighting the specific button to press next
+with a dimmed backdrop and an arrow. Plus a
 separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
 skeleton loading states, and a marketing landing page at `/` for signed-out
@@ -109,6 +111,13 @@ Budget/Review/Label, and Reports. Categories without a chosen color get a stable
 automatic color. The dashboard layout is fluid — it fills large desktop screens
 (capped for ultrawides) and adapts down to tablet and phone.
 
+**50/30/20 rule**: the **Planning → 50/30/20** tab buckets each of the 13
+categories into Needs / Wants / Savings & Investing and compares the
+month's actual split (donut chart) against the 50/30/20 targets derived
+from your monthly income, plus a short rule-based guidance card (e.g.
+trim the largest "want" if savings are short). Savings counts both money
+spent in the Investments category and unspent income for the month.
+
 **Subscriptions**: the **Planning → Subscriptions** tab auto-detects recurring
 merchants (≥3 charges in the trailing 6 months at a monthly or weekly cadence,
 with a stable amount) and shows an estimated monthly total. Each detected
@@ -117,15 +126,22 @@ re-detection runs. Detection logic lives in `src/recurring.py` (pure pandas,
 no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
 detection, and upserts into the `recurring_merchants` cache table.
 
-**Budget alerts**: the header's notification bell shows a live count of
-over-budget and approaching-budget categories, computed on every load by
-`GET /dashboard/action`. Clicking it jumps to **Planning → Action plan**,
-which lists both kinds of budget warnings as cards. Optionally, **Settings →
-Budget alerts** turns on email notifications with a configurable
-"approaching budget" threshold (default 80%) — emails are de-duplicated per
-category/month so the same crossing is never sent twice, and are checked
-reactively (when you upload, review, or label a transaction), not on a
-schedule, since no background scheduler exists yet.
+**Notifications**: the header's notification bell shows a live count of
+over-budget/approaching-budget categories, a welcome message for the first
+48 hours of a new account, and a training-finished note for 30 minutes
+after a model run succeeds, opening a dropdown with those items plus any
+pending-review reminder — all computed on every load by
+`GET /dashboard/action` — no separate notifications table, it's the same
+live data **Planning → Action plan** shows, just reachable without leaving
+the page ("View all in Planning" in the dropdown links there for the fuller
+view). **Settings → Notification preferences** has three categories: Budget
+alerts (in-app + email, with a configurable "approaching budget" threshold,
+default 80%), Pending review reminders (in-app only), and Monthly spending
+overview (email only — a settings toggle today, sending isn't built yet).
+Budget alert emails are de-duplicated per category/month so the same
+crossing is never sent twice, and are checked reactively (when you upload,
+review, or label a transaction), not on a schedule, since no background
+scheduler exists yet.
 
 **Insights**: **Planning → Insights** compares each category's current-month
 spend to its trailing 3-month average (flagging notable swings either way)

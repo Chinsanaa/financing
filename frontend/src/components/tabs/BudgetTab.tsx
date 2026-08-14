@@ -48,7 +48,7 @@ export default function BudgetTab() {
     month ? `/dashboard/budget?month=${month}` : '/dashboard/budget'
   );
   const { data: categoriesData } = useApi<{ categories: Category[] }>('/categories/');
-  const { toneFor } = useCategoryColors();
+  const { toneFor, chartColorFor } = useCategoryColors();
 
   // Options for the selector: the resolved current month is always first, then
   // any other months that have transactions.
@@ -233,22 +233,25 @@ export default function BudgetTab() {
                 ? Math.round((cat.current_spend / cat.monthly_budget) * 100)
                 : 0;
               const isOverBudget = cat.current_spend > cat.monthly_budget;
-              const color = isOverBudget
-                ? 'bg-danger'
-                : percentage > 80
-                ? 'bg-[color:var(--chart-5)]'
-                : 'bg-accent';
+              const isApproaching = !isOverBudget && percentage > 80;
+              // Status (over/approaching budget) is shown via TEXT color only —
+              // the bar always stays the category's own identity color.
+              const statusTextColor = isOverBudget
+                ? 'text-danger'
+                : isApproaching
+                ? 'text-[color:var(--chart-5)]'
+                : '';
 
               return (
                 <div key={cat.category}>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <Badge tone={toneFor(cat.category)}>{cat.category}</Badge>
-                    <p className={`text-sm font-semibold tabular-nums ${isOverBudget ? 'text-danger' : ''}`}>
+                    <p className={`text-sm font-semibold tabular-nums ${statusTextColor}`}>
                       {formatCurrencyWhole(cat.current_spend)} / {formatCurrencyWhole(cat.monthly_budget)}
                     </p>
                   </div>
-                  <ProgressBar percent={percentage} color={color} />
-                  <p className="mt-1 text-xs text-muted">
+                  <ProgressBar percent={percentage} fillColor={chartColorFor(cat.category)} />
+                  <p className={`mt-1 text-xs ${statusTextColor || 'text-muted'}`}>
                     {isOverBudget
                       ? `${formatCurrencyWhole(cat.current_spend - cat.monthly_budget)} over budget`
                       : `${percentage}% of budget used`}
