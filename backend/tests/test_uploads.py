@@ -12,19 +12,16 @@ import routes.uploads as uploads_module
 USER_A = "user-a-id"
 
 ALIPAY_HEADER = [
+    "支付宝交易记录明细查询",
+    "---------------------------------交易记录明细列表------------------------------------",
     "交易时间,交易分类,交易对方,商品说明,收/支,金额,交易状态",
 ]
-# Deliberately no title/separator preamble rows above the header (unlike
-# tests/conftest.py::_write_alipay_native, which src/parse.py's own
-# hand-rolled line scanner tolerates fine). routes/uploads.py's
-# `detect_source` -> `_read_headers` reads the file with
-# `pd.read_csv(header=None)`, which raises a ParserError on a file whose
-# early rows have fewer fields than later ones (a title line has 1 field,
-# the header row has 7) — silently swallowed, then it falls back to
-# treating just the first line as the header. That looks like a real,
-# separate latent bug (any genuine Alipay export with that two-line
-# preamble would 400 as "could not detect file source"), but it's outside
-# this feature's scope, so these fixtures sidestep it rather than fix it.
+# Includes a realistic title/separator preamble above the header (rows with
+# fewer fields than the 7-field header row) — routes/uploads.py's
+# `_read_headers` used to run this through `pd.read_csv(header=None)`, which
+# raised a ParserError on the ragged preamble; now it scans raw lines
+# instead, so this is safe. See test_realistic_gb18030_preamble_is_detected
+# below for the fuller real-world shape (metadata block, disclaimer, GB18030).
 
 
 def _alipay_csv(rows: list) -> bytes:
@@ -133,3 +130,40 @@ def test_overlapping_files_do_not_double_import(client, patch_jwks, make_token, 
     merchants = [t["merchant"] for t in fake_db._tables["transactions"].rows]
     assert merchants.count("Uniqlo") == 1
     assert set(merchants) == {"McDonalds", "Uniqlo", "Starbucks"}
+
+
+def test_realistic_gb18030_preamble_is_detected(client, patch_jwks, make_token, fake_db, monkeypatch):
+    """Regression test for a real-world Alipay export: GB18030-encoded, with
+    the full metadata preamble (title, an "导出信息" block, a numbered
+    "特别提示" disclaimer, a second separator line) before the real header —
+    previously 400'd as "Could not detect file source" because
+    routes/uploads.py's `_read_headers` hardcoded utf-8 and choked on the
+    ragged preamble via pd.read_csv(header=None)."""
+    _no_classification(monkeypatch)
+    lines = [
+        "------------------------------------------------------------------------------------",
+        "导出信息：",
+        "姓名：CHULUUNBOLD CHINSANAA",
+        "支付宝账户：chinsanaa0202@gmail.com",
+        "起始时间：[2025-08-23 00:00:00]    终止时间：[2026-05-17 23:59:59]",
+        "导出交易类型：[全部]",
+        "导出时间：[2026-05-27 18:22:56]",
+        "共1笔记录",
+        "",
+        "特别提示：",
+        "1.本回单内容可表明支付宝受理了相应支付交易申请。",
+        "",
+        "------------------------------支付宝支付宝对账单 财付通交易明细------------------------------",
+        "交易时间,交易分类,交易对方,对方账号,商品说明,收/支,金额,收/付款方式,交易状态,交易分类,交易订单号,商家订单号,备注",
+        "2026-05-16 05:01:31,餐饮美食,麦当劳,chu***@didichuxing.com,巨无霸套餐,支出,38.00,Visa(9272),交易成功,餐饮美食,2026051622001413631401481301\t,212_202605168651457701811533\t,",
+    ]
+    content = ("\r\n".join(lines) + "\r\n").encode("gb18030")
+
+    resp = client.post(
+        "/uploads/", headers=_headers(make_token),
+        files={"file": ("alipay_export.csv", content, "text/csv")},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["rows_imported"] == 1
+    assert fake_db._tables["transactions"].rows[0]["merchant"] == "麦当劳"

@@ -3928,3 +3928,62 @@ together in one pass once real credentials are available.
 
 **Next suggested step**: the live-browser pass (unchanged ask from
 Session 61, now with one more item to check).
+
+### Session 63 (2026-08-14) — Fix: real Alipay CSV upload failing as "Could not detect file source"
+
+User uploaded a real Alipay export CSV and got a generic upload-failed
+error. Diagnosed by inspecting the actual uploaded file (in the chat
+upload directory, not the repo): GB18030-encoded, ~13-line Chinese
+metadata preamble (title, separator, "导出信息" block, numbered "特别提示"
+disclaimer, second separator) before the real 13-column header row.
+
+Root cause: `backend/routes/uploads.py`'s `_read_headers()` (used by
+`detect_source()` before any file is handed to `src/parse.py`) hardcoded
+`encoding='utf-8'` and ran the whole preamble through
+`pd.read_csv(header=None)`. A GB18030 file raised `UnicodeDecodeError`
+(silently swallowed by a bare `except Exception: pass`, then hit again
+unguarded at the fallback read); separately, even with correct encoding, a
+ragged preamble (1-field title row vs. 13-field header row) raises a
+`pandas.errors.ParserError` the same way. This was a **known, already-
+documented latent bug** — `backend/tests/test_uploads.py`'s old fixture
+comment (lines 17-27, now removed) explicitly described this exact failure
+and said the fixtures were written to dodge it rather than fix it, calling
+it "outside this feature's scope." `src/parse.py`'s own header-finder
+(`_find_alipay_header`) already had the correct fix pattern (raw-line scan
++ `utf-8-sig/utf-8/gbk/gb18030` fallback) — `_read_headers` just didn't use it.
+
+**What changed:**
+- `backend/routes/uploads.py`: `_read_headers()`'s CSV branch rewritten to
+  scan raw lines (via `open(..., encoding=enc)`, not `pd.read_csv(header=None)`)
+  across the same `utf-8-sig/utf-8/gbk/gb18030` fallback order as
+  `src/parse.py`, splitting only the single matched line with `csv.reader`
+  — so a ragged preamble can never hit `ParserError` here. Added `import csv`.
+  `detect_source()` and `src/parse.py` were already correct and untouched.
+- `backend/tests/test_uploads.py`: `ALIPAY_HEADER`/`_alipay_csv` fixture
+  now includes a realistic title+separator preamble (previously deliberately
+  omitted to dodge the bug — stale comment removed). Added
+  `test_realistic_gb18030_preamble_is_detected`, a full regression test
+  built from the user's actual file's structure (GB18030, full metadata
+  block, CRLF, trailing tab-before-comma fields) posted through
+  `POST /uploads/` end-to-end.
+
+**Verified**: full backend suite (117/117) passes. Additionally ran the
+fixed detection logic and `src.parse.parse_alipay` directly against the
+user's actual uploaded file (outside the repo, not copied into it) —
+correctly detects as `alipay` and parses all 248 transactions. **Not
+verified**: the live upload UI itself (still no Supabase credentials in
+this sandbox) — user should re-upload the same file for final confirmation,
+though the parse-level check above is about as close to certain as this
+sandbox allows.
+
+**Decided**: did not copy the user's real CSV into the repo/tests (contains
+real name/email/transaction data) — the regression test uses a synthetic
+fixture built to match its structure instead.
+
+**Open**: same live-browser backlog as Sessions 60-62, now plus confirming
+this fix against the real upload flow (the user re-uploading their file
+would settle both at once).
+
+**Next suggested step**: ask the user to re-try the upload now that this
+is fixed and merged; if it still fails, get the exact new error message
+since that would indicate a different issue than the one diagnosed here.
