@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Bell, Download, FileText, ScrollText } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import { api } from '@/utils/api';
+import { formatDate } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
@@ -239,7 +240,7 @@ export default function SettingsClient() {
             <div>
               <p className="section-label mb-0.5">Account created</p>
               <p className="text-sm font-medium">
-                {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : '—'}
+                {profile?.created_at ? formatDate(profile.created_at) : '—'}
               </p>
             </div>
           </div>

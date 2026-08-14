@@ -11,7 +11,7 @@ import Badge from '@/components/ui/Badge';
 import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
-import { formatCurrency } from '@/utils/format';
+import { formatCurrency, formatDate } from '@/utils/format';
 
 interface Transaction {
   id: string;
@@ -178,7 +178,7 @@ export default function ReviewTab() {
                       }`}
                     >
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-muted">
-                        {new Date(tx.date).toLocaleDateString()}
+                        {formatDate(tx.date)}
                       </td>
                       <td className="px-4 py-3 font-medium">{tx.merchant}</td>
                       <td className="max-w-xs truncate px-4 py-3 text-xs text-muted">

@@ -22,7 +22,7 @@ import { toneForKey } from '@/utils/categoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import Input, { Select } from '@/components/ui/Input';
-import { formatCurrencyWhole } from '@/utils/format';
+import { formatCurrencyWhole, formatDate } from '@/utils/format';
 import SplitModal from '@/components/tabs/SplitModal';
 
 interface Transaction {
@@ -84,7 +84,7 @@ function toCsv(transactions: Transaction[]): string {
   };
   const header = ['Date', 'Merchant', 'Description', 'Category', 'Amount', 'Source'];
   const rows = transactions.map((t) =>
-    [t.date, t.merchant, t.description, t.category, t.amount, t.label_source].map(esc).join(',')
+    [formatDate(t.date), t.merchant, t.description, t.category, t.amount, t.label_source].map(esc).join(',')
   );
   return [header.join(','), ...rows].join('\n');
 }
@@ -547,7 +547,7 @@ export default function ReportsTab() {
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted">
-                      {new Date(txn.date).toLocaleDateString()}
+                      {formatDate(txn.date)}
                     </td>
                     <td className="px-4 py-3 font-medium">{txn.merchant}</td>
                     <td className="max-w-xs truncate px-4 py-3 text-xs text-muted">

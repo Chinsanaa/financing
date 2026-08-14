@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, Play } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
+import { formatDateTime } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
@@ -122,7 +123,7 @@ export default function TrainingTab() {
                 <div>
                   <p className="text-sm font-medium">Run {run.id.slice(0, 8)}</p>
                   <p className="text-xs text-muted">
-                    {new Date(run.created_at).toLocaleString()}
+                    {formatDateTime(run.created_at)}
                   </p>
                 </div>
                 <Badge tone={statusTone(run.status)}>

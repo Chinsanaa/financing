@@ -6,7 +6,7 @@ import { Alert } from '@/components/ui-feedback';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
-import { formatCurrencyWhole } from '@/utils/format';
+import { formatCurrencyWhole, formatDate } from '@/utils/format';
 
 interface CategoryTrend {
   category: string;
@@ -105,7 +105,7 @@ export default function InsightsTab() {
                 <div>
                   <p className="text-sm font-medium">{txn.merchant}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {txn.category} · {new Date(txn.timestamp).toLocaleDateString()}
+                    {txn.category} · {formatDate(txn.timestamp)}
                   </p>
                 </div>
                 <p className="font-display text-sm font-bold tabular-nums">

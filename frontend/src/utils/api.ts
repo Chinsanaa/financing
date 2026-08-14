@@ -73,6 +73,16 @@ export const api = {
       apiClient.get(`/uploads/${uploadId}`),
   },
 
+  transactions: {
+    create: (data: {
+      timestamp: string;
+      merchant: string;
+      description: string;
+      amount: number;
+      category_id: string;
+    }) => apiClient.post('/transactions/', data),
+  },
+
   training: {
     retrain: () => apiClient.post('/training/retrain'),
     getStatus: (modelRunId: string) => apiClient.get(`/training/${modelRunId}`),

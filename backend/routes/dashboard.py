@@ -1064,10 +1064,15 @@ async def export_transactions(request: Request):
         # over the user's ENTIRE transaction history — run the whole batch
         # off the event loop so it doesn't block other requests, then append
         # to the workbook (cheap, no network calls) back on the loop.
+        def _fmt_date(ts):
+            if not ts:
+                return ""
+            return datetime.fromisoformat(ts.replace("Z", "+00:00")).strftime("%Y/%m/%d")
+
         def build_rows():
             return [
                 [
-                    txn["timestamp"],
+                    _fmt_date(txn["timestamp"]),
                     merchant_label_english(txn["merchant"]),
                     description_label_english(txn["description"]),
                     f"Split ({split_counts.get(txn['id'], 0)})" if txn.get("is_split") else (txn["categories"]["name"] if txn["categories"] else "Uncategorized"),

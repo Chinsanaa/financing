@@ -2,15 +2,17 @@
 
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileSpreadsheet, UploadCloud, Trash2 } from 'lucide-react';
+import { FileSpreadsheet, UploadCloud, Trash2, PenLine } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
+import { formatDate } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import UploadQueueItem, { QueuedFile, QueueStatus } from '@/components/ui/UploadQueueItem';
+import Input, { Select } from '@/components/ui/Input';
 
 interface Upload {
   id: string;
@@ -73,11 +75,69 @@ export default function UploadTab() {
   const [error, setError] = useState(''); // delete-path errors only
   const [deleting, setDeleting] = useState<string | null>(null);
 
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualDate, setManualDate] = useState('');
+  const [manualMerchant, setManualMerchant] = useState('');
+  const [manualDescription, setManualDescription] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualCategoryId, setManualCategoryId] = useState('');
+  const [manualError, setManualError] = useState('');
+  const [manualSuccess, setManualSuccess] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const stopRef = useRef(false);
 
   // Fetch upload history
   const { data: uploadsData, loading: uploadsLoading, setData: setUploadsData, reload } = useApi<{ uploads: Upload[] }>('/uploads/');
+  const { data: categoriesData } = useApi<{ categories: { id: string; name: string }[] }>('/categories/');
+  const categories = categoriesData?.categories || [];
+
+  const resetManualForm = () => {
+    setManualDate('');
+    setManualMerchant('');
+    setManualDescription('');
+    setManualAmount('');
+    setManualCategoryId('');
+  };
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setManualSuccess('');
+
+    const merchant = manualMerchant.trim();
+    const description = manualDescription.trim();
+    const amount = Number(manualAmount);
+
+    if (!manualDate || !merchant || !description || !manualAmount || !manualCategoryId) {
+      setManualError('All fields are required.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setManualError('Amount must be a number greater than 0.');
+      return;
+    }
+
+    setManualError('');
+    setManualSubmitting(true);
+    try {
+      await api.transactions.create({
+        timestamp: new Date(`${manualDate}T00:00:00`).toISOString(),
+        merchant,
+        description,
+        amount,
+        category_id: manualCategoryId,
+      });
+      setManualSuccess('Expense added.');
+      resetManualForm();
+      setShowManualForm(false);
+      invalidate('/dashboard');
+    } catch (err: any) {
+      setManualError(err.response?.data?.detail || 'Failed to add expense');
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
 
   const patch = (id: string, partial: Partial<QueuedFile>) => {
     setQueue((prev) => prev.map((i) => (i.id === id ? { ...i, ...partial } : i)));
@@ -287,6 +347,91 @@ export default function UploadTab() {
         </div>
       </div>
 
+      <div className="text-center">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            setShowManualForm((prev) => !prev);
+            setManualError('');
+            setManualSuccess('');
+          }}
+        >
+          <PenLine className="h-4 w-4" />
+          Add expense manually
+        </Button>
+      </div>
+
+      {showManualForm && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="space-y-4 p-6">
+            <SectionHeader label="Manual entry" title="Add an expense" />
+            <form onSubmit={handleManualSubmit} className="space-y-4">
+              <Input
+                label="Date"
+                type="date"
+                required
+                value={manualDate}
+                onChange={(e) => setManualDate(e.target.value)}
+              />
+              <Input
+                label="Merchant"
+                type="text"
+                required
+                placeholder="e.g. Starbucks"
+                value={manualMerchant}
+                onChange={(e) => setManualMerchant(e.target.value)}
+              />
+              <Input
+                label="Description"
+                type="text"
+                required
+                placeholder="e.g. Coffee with a friend"
+                value={manualDescription}
+                onChange={(e) => setManualDescription(e.target.value)}
+              />
+              <Input
+                label="Amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                placeholder="0.00"
+                value={manualAmount}
+                onChange={(e) => setManualAmount(e.target.value)}
+              />
+              <Select
+                label="Category"
+                required
+                value={manualCategoryId}
+                onChange={(e) => setManualCategoryId(e.target.value)}
+              >
+                <option value="" disabled>
+                  Select a category
+                </option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </Select>
+
+              {manualError && <Alert kind="error">{manualError}</Alert>}
+              {manualSuccess && <Alert kind="success">{manualSuccess}</Alert>}
+
+              <div className="flex items-center gap-2">
+                <Button type="submit" loading={manualSubmitting} className="flex-1">
+                  Add expense
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setShowManualForm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </motion.div>
+      )}
+
       {queue.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
           <div className="space-y-2">
@@ -359,7 +504,7 @@ export default function UploadTab() {
                       <td className="px-4 py-3 text-xs text-muted capitalize">{upload.file_type}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{upload.row_count}</td>
                       <td className="px-4 py-3 text-xs text-muted">
-                        {new Date(upload.created_at).toLocaleDateString()}
+                        {formatDate(upload.created_at)}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span
