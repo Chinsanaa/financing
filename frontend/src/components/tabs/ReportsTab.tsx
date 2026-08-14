@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, FileText, Check } from 'lucide-react';
 import { useApi, invalidate } from '@/utils/useApi';
 import { api } from '@/utils/api';
@@ -11,6 +11,7 @@ import Badge from '@/components/ui/Badge';
 import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
+import Input, { Select } from '@/components/ui/Input';
 import { formatCurrencyWhole } from '@/utils/format';
 
 interface Transaction {
@@ -67,8 +68,33 @@ export default function ReportsTab() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
+  // Search is debounced so typing doesn't refetch on every keystroke.
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCategoryId, setBulkCategoryId] = useState('');
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+
   const query = `/dashboard/reports?page=${page}&per_page=${PER_PAGE}${
     uncategorizedOnly ? '&uncategorized_only=true' : ''
+  }${search ? `&search=${encodeURIComponent(search)}` : ''}${
+    dateFrom ? `&date_from=${dateFrom}` : ''
+  }${dateTo ? `&date_to=${dateTo}` : ''}${minAmount ? `&min_amount=${minAmount}` : ''}${
+    maxAmount ? `&max_amount=${maxAmount}` : ''
   }`;
   const { data: reports, loading, error, setData, reload } = useApi<ReportsData>(query);
   const { data: cats } = useApi<{ categories: Category[] }>('/categories/');
@@ -76,6 +102,50 @@ export default function ReportsTab() {
   const categories = cats?.categories || [];
 
   const totalPages = reports ? Math.max(1, Math.ceil(reports.total_count / PER_PAGE)) : 1;
+
+  const resetPageAndSelection = () => {
+    setPage(1);
+    setEditingId(null);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    if (!reports) return;
+    const pageIds = reports.transactions.map((t) => t.id);
+    const allSelected = pageIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const handleBulkApply = async () => {
+    if (!bulkCategoryId || selectedIds.size === 0) return;
+    setBulkApplying(true);
+    setBulkError('');
+    try {
+      await api.classifyTx.bulkLabel(Array.from(selectedIds), bulkCategoryId);
+      invalidate('/dashboard');
+      setSelectedIds(new Set());
+      setBulkCategoryId('');
+      reload();
+    } catch (err: any) {
+      setBulkError(err.response?.data?.detail || 'Failed to update selected transactions');
+    } finally {
+      setBulkApplying(false);
+    }
+  };
 
   const handleCategoryChange = async (txn: Transaction, newCategoryId: string) => {
     if (!newCategoryId || newCategoryId === txn.category_id) {
@@ -114,8 +184,7 @@ export default function ReportsTab() {
 
   const changeFilter = (only: boolean) => {
     setUncategorizedOnly(only);
-    setPage(1);
-    setEditingId(null);
+    resetPageAndSelection();
   };
 
   const handleExportXlsx = async () => {
@@ -192,6 +261,61 @@ export default function ReportsTab() {
         <Alert kind="error">Couldn&apos;t save the category for {rowError}. Please try again.</Alert>
       )}
 
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[200px] flex-1">
+          <Input
+            label="Search"
+            placeholder="Merchant or description…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+        <div className="w-[150px]">
+          <Input
+            type="date"
+            label="From"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              resetPageAndSelection();
+            }}
+          />
+        </div>
+        <div className="w-[150px]">
+          <Input
+            type="date"
+            label="To"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              resetPageAndSelection();
+            }}
+          />
+        </div>
+        <div className="w-[120px]">
+          <Input
+            type="number"
+            label="Min amount"
+            value={minAmount}
+            onChange={(e) => {
+              setMinAmount(e.target.value);
+              resetPageAndSelection();
+            }}
+          />
+        </div>
+        <div className="w-[120px]">
+          <Input
+            type="number"
+            label="Max amount"
+            value={maxAmount}
+            onChange={(e) => {
+              setMaxAmount(e.target.value);
+              resetPageAndSelection();
+            }}
+          />
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         {reports && (
           <p className="text-sm text-muted">
@@ -208,6 +332,31 @@ export default function ReportsTab() {
           Uncategorized only
         </label>
       </div>
+
+      {selectedIds.size > 0 && (
+        <Card className="flex flex-wrap items-center gap-3 border-accent/25 p-4">
+          <p className="text-sm font-medium">{selectedIds.size} selected</p>
+          <div className="w-[200px]">
+            <Select value={bulkCategoryId} onChange={(e) => setBulkCategoryId(e.target.value)}>
+              <option value="" disabled>
+                Move to category…
+              </option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Button size="sm" onClick={handleBulkApply} loading={bulkApplying} disabled={!bulkCategoryId}>
+            Apply
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+            Clear selection
+          </Button>
+          {bulkError && <Alert kind="error">{bulkError}</Alert>}
+        </Card>
+      )}
 
       <Card className="overflow-hidden">
         {!reports || reports.transactions.length === 0 ? (
@@ -227,6 +376,15 @@ export default function ReportsTab() {
             <table className="w-full text-sm">
               <thead className="border-b border-edge/8 bg-surface-2/60">
                 <tr>
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={reports.transactions.every((t) => selectedIds.has(t.id))}
+                      onChange={toggleSelectAllOnPage}
+                      className="h-4 w-4 rounded border-edge/30 accent-accent"
+                      aria-label="Select all on this page"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-medium text-muted">Date</th>
                   <th className="px-4 py-3 text-left font-medium text-muted">Merchant</th>
                   <th className="px-4 py-3 text-left font-medium text-muted">Description</th>
@@ -238,6 +396,15 @@ export default function ReportsTab() {
               <tbody className="divide-y divide-edge/8">
                 {reports.transactions.map((txn) => (
                   <tr key={txn.id} className="transition-colors hover:bg-edge/5">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(txn.id)}
+                        onChange={() => toggleSelected(txn.id)}
+                        className="h-4 w-4 rounded border-edge/30 accent-accent"
+                        aria-label={`Select ${txn.merchant}`}
+                      />
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted">
                       {new Date(txn.date).toLocaleDateString()}
                     </td>

@@ -619,13 +619,22 @@ async def get_reports(
     per_page: int = 100,
     uncategorized_only: bool = False,
     category_id: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
 ):
     """Detailed reports: paginated transaction list.
 
     Now includes uncategorized rows (so users can categorize anything from the
     table) and returns each row's `id`/`category_id` so the frontend can edit
     the category inline via POST /classify/{id}/label. Optional filters:
-    `uncategorized_only` and a specific `category_id`.
+    `uncategorized_only`/`category_id` (mutually exclusive, as before), plus
+    `search` (merchant/description substring), a `date_from`/`date_to`
+    (`YYYY-MM-DD`) range, and a `min_amount`/`max_amount` range — all
+    independent of each other and of the category filters, so any
+    combination can apply at once.
     """
     user_id = request.state.user_id
     page = max(1, page)
@@ -643,6 +652,17 @@ async def get_reports(
             query = query.is_("category_id", "null")
         elif category_id:
             query = query.eq("category_id", category_id)
+        if search:
+            escaped = search.replace(",", "").replace("%", "")
+            query = query.or_(f"merchant.ilike.%{escaped}%,description.ilike.%{escaped}%")
+        if date_from:
+            query = query.gte("timestamp", date_from)
+        if date_to:
+            query = query.lt("timestamp", date_to)
+        if min_amount is not None:
+            query = query.gte("amount", min_amount)
+        if max_amount is not None:
+            query = query.lte("amount", max_amount)
 
         response = await run_query(
             lambda: query

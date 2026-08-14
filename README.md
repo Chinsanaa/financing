@@ -88,7 +88,10 @@ Supabase Auth's own project-level rate limits.
 
 **Correcting categories**: the **Reports → All transactions** table is editable —
 click any category (including uncategorized rows) to reassign it; the change is
-saved immediately and flows through to the Overview and Budget views. **Per-month
+saved immediately and flows through to the Overview and Budget views. The table
+can be searched (merchant/description) and filtered by date range and amount
+range, all combinable; select multiple rows with the checkbox column to
+re-categorize them all at once via the bulk action bar. **Per-month
 budgets**: the **Budget** tab has a month selector so you can see how each past
 month tracked against your budget (budgets are global, so past months compare
 against your current budget). **Category colors**: pick a color per category in

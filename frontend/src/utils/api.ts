@@ -84,6 +84,8 @@ export const api = {
       apiClient.post(`/classify/${transactionId}/label`, { category_id: categoryId }),
     accept: (transactionId: string) =>
       apiClient.post(`/classify/${transactionId}/accept`, {}),
+    bulkLabel: (transactionIds: string[], categoryId: string) =>
+      apiClient.post('/classify/bulk-label', { transaction_ids: transactionIds, category_id: categoryId }),
   },
 
   categories: {

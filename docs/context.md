@@ -2722,3 +2722,105 @@ a new `POST /classify/bulk-label`, building transaction splits last and
 separately given its blast radius) — or confirm with the user first whether
 to pause and address the deployment backlog (migrations + `RESEND_API_KEY`)
 before adding more undeployed features on top.
+
+### Session 56 (2026-08-14) — Transaction search/filter + bulk re-categorize (branch `claude/feature-planning-roadmap-g74j9j`)
+
+User said "Next feature"; per the roadmap this is feature 4's first step
+(search/filter/bulk — transaction splits deliberately stays separate,
+flagged as the highest-blast-radius item in the whole roadmap). Re-grounded
+the plan file's feature-4 sketch against the real current code (fresh
+Explore pass) before building, same discipline as every prior session.
+
+- **`backend/routes/dashboard.py`**: `get_reports` gains five new optional
+  query params — `search` (case-insensitive substring on merchant OR
+  description, via `.or_("merchant.ilike.%x%,description.ilike.%x%")`),
+  `date_from`/`date_to` (`.gte`/`.lt` on `timestamp`), `min_amount`/
+  `max_amount` (`.gte`/`.lte` on `amount`) — all additive to the existing
+  mutable query-builder chain, all independently combinable with each
+  other and with `uncategorized_only`/`category_id`. `search` input is
+  stripped of `,` and `%` before building the filter string, since both
+  are syntactically significant to PostgREST's `or_()` filter grammar
+  (comma separates conditions, `%` is the ilike wildcard) — unescaped,
+  either character in a search term could inject unintended filter
+  conditions or wildcard behavior. This is the first use of `ilike`
+  anywhere in this codebase (confirmed via grep before building).
+- **`backend/routes/classify.py`**: extracted `label_transaction`'s
+  fetch-before/update/promote sequence into a shared `_label_one(user_id,
+  transaction_id, category_id, label_source)` helper, then added `POST
+  /classify/bulk-label` (`{transaction_ids, category_id}`) which does the
+  category-ownership check once (not per-transaction) and loops
+  `_label_one` per ID — not a single `.in_("id", ids)` update, since each
+  transaction's own prior `label_source` needs its own fetch for the
+  LLM-rule-promotion check to stay correct per-row, and the fake DB has no
+  `.in_()` support to test against anyway (a design choice that sidesteps
+  needing that gap filled, not an oversight). One
+  `check_budget_alerts` background task per batch, not per transaction —
+  already de-duplicated by the `budget_alerts` table, so queuing it N
+  times would just be N redundant no-op re-checks. Bulk labeling reports
+  both `updated` and `not_found` transaction IDs rather than failing the
+  whole batch on one bad ID.
+- **`frontend/src/components/tabs/ReportsTab.tsx`**: search input
+  (debounced 300ms so typing doesn't refetch per keystroke), date-range and
+  amount-range inputs (all appended into the same template-literal query
+  string `useApi` already builds — no `useApi` changes needed, it caches by
+  exact path). New checkbox column + "select all on this page" + a bulk
+  action bar (category picker + Apply) that calls the new
+  `api.classifyTx.bulkLabel(...)` and optimistically reloads. Any filter
+  change resets `page` to 1 and clears the current selection, mirroring the
+  existing `uncategorizedOnly` toggle's behavior.
+- **Test infra extensions** (`backend/tests/fake_supabase.py`): added
+  `ilike()` as a real filter method (case-insensitive `%substring%` match
+  only — not general SQL LIKE wildcard positions) plus recognition of the
+  `ilike` operator inside `_or_condition_matches` (the existing `or_()`
+  fake only handled `is`/`eq` operators before this).
+
+**Verified**:
+- `backend/tests/test_dashboard_reports_filters.py` (6 new tests: search
+  matches merchant case-insensitively, search also matches description,
+  date range filters correctly, amount range filters correctly, filters
+  respect `user_id` isolation, and multiple filters combine with AND
+  semantics — confirmed with a case designed so only one of three seeded
+  transactions matches both filters at once) and
+  `backend/tests/test_classify_bulk_label.py` (6 new tests: updates all
+  transactions in a batch, reports not-found IDs without failing the
+  batch, rejects a category owned by another user, silently skips (via
+  `not_found`, not a 500) transactions belonging to another user rather
+  than leaking or touching them, rejects an empty ID list with 400, and
+  promotes LLM suggestions to rules per-transaction correctly — only the
+  `llm`-sourced one in a two-transaction batch creates a rule) — ran
+  against a throwaway venv with `backend/requirements-dev.txt` installed.
+  Full existing `backend/tests/` suite: 78/78 pass, no regressions.
+- `frontend`: `npx tsc --noEmit` clean; `npm run build` compiles,
+  typechecks, and generates all routes with the new filter inputs and
+  bulk-select UI included. **Not manually verified in a live browser** —
+  same sandbox limitation as every prior session this roadmap.
+- Cleaned up: removed the throwaway Python venv and `frontend/.next` build
+  output.
+
+**Decided**: nothing new decided beyond what's already recorded in the plan
+file — executed as planned with no scope changes, aside from confirming the
+`.in_()`-avoidance design choice was deliberate (recorded in the plan's
+Risks section before this session started, not decided mid-build).
+
+**Open** (carried into the next session per the approved plan's build order):
+- Transaction splits (`transaction_splits` table + shared
+  `spend_by_category_with_splits` RPC + Split modal in `ReportsTab.tsx`) —
+  the last remaining item from the original 4-feature roadmap, and the
+  highest-blast-radius one (touches `get_summary`, `get_by_category`,
+  `get_trends`, and `export` — four existing aggregation endpoints).
+- Still not deployed: two pending migrations (`recurring_merchants`,
+  `budget_alerts`) need applying to the live Supabase project, and
+  `RESEND_API_KEY` needs setting in the real backend environment.
+- No cron/scheduler exists anywhere in the backend — budget alerts and
+  subscription refresh remain reactive-only.
+- Multi-currency, net worth, and tags (features 5–7) remain
+  architecture-only sketches in the plan file, not started.
+
+**Next suggested step**: with all four originally-picked features now
+built except transaction splits, worth checking with the user whether to
+(a) build splits next despite its blast radius, (b) pause on new features
+and clear the deployment backlog (migrations + `RESEND_API_KEY`) first, or
+(c) treat the 4-feature roadmap as substantially complete and revisit
+features 5–7 (multi-currency/net worth/tags) or something else entirely —
+rather than assuming splits is still the automatic next step now that it's
+the only remaining item.

@@ -73,6 +73,12 @@ class FakeQueryBuilder:
         self._filters.append(("lt", col, val))
         return self
 
+    def ilike(self, col: str, pattern: str):
+        """Only supports the '%substring%' shape this codebase actually
+        generates — not general SQL LIKE wildcard positions."""
+        self._filters.append(("ilike", col, pattern))
+        return self
+
     @property
     def not_(self) -> "_NotFilter":
         """postgrest-py exposes `.not_` as a PROPERTY (not a method) whose
@@ -140,6 +146,8 @@ class FakeQueryBuilder:
                 return False
             if kind == "lt" and not (row.get(col) is not None and row.get(col) < val):
                 return False
+            if kind == "ilike" and not _ilike_matches(row.get(col), val):
+                return False
         if self._or_filter:
             conditions = self._or_filter.split(",")
             if not any(self._or_condition_matches(row, cond) for cond in conditions):
@@ -153,7 +161,18 @@ class FakeQueryBuilder:
             return row.get(col) is None if val == "null" else row.get(col) is not None
         if op == "eq":
             return str(row.get(col)) == val
+        if op == "ilike":
+            return _ilike_matches(row.get(col), val)
         return False
+
+
+def _ilike_matches(value: Any, pattern: str) -> bool:
+    """Case-insensitive '%substring%' match — the only ilike shape this
+    codebase generates (backend/routes/dashboard.py's reports `search`)."""
+    if value is None:
+        return False
+    needle = pattern.strip("%").lower()
+    return needle in str(value).lower()
 
 
 class FakeTable:
