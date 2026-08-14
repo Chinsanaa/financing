@@ -1,8 +1,8 @@
-"""Confirming an LLM-sourced suggestion (label/accept) must write back a new
-per-user merchant_rules row — the "generalization" loop: the next
-transaction from that merchant hits the fast rule path instead of costing
-another LLM call. Confirming a rule/model suggestion must NOT create one.
-"""
+"""Labeling or accepting a transaction (any label_source) must write back a
+new per-user merchant_rules row — the "generalization" loop: the next
+transaction from that merchant hits the fast rule path instead of needing
+review again (llm-sourced labels get source='llm_confirmed', everything
+else gets source='user_created')."""
 
 USER_A = "user-a-id"
 
@@ -38,7 +38,9 @@ def test_labeling_an_llm_transaction_creates_a_merchant_rule(client, patch_jwks,
     assert rules[0]["user_id"] == USER_A
 
 
-def test_labeling_a_non_llm_transaction_does_not_create_a_rule(client, patch_jwks, make_token, fake_db):
+def test_labeling_a_non_llm_transaction_also_creates_a_rule(client, patch_jwks, make_token, fake_db):
+    """Manual labels promote a rule too now (source='user_created'), not
+    just llm-confirmed ones — so this merchant never needs re-labeling."""
     fake_db.seed("categories", [{"id": "cat-eat", "user_id": USER_A, "name": "Eating Out"}])
     fake_db.seed("transactions", [{
         "id": "t1", "user_id": USER_A, "merchant": "Known Chain",
@@ -52,7 +54,10 @@ def test_labeling_a_non_llm_transaction_does_not_create_a_rule(client, patch_jwk
     )
 
     assert response.status_code == 200
-    assert _merchant_rule_rows(fake_db) == []
+    rules = _merchant_rule_rows(fake_db)
+    assert len(rules) == 1
+    assert rules[0]["merchant_pattern"] == "known chain"
+    assert rules[0]["source"] == "user_created"
 
 
 def test_accepting_an_llm_suggestion_creates_a_rule_and_stays_confirmed_llm_source(client, patch_jwks, make_token, fake_db):
@@ -75,7 +80,8 @@ def test_accepting_an_llm_suggestion_creates_a_rule_and_stays_confirmed_llm_sour
     assert rules[0]["source"] == "llm_confirmed"
 
 
-def test_accepting_a_model_suggestion_does_not_create_a_rule(client, patch_jwks, make_token, fake_db):
+def test_accepting_a_model_suggestion_also_creates_a_rule(client, patch_jwks, make_token, fake_db):
+    """Accepting a model (non-llm) suggestion promotes a rule too now."""
     fake_db.seed("categories", [{"id": "cat-eat", "user_id": USER_A, "name": "Eating Out"}])
     fake_db.seed("transactions", [{
         "id": "t1", "user_id": USER_A, "merchant": "Known Chain",
@@ -87,7 +93,10 @@ def test_accepting_a_model_suggestion_does_not_create_a_rule(client, patch_jwks,
     assert response.status_code == 200
     txn = response.json()["transaction"]
     assert txn["label_source"] == "model_agreed"
-    assert _merchant_rule_rows(fake_db) == []
+    rules = _merchant_rule_rows(fake_db)
+    assert len(rules) == 1
+    assert rules[0]["merchant_pattern"] == "known chain"
+    assert rules[0]["source"] == "user_created"
 
 
 def test_second_transaction_from_same_merchant_now_matches_the_new_rule(client, patch_jwks, make_token, fake_db, monkeypatch):

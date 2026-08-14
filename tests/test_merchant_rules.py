@@ -65,6 +65,28 @@ def test_watch_verb_in_description_not_hijacked_to_shopping(description):
     assert result != "Shopping", f"description {description!r} incorrectly triggered Shopping"
 
 
+METRO_STATION_DESCRIPTION_CASES = [
+    "Metro card top-up near Houtan",
+    "地铁站-后滩",
+    "Jing'an Temple exit 3",
+    "静安寺地铁站",
+    "Lujiazui station",
+    "陆家嘴地铁",
+    "Hongqiao transfer",
+    "虹桥火车站",
+    "Pudong line 2",
+    "浦东大道",
+    "Century Avenue interchange",
+    "世纪大道",
+]
+
+
+@pytest.mark.parametrize("description", METRO_STATION_DESCRIPTION_CASES)
+def test_metro_station_names_classify_as_transportation(description):
+    result = special_category("Random Unmapped Merchant XYZ", description)
+    assert result == "Transportation", f"description {description!r} did not classify as Transportation"
+
+
 # --- Structural guards ---------------------------------------------------
 
 def test_no_dangerously_short_unallowlisted_patterns():

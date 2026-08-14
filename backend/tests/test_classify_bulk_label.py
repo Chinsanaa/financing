@@ -94,7 +94,10 @@ def test_bulk_label_rejects_empty_list(client, patch_jwks, make_token, fake_db):
     assert response.status_code == 400
 
 
-def test_bulk_label_promotes_llm_suggestions_per_transaction(client, patch_jwks, make_token, fake_db):
+def test_bulk_label_promotes_a_merchant_rule_per_transaction(client, patch_jwks, make_token, fake_db):
+    """Every bulk-labeled transaction gets its merchant promoted to a rule
+    now, not just llm-sourced ones — "unique merchants only" means labeling
+    a merchant once (by any means) should be enough."""
     fake_db.seed("categories", [{"id": "cat-1", "user_id": USER_A, "name": "Eating Out"}])
     fake_db.seed("transactions", [
         {"id": "t1", "user_id": USER_A, "merchant": "Obscure Ramen Shop", "label_source": "llm", "category_id": None},
@@ -109,5 +112,7 @@ def test_bulk_label_promotes_llm_suggestions_per_transaction(client, patch_jwks,
 
     assert response.status_code == 200
     rules = fake_db._tables["merchant_rules"].rows
-    assert len(rules) == 1
-    assert rules[0]["merchant_pattern"] == "obscure ramen shop"
+    assert len(rules) == 2
+    rules_by_merchant = {r["merchant_pattern"]: r for r in rules}
+    assert rules_by_merchant["obscure ramen shop"]["source"] == "llm_confirmed"
+    assert rules_by_merchant["known chain"]["source"] == "user_created"

@@ -794,7 +794,21 @@ DESCRIPTION_KEYWORD_RULES: list[tuple[str, tuple[str, ...]]] = [
     # "watch"/"toy" deliberately excluded: "watch" is usually the verb ("watch a
     # movie"), and "toy" collides with unrelated words ("Toyota") — both high
     # false-positive rate in free-text descriptions.
-    ("Transportation", ("ride", "parking", "fuel", "车费", "停泊", "加油", "汽油")),
+    ("Transportation", (
+        "ride", "parking", "fuel", "车费", "停泊", "加油", "汽油",
+        # Shanghai Metro station names appearing in transaction descriptions.
+        # Station names only, not generic district/province names — those
+        # are too broad and collide with unrelated merchants' legal business
+        # names (e.g. "上海XX有限公司"). "hongqiao"/"浦东" and "pudong"/"虹桥"
+        # are borderline (also district names), included anyway since they're
+        # specific, frequently-visited stations for this user.
+        "houtan", "后滩", "jing'an temple", "jingan temple", "静安寺",
+        "lujiazui", "陆家嘴", "hongqiao", "虹桥", "pudong", "浦东",
+        "people's square", "人民广场", "xujiahui", "徐家汇",
+        "century avenue", "世纪大道", "nanjing road", "南京东路", "南京西路",
+        "zhongshan park", "中山公园", "longyang road", "龙阳路",
+        "yuyuan garden", "豫园",
+    )),
     # "gas" deliberately excluded: matches inside unrelated words (e.g. "Vegas").
     ("Travel", ("flight", "airport", "hotel", "vacation", "机票", "酒店", "度假", "旅游")),
     ("Housing", ("rent", "mortgage", "房租", "房贷", "物业")),
