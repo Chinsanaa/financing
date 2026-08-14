@@ -84,6 +84,12 @@ export const api = {
       apiClient.post(`/classify/${transactionId}/label`, { category_id: categoryId }),
     accept: (transactionId: string) =>
       apiClient.post(`/classify/${transactionId}/accept`, {}),
+    bulkLabel: (transactionIds: string[], categoryId: string) =>
+      apiClient.post('/classify/bulk-label', { transaction_ids: transactionIds, category_id: categoryId }),
+    split: (transactionId: string, splits: { category_id: string; amount: number }[]) =>
+      apiClient.post(`/classify/${transactionId}/split`, { splits }),
+    unsplit: (transactionId: string) =>
+      apiClient.delete(`/classify/${transactionId}/split`),
   },
 
   categories: {
@@ -96,5 +102,11 @@ export const api = {
 
   export: {
     xlsx: () => apiClient.get('/dashboard/export', { responseType: 'blob' }),
+  },
+
+  subscriptions: {
+    list: () => apiClient.get('/subscriptions/'),
+    confirm: (id: string) => apiClient.post(`/subscriptions/${id}/confirm`, {}),
+    dismiss: (id: string) => apiClient.post(`/subscriptions/${id}/dismiss`, {}),
   },
 };

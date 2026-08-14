@@ -134,6 +134,8 @@ def fake_db(monkeypatch):
     import routes.settings as settings_module
     import routes.training as training_module
     import routes.uploads as uploads_module
+    import routes.subscriptions as subscriptions_module
+    import alerts as alerts_module
 
     monkeypatch.setattr(auth_module, "supabase_client", fake)
     monkeypatch.setattr(categories_module, "supabase_client", fake)
@@ -142,5 +144,7 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(settings_module, "supabase_client", fake)
     monkeypatch.setattr(training_module, "supabase_client", fake)
     monkeypatch.setattr(uploads_module, "supabase_client", fake)
+    monkeypatch.setattr(subscriptions_module, "supabase_client", fake)
+    monkeypatch.setattr(alerts_module, "supabase_client", fake)
 
     return fake

@@ -32,6 +32,13 @@ def _month_start(now: datetime = None) -> datetime:
     return datetime(now.year, now.month, 1)
 
 
+def _months_ago_start(n: int, now: datetime = None) -> datetime:
+    """First-of-month, n months before `now` (or the current month)."""
+    now = now or _now_cn()
+    total_months = now.year * 12 + (now.month - 1) - n
+    return datetime(total_months // 12, total_months % 12 + 1, 1)
+
+
 @router.get("/summary")
 async def get_summary(request: Request):
     """Overall summary: total transactions, labeled%, total spend."""
@@ -77,34 +84,29 @@ async def get_summary(request: Request):
 
 @router.get("/by-category")
 async def get_by_category(request: Request):
-    """Spending breakdown by category (transactions with category_id set)."""
+    """Spending breakdown by category (includes both transactions with
+    category_id set directly and split transactions' transaction_splits
+    line-items — see spend_by_category_for_user RPC in migration
+    20260814000000_add_transaction_splits.sql).
+
+    `transaction_count` for a category that includes split transactions
+    counts contributing split line-items, not distinct transactions — an
+    approximation for split transactions, not a distinct-transaction count.
+    """
     user_id = request.state.user_id
 
     try:
-        rows = await fetch_all_async(
-            lambda: supabase_client.table("transactions")
-            .select("amount, category_id, categories(name)")
-            .eq("user_id", user_id)
-            .not_.is_("category_id", "null")
+        resp = await run_query(
+            lambda: supabase_client.rpc("spend_by_category_for_user", {"p_user_id": user_id}).execute()
         )
-
-        if not rows:
-            return {"categories": []}
-
-        df = pd.DataFrame(rows)
-        df["category_name"] = df["categories"].apply(lambda x: x["name"] if x else "Unknown")
-
-        breakdown = df.groupby("category_name")["amount"].agg(["sum", "count"]).reset_index()
-        breakdown.columns = ["category", "total_amount", "count"]
-
         return {
             "categories": [
                 {
-                    "category": row["category"],
-                    "total_amount": float(row["total_amount"]),
-                    "transaction_count": int(row["count"]),
+                    "category": row["category_name"],
+                    "total_amount": float(row["amount"]),
+                    "transaction_count": int(row["txn_count"]),
                 }
-                for _, row in breakdown.iterrows()
+                for row in (resp.data or [])
             ]
         }
     except HTTPException:
@@ -143,7 +145,7 @@ async def get_trends(request: Request, days: int = 30, granularity: str = "day",
             lambda: supabase_client.table("transactions")
             .select("timestamp, amount")
             .eq("user_id", user_id)
-            .not_.is_("category_id", "null")
+            .or_("category_id.not.is.null,is_split.eq.true")
             .gte("timestamp", cutoff.isoformat())
         )
 
@@ -189,21 +191,19 @@ async def _spend_by_category(user_id: str, start: datetime, end: datetime) -> di
     """Spend per category name within [start, end) — a single month window.
 
     Monthly budgets compare against one month's spend, so callers pass that
-    month's bounds. The `.lt(end)` upper bound matters for past months (the old
-    current-month-only version had only a lower bound)."""
-    rows = await fetch_all_async(
-        lambda: supabase_client.table("transactions")
-        .select("amount, category_id, categories(name)")
-        .eq("user_id", user_id)
-        .not_.is_("category_id", "null")
-        .gte("timestamp", start.isoformat())
-        .lt("timestamp", end.isoformat())
+    month's bounds. Includes both plain-categorized transactions and
+    transaction_splits line-items (see spend_by_category_for_user RPC in
+    supabase/migrations/20260814000000_add_transaction_splits.sql), so a
+    split transaction's per-category contributions count toward budgets the
+    same as an unsplit one's.
+    """
+    resp = await run_query(
+        lambda: supabase_client.rpc(
+            "spend_by_category_for_user",
+            {"p_user_id": user_id, "p_start": start.isoformat(), "p_end": end.isoformat()},
+        ).execute()
     )
-    if not rows:
-        return {}
-    df = pd.DataFrame(rows)
-    df["category_name"] = df["categories"].apply(lambda x: x["name"] if x else "Unknown")
-    return df.groupby("category_name")["amount"].sum().to_dict()
+    return {row["category_name"]: float(row["amount"]) for row in (resp.data or [])}
 
 
 def _month_bounds(month: Optional[str] = None) -> tuple:
@@ -377,8 +377,7 @@ async def get_savings(request: Request):
         current_spend = float(spend_resp.data or 0)
 
         # Simple anomaly detection: compare to average of last 3 months
-        three_months_ago = datetime(now.year if now.month >= 4 else now.year - 1,
-                                    now.month - 3 if now.month >= 4 else now.month + 9, 1)
+        three_months_ago = _months_ago_start(3, now)
 
         # Per-month totals computed in Postgres — a handful of rows (one per
         # month) instead of every raw transaction in the window.
@@ -412,39 +411,93 @@ async def get_savings(request: Request):
         raise internal_error(e, "dashboard/savings")
 
 
+DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT = 80  # used when profiles.alert_threshold_pct is unset
+
+
+async def _budget_crossings(user_id: str, threshold_pct: float) -> list:
+    """Categories currently over, or approaching (>= threshold_pct%), their
+    monthly budget. Shared by `get_action` (in-app, always computed fresh) and
+    `backend/alerts.py::check_budget_alerts` (email side effect, gated by the
+    `budget_alerts` de-dup table) — kept as one function so the two never
+    drift out of sync on what counts as a crossing.
+
+    Returns dicts with `kind` ('over' | 'approaching'), `category_id`,
+    `category` (name), `current`, `limit`, and either `overage` (kind='over')
+    or `pct` (kind='approaching').
+    """
+    cat_budget_resp = await run_query(
+        lambda: supabase_client.table("budget_category_config")
+        .select("*, categories(name)")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not cat_budget_resp.data:
+        return []
+
+    # Crossings are always about the current month.
+    start, end = _month_bounds(None)
+    spending_by_cat = await _spend_by_category(user_id, start, end)
+
+    crossings = []
+    for budget_row in cat_budget_resp.data:
+        cat_name = budget_row["categories"]["name"] if budget_row["categories"] else "Unknown"
+        budget = float(budget_row["monthly_budget"]) if budget_row["monthly_budget"] else 0
+        spend = float(spending_by_cat.get(cat_name, 0))
+
+        if budget > 0 and spend > budget:
+            crossings.append({
+                "kind": "over",
+                "category_id": budget_row["category_id"],
+                "category": cat_name,
+                "current": spend,
+                "limit": budget,
+                "overage": spend - budget,
+            })
+        elif budget > 0 and spend >= (threshold_pct / 100) * budget:
+            crossings.append({
+                "kind": "approaching",
+                "category_id": budget_row["category_id"],
+                "category": cat_name,
+                "current": spend,
+                "limit": budget,
+                "pct": round(100 * spend / budget, 1),
+            })
+
+    return crossings
+
+
+_CROSSING_KIND_TO_ACTION_TYPE = {"over": "over_budget", "approaching": "approaching_budget"}
+
+
 @router.get("/action")
 async def get_action(request: Request):
-    """Action items: over-budget categories, review queue count."""
+    """Action items: over-budget / approaching-budget categories, review queue count."""
     user_id = request.state.user_id
 
     try:
         actions = []
 
-        cat_budget_resp = await run_query(
-            lambda: supabase_client.table("budget_category_config")
-            .select("*, categories(name)")
-            .eq("user_id", user_id)
-            .execute()
+        profile_resp = await run_query(
+            lambda: supabase_client.table("profiles").select("alert_threshold_pct").eq("id", user_id).execute()
+        )
+        threshold_pct = (
+            float(profile_resp.data[0]["alert_threshold_pct"])
+            if profile_resp.data and profile_resp.data[0].get("alert_threshold_pct") is not None
+            else DEFAULT_APPROACHING_BUDGET_THRESHOLD_PCT
         )
 
-        if cat_budget_resp.data:
-            # Action items are always about the current month.
-            start, end = _month_bounds(None)
-            spending_by_cat = await _spend_by_category(user_id, start, end)
-
-            for budget_row in cat_budget_resp.data:
-                cat_name = budget_row["categories"]["name"] if budget_row["categories"] else "Unknown"
-                budget = float(budget_row["monthly_budget"]) if budget_row["monthly_budget"] else 0
-                spend = float(spending_by_cat.get(cat_name, 0))
-
-                if budget > 0 and spend > budget:
-                    actions.append({
-                        "type": "over_budget",
-                        "category": cat_name,
-                        "current": spend,
-                        "limit": budget,
-                        "overage": spend - budget,
-                    })
+        for crossing in await _budget_crossings(user_id, threshold_pct):
+            action = {
+                "type": _CROSSING_KIND_TO_ACTION_TYPE[crossing["kind"]],
+                "category": crossing["category"],
+                "current": crossing["current"],
+                "limit": crossing["limit"],
+            }
+            if crossing["kind"] == "over":
+                action["overage"] = crossing["overage"]
+            else:
+                action["pct"] = crossing["pct"]
+            actions.append(action)
 
         # Review queue count
         review_resp = await run_query(
@@ -469,6 +522,132 @@ async def get_action(request: Request):
         raise internal_error(e, "dashboard/action")
 
 
+MIN_TRANSACTIONS_FOR_ANOMALY = 5  # per category, within the trailing window
+ANOMALY_STD_MULTIPLIER = 2
+
+
+@router.get("/insights")
+async def get_insights(request: Request):
+    """Per-category spending trend (this month vs. trailing 3-month average)
+    and per-transaction amount anomalies within that same window.
+
+    Read-only, nothing persisted — same "compute fresh every call" approach
+    as `get_action`/`_budget_crossings`, just per-category and per-transaction
+    instead of per-budget-limit.
+
+    category_trends includes both plain-categorized transactions and
+    transaction_splits line-items (fetched separately and concatenated in
+    pandas before the groupby, since transaction_splits has no timestamp of
+    its own and must be filtered against its parent transaction's
+    timestamp).
+
+    flagged_transactions (per-transaction anomaly detection) excludes
+    transactions where is_split=True — a split transaction's whole amount
+    isn't attributable to one category, so anomaly-flagging it against any
+    single category's mean would be wrong. Known limitation: split
+    transactions are never flagged as anomalies, even if a large one would
+    otherwise qualify.
+    """
+    user_id = request.state.user_id
+
+    try:
+        now = _now_cn()
+        month_start = _month_start(now)
+        window_start = _months_ago_start(3, now)
+
+        plain_rows = await fetch_all_async(
+            lambda: supabase_client.table("transactions")
+            .select("id, merchant, amount, timestamp, is_split, categories(name)")
+            .eq("user_id", user_id)
+            .not_.is_("category_id", "null")
+            .gte("timestamp", window_start.isoformat())
+        )
+        split_rows_raw = await fetch_all_async(
+            lambda: supabase_client.table("transaction_splits")
+            .select("transaction_id, amount, categories(name), transactions(timestamp)")
+            .eq("user_id", user_id)
+        )
+        split_rows = [
+            {
+                "id": r["transaction_id"],
+                "merchant": None,
+                "amount": r["amount"],
+                "timestamp": r["transactions"]["timestamp"],
+                "is_split": True,
+                "category_name": r["categories"]["name"] if r["categories"] else "Unknown",
+            }
+            for r in split_rows_raw
+            if r["transactions"] and r["transactions"]["timestamp"] >= window_start.isoformat()
+        ]
+
+        if not plain_rows and not split_rows:
+            return {"category_trends": [], "flagged_transactions": []}
+
+        plain_df = pd.DataFrame(plain_rows)
+        if not plain_df.empty:
+            plain_df["category_name"] = plain_df["categories"].apply(lambda x: x["name"] if x else "Unknown")
+            # reindex (not a plain column-list select): "is_split" may be
+            # absent from older seeded/legacy rows that predate this column,
+            # and reindex fills a missing column with NaN instead of raising.
+            plain_df = plain_df.reindex(columns=["id", "merchant", "amount", "timestamp", "is_split", "category_name"])
+            plain_df["is_split"] = plain_df["is_split"].fillna(False)
+        split_df = pd.DataFrame(split_rows)
+        df = pd.concat([plain_df, split_df], ignore_index=True) if not split_df.empty else plain_df
+
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df["month"] = df["timestamp"].dt.to_period("M")
+
+        current_period = pd.Period(month_start, freq="M")
+        current_df = df[df["month"] == current_period]
+        prior_df = df[df["month"] != current_period]
+
+        current_by_cat = current_df.groupby("category_name")["amount"].sum()
+        prior_avg_by_cat = (
+            prior_df.groupby(["category_name", "month"])["amount"].sum().groupby("category_name").mean()
+        )
+
+        category_trends = []
+        for cat in set(current_by_cat.index) | set(prior_avg_by_cat.index):
+            avg = float(prior_avg_by_cat.get(cat, 0))
+            if avg <= 0:
+                continue  # no prior-month baseline to compare against
+            current = float(current_by_cat.get(cat, 0))
+            category_trends.append({
+                "category": cat,
+                "current": round(current, 2),
+                "avg_3mo": round(avg, 2),
+                "pct_change": round(100 * (current - avg) / avg, 1),
+            })
+        category_trends.sort(key=lambda t: abs(t["pct_change"]), reverse=True)
+
+        # Anomaly flagging excludes split transactions (is_split=True) — see
+        # docstring.
+        flag_df = df[df["is_split"] != True]  # noqa: E712
+        flagged_transactions = []
+        for cat, group in flag_df.groupby("category_name"):
+            if len(group) < MIN_TRANSACTIONS_FOR_ANOMALY:
+                continue
+            std = group["amount"].std()
+            if not std or pd.isna(std):
+                continue
+            threshold = group["amount"].mean() + ANOMALY_STD_MULTIPLIER * std
+            for _, txn in group[group["amount"] > threshold].iterrows():
+                flagged_transactions.append({
+                    "id": txn["id"],
+                    "merchant": txn["merchant"],
+                    "category": cat,
+                    "amount": float(txn["amount"]),
+                    "timestamp": txn["timestamp"].isoformat(),
+                })
+        flagged_transactions.sort(key=lambda t: t["amount"], reverse=True)
+
+        return {"category_trends": category_trends, "flagged_transactions": flagged_transactions}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/insights")
+
+
 @router.get("/reports")
 async def get_reports(
     request: Request,
@@ -476,13 +655,22 @@ async def get_reports(
     per_page: int = 100,
     uncategorized_only: bool = False,
     category_id: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
 ):
     """Detailed reports: paginated transaction list.
 
     Now includes uncategorized rows (so users can categorize anything from the
     table) and returns each row's `id`/`category_id` so the frontend can edit
     the category inline via POST /classify/{id}/label. Optional filters:
-    `uncategorized_only` and a specific `category_id`.
+    `uncategorized_only`/`category_id` (mutually exclusive, as before), plus
+    `search` (merchant/description substring), a `date_from`/`date_to`
+    (`YYYY-MM-DD`) range, and a `min_amount`/`max_amount` range — all
+    independent of each other and of the category filters, so any
+    combination can apply at once.
     """
     user_id = request.state.user_id
     page = max(1, page)
@@ -492,7 +680,7 @@ async def get_reports(
         start = (page - 1) * per_page
         query = (
             supabase_client.table("transactions")
-            .select("id, timestamp, merchant, description, amount, category_id, categories(name), label_source",
+            .select("id, timestamp, merchant, description, amount, category_id, categories(name), is_split, label_source",
                     count="exact")
             .eq("user_id", user_id)
         )
@@ -500,6 +688,17 @@ async def get_reports(
             query = query.is_("category_id", "null")
         elif category_id:
             query = query.eq("category_id", category_id)
+        if search:
+            escaped = search.replace(",", "").replace("%", "")
+            query = query.or_(f"merchant.ilike.%{escaped}%,description.ilike.%{escaped}%")
+        if date_from:
+            query = query.gte("timestamp", date_from)
+        if date_to:
+            query = query.lt("timestamp", date_to)
+        if min_amount is not None:
+            query = query.gte("amount", min_amount)
+        if max_amount is not None:
+            query = query.lte("amount", max_amount)
 
         response = await run_query(
             lambda: query
@@ -510,20 +709,47 @@ async def get_reports(
 
         total_count = response.count if response.count is not None else len(response.data or [])
 
+        split_txn_ids = [t["id"] for t in (response.data or []) if t.get("is_split")]
+        splits_by_txn: dict = {}
+        split_counts: dict = {}
+        if split_txn_ids:
+            split_resp = await run_query(
+                lambda: supabase_client.table("transaction_splits")
+                .select("transaction_id, category_id, amount, categories(name)")
+                .in_("transaction_id", split_txn_ids)
+                .execute()
+            )
+            for row in (split_resp.data or []):
+                tid = row["transaction_id"]
+                splits_by_txn.setdefault(tid, []).append({
+                    "category_id": row["category_id"],
+                    "category_name": row["categories"]["name"] if row["categories"] else "Unknown",
+                    "amount": float(row["amount"]),
+                })
+                split_counts[tid] = split_counts.get(tid, 0) + 1
+
         def build_rows():
-            return [
-                {
+            rows = []
+            for txn in (response.data or []):
+                is_split = bool(txn.get("is_split"))
+                if is_split:
+                    n = split_counts.get(txn["id"], 0)
+                    category_label = f"Split ({n})"
+                else:
+                    category_label = txn["categories"]["name"] if txn["categories"] else "Uncategorized"
+                rows.append({
                     "id": txn["id"],
                     "date": txn["timestamp"],
                     "merchant": merchant_label_english(txn["merchant"]),
                     "description": description_label_english(txn["description"]),
                     "amount": float(txn["amount"]),
-                    "category": txn["categories"]["name"] if txn["categories"] else "Uncategorized",
+                    "category": category_label,
                     "category_id": txn["category_id"],
+                    "is_split": is_split,
+                    "splits": splits_by_txn.get(txn["id"], []) if is_split else None,
                     "label_source": txn["label_source"],
-                }
-                for txn in (response.data or [])
-            ]
+                })
+            return rows
 
         # merchant/description labeling can hit a live Google Translate call
         # per untranslated string (see src/translate.py) — run the whole
@@ -562,12 +788,22 @@ async def export_transactions(request: Request):
         def make_query():
             return (
                 supabase_client.table("transactions")
-                .select("timestamp, merchant, description, amount, category_id, categories(name), label_source")
+                .select("id, timestamp, merchant, description, amount, category_id, categories(name), is_split, label_source")
                 .eq("user_id", user_id)
                 .order("timestamp", desc=True)
             )
 
         all_txns = await fetch_all_async(make_query)
+
+        split_counts_resp = await run_query(
+            lambda: supabase_client.table("transaction_splits")
+            .select("transaction_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        split_counts: dict = {}
+        for row in (split_counts_resp.data or []):
+            split_counts[row["transaction_id"]] = split_counts.get(row["transaction_id"], 0) + 1
 
         # Create workbook
         wb = Workbook()
@@ -599,7 +835,7 @@ async def export_transactions(request: Request):
                     txn["timestamp"],
                     merchant_label_english(txn["merchant"]),
                     description_label_english(txn["description"]),
-                    txn["categories"]["name"] if txn["categories"] else "Uncategorized",
+                    f"Split ({split_counts.get(txn['id'], 0)})" if txn.get("is_split") else (txn["categories"]["name"] if txn["categories"] else "Uncategorized"),
                     float(txn["amount"]),
                     txn["label_source"] or "",
                 ]
@@ -656,7 +892,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
             # Show manually labeled transactions for user review/correction
             response = await run_query(
                 lambda: supabase_client.table("transactions")
-                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
+                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name), is_split")
                 .eq("user_id", user_id)
                 .eq("is_manually_labeled", True)
                 .order("timestamp", desc=True)  # Most recent labels first
@@ -672,7 +908,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
             # the queue — unique merchants make better labeling coverage.
             pool = await run_query(
                 lambda: supabase_client.table("transactions")
-                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name)")
+                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name), is_split")
                 .eq("user_id", user_id)
                 .eq("needs_review", True)
                 .order("confidence")  # Least confident first
@@ -706,8 +942,8 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                     "description": description_label_english(txn["description"]),
                     "amount": float(txn["amount"]),
                     "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
-                    "category": (txn["categories"]["name"] if txn["categories"] else None) if show_labeled else None,
-                    "suggested_category": txn["categories"]["name"] if txn["categories"] else None,
+                    "category": (("Split" if txn.get("is_split") else (txn["categories"]["name"] if txn["categories"] else None)) if show_labeled else None),
+                    "suggested_category": "Split" if txn.get("is_split") else (txn["categories"]["name"] if txn["categories"] else None),
                 }
                 for txn in rows
             ]

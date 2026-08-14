@@ -22,7 +22,7 @@ Supabase PostgreSQL + Auth + Storage
 - **Backend**: FastAPI + supabase-py — `backend/`
 - **ML pipeline**: scikit-learn (TF-IDF + Logistic Regression, optional
   semantic-embedding second model with calibrated agreement) — `src/`
-- **Database**: PostgreSQL, 9 tables, RLS enabled on all — `supabase/migrations/`
+- **Database**: PostgreSQL, 12 tables, RLS enabled on all — `supabase/migrations/`
 
 ## How classification works
 
@@ -68,7 +68,7 @@ Two very different questions:
 The ten original tabs are grouped into five compact sections with sub-tabs:
 **Overview** (a monthly-spending line chart + category split), **Transactions**
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
-(Budget / Savings / Action plan), and **Reports**. A dismissible onboarding
+(Budget / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible onboarding
 checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
 separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
@@ -88,7 +88,18 @@ Supabase Auth's own project-level rate limits.
 
 **Correcting categories**: the **Reports → All transactions** table is editable —
 click any category (including uncategorized rows) to reassign it; the change is
-saved immediately and flows through to the Overview and Budget views. **Per-month
+saved immediately and flows through to the Overview and Budget views. The table
+can be searched (merchant/description) and filtered by date range and amount
+range, all combinable; select multiple rows with the checkbox column to
+re-categorize them all at once via the bulk action bar. **Split
+transactions**: any transaction can be split across multiple categories
+(e.g. a Costco run: groceries + household) via the "Split" action next to
+its category — amounts must sum to the transaction's total. A split
+transaction shows a "Split (n)" badge instead of a single category and its
+per-category amounts are counted separately everywhere spend is
+aggregated (Budget, Action items, Insights, by-category totals); a split
+can be removed at any time, which sends the transaction back to the
+review queue uncategorized. **Per-month
 budgets**: the **Budget** tab has a month selector so you can see how each past
 month tracked against your budget (budgets are global, so past months compare
 against your current budget). **Category colors**: pick a color per category in
@@ -97,6 +108,31 @@ same color follows that category everywhere: the Overview pie chart, badges in
 Budget/Review/Label, and Reports. Categories without a chosen color get a stable
 automatic color. The dashboard layout is fluid — it fills large desktop screens
 (capped for ultrawides) and adapts down to tablet and phone.
+
+**Subscriptions**: the **Planning → Subscriptions** tab auto-detects recurring
+merchants (≥3 charges in the trailing 6 months at a monthly or weekly cadence,
+with a stable amount) and shows an estimated monthly total. Each detected
+merchant can be confirmed or dismissed; dismissals persist across future
+re-detection runs. Detection logic lives in `src/recurring.py` (pure pandas,
+no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
+detection, and upserts into the `recurring_merchants` cache table.
+
+**Budget alerts**: the header's notification bell shows a live count of
+over-budget and approaching-budget categories, computed on every load by
+`GET /dashboard/action`. Clicking it jumps to **Planning → Action plan**,
+which lists both kinds of budget warnings as cards. Optionally, **Settings →
+Budget alerts** turns on email notifications with a configurable
+"approaching budget" threshold (default 80%) — emails are de-duplicated per
+category/month so the same crossing is never sent twice, and are checked
+reactively (when you upload, review, or label a transaction), not on a
+schedule, since no background scheduler exists yet.
+
+**Insights**: **Planning → Insights** compares each category's current-month
+spend to its trailing 3-month average (flagging notable swings either way)
+and lists individual transactions whose amount is unusually large for their
+category (more than 2 standard deviations above that category's mean,
+skipped for categories with too little history to judge). Both are computed
+fresh on every load — nothing is persisted.
 
 ## Quick start (local)
 
@@ -136,7 +172,7 @@ verified with `npx tsc --noEmit && npm run build`.
 financing/
 ├── frontend/            # Next.js app (see frontend/README.md)
 ├── backend/             # FastAPI app (see backend/README.md)
-│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings
+│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings, subscriptions
 │   ├── auth_utils.py    # JWT verification against Supabase's JWKS
 │   ├── tests/           # JWT verification + cross-user isolation tests
 │   └── ml.py            # per-user model loading + bulk classification
@@ -149,7 +185,8 @@ financing/
 │   ├── calibration.py   # top-label Platt scaling
 │   ├── eval_grouped.py  # GroupKFold evaluation + threshold derivation
 │   ├── merchant_categories.py  # global rule patterns
-│   └── llm_classify.py  # LLM fallback classifier (batched, DB-free)
+│   ├── llm_classify.py  # LLM fallback classifier (batched, DB-free)
+│   └── recurring.py     # recurring/subscription merchant detection (pure pandas, DB-free)
 ├── supabase/            # migrations (schema, RLS, storage buckets, fixes)
 ├── tests/               # pytest suite for src/
 ├── scripts/test_local.sh

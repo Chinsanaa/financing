@@ -14,7 +14,7 @@ from auth_utils import decode_supabase_jwt
 from limiter import limiter
 
 # Initialize routers (will be imported below)
-from routes import auth, categories, uploads, training, classify, dashboard, settings as settings_router
+from routes import auth, categories, uploads, training, classify, dashboard, settings as settings_router, subscriptions
 
 # --- Startup / Shutdown ---
 @asynccontextmanager
@@ -142,6 +142,7 @@ app.include_router(training.router, prefix="/training", tags=["training"])
 app.include_router(classify.router, prefix="/classify", tags=["classify"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(settings_router.router, prefix="/settings", tags=["settings"])
+app.include_router(subscriptions.router, prefix="/subscriptions", tags=["subscriptions"])
 
 
 # --- Root ---

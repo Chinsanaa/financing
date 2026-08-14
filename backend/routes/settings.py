@@ -1,6 +1,6 @@
 """Settings: account management, profile updates, account deletion."""
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from config import supabase_client
 from db import run_query
@@ -11,6 +11,10 @@ router = APIRouter()
 
 class ProfileUpdate(BaseModel):
     monthly_income: Optional[float] = None
+    alert_email_enabled: Optional[bool] = None
+    # "Approaching budget" threshold, e.g. 80 = warn/email at 80% of a
+    # category's monthly budget. "Over budget" (100%) is not configurable.
+    alert_threshold_pct: Optional[float] = Field(default=None, ge=0, le=100)
 
 
 class BudgetSettingsUpdate(BaseModel):

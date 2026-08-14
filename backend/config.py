@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # having no trained model — rows stay in the review queue with no
     # suggestion.
     groq_api_key: str | None = None
+    # Optional: enables budget-alert emails (backend/email.py). Unset in
+    # dev/test just means send_alert_email() no-ops — the in-app bell/action
+    # items still work either way, since they don't depend on email.
+    resend_api_key: str | None = None
 
     class Config:
         env_file = ".env"

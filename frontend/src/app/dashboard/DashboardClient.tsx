@@ -16,6 +16,7 @@ import { createClient } from '@/utils/supabase';
 import { TabBar, TabPanel, TabItem } from '@/components/ui/Tabs';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import NotificationBell from '@/components/ui/NotificationBell';
 import DashboardLoading from './loading';
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
 
@@ -28,6 +29,8 @@ const SavingsTab = dynamic(() => import('@/components/tabs/SavingsTab'), { loadi
 const ActionTab = dynamic(() => import('@/components/tabs/ActionTab'), { loading: tabLoading, ssr: false });
 const ReportsTab = dynamic(() => import('@/components/tabs/ReportsTab'), { loading: tabLoading, ssr: false });
 const TransactionsModelTab = dynamic(() => import('@/components/tabs/TransactionsModelTab'), { loading: tabLoading, ssr: false });
+const SubscriptionsTab = dynamic(() => import('@/components/tabs/SubscriptionsTab'), { loading: tabLoading, ssr: false });
+const InsightsTab = dynamic(() => import('@/components/tabs/InsightsTab'), { loading: tabLoading, ssr: false });
 
 /** Four sections with sub-tabs. Transactions & Model merged into one workflow. */
 const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
@@ -45,6 +48,8 @@ const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
     subs: [
       { id: 'budget', label: 'Budget' },
       { id: 'savings', label: 'Savings' },
+      { id: 'subscriptions', label: 'Subscriptions' },
+      { id: 'insights', label: 'Insights' },
       { id: 'action', label: 'Action plan' },
     ],
   },
@@ -57,6 +62,8 @@ const TAB_SECTION: Record<string, string> = {
   'transactions-model': 'transactions-model',
   budget: 'planning',
   savings: 'planning',
+  subscriptions: 'planning',
+  insights: 'planning',
   action: 'planning',
   reports: 'reports',
 };
@@ -144,6 +151,7 @@ export default function DashboardClient() {
             <p className="mr-2 hidden text-sm text-muted sm:block">
               {user?.user_metadata?.username || user?.email}
             </p>
+            <NotificationBell onClick={() => goToTab('action')} />
             <ThemeToggle />
             <Link
               href="/settings"
@@ -191,6 +199,8 @@ export default function DashboardClient() {
           )}
           {activeTab === 'budget' && <BudgetTab />}
           {activeTab === 'savings' && <SavingsTab />}
+          {activeTab === 'subscriptions' && <SubscriptionsTab />}
+          {activeTab === 'insights' && <InsightsTab />}
           {activeTab === 'action' && <ActionTab onNavigate={goToTab} />}
           {activeTab === 'reports' && <ReportsTab />}
         </TabPanel>

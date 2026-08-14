@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Download, FileText, ScrollText } from 'lucide-react';
+import { ArrowLeft, Bell, Download, FileText, ScrollText } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import { api } from '@/utils/api';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
+import Input from '@/components/ui/Input';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
 import PasswordInput from '@/components/auth/PasswordInput';
@@ -19,6 +20,8 @@ interface Profile {
   email_verified_at: string;
   onboarding_phase: string;
   created_at: string;
+  alert_email_enabled: boolean;
+  alert_threshold_pct: number;
 }
 
 export default function SettingsClient() {
@@ -34,6 +37,12 @@ export default function SettingsClient() {
   const deleteConfirmRef = useRef<HTMLDivElement>(null);
 
   const [exporting, setExporting] = useState(false);
+
+  const [alertEmailEnabled, setAlertEmailEnabled] = useState(false);
+  const [alertThresholdPct, setAlertThresholdPct] = useState(80);
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertError, setAlertError] = useState('');
+  const [alertSuccess, setAlertSuccess] = useState('');
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -64,6 +73,8 @@ export default function SettingsClient() {
       try {
         const res = await api.get('/settings/profile');
         setProfile(res.data.profile);
+        setAlertEmailEnabled(!!res.data.profile.alert_email_enabled);
+        setAlertThresholdPct(res.data.profile.alert_threshold_pct ?? 80);
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load profile');
       } finally {
@@ -90,6 +101,23 @@ export default function SettingsClient() {
       setError('Failed to export data');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleSaveAlertPreferences = async () => {
+    setAlertSaving(true);
+    setAlertError('');
+    setAlertSuccess('');
+    try {
+      await api.patch('/settings/profile', {
+        alert_email_enabled: alertEmailEnabled,
+        alert_threshold_pct: alertThresholdPct,
+      });
+      setAlertSuccess('Alert preferences saved');
+    } catch (err: any) {
+      setAlertError(err.response?.data?.detail || 'Failed to save alert preferences');
+    } finally {
+      setAlertSaving(false);
     }
   };
 
@@ -201,6 +229,48 @@ export default function SettingsClient() {
                 {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : '—'}
               </p>
             </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <SectionHeader label="Notifications" title="Budget alerts" />
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              Get an email when a category goes over budget, or crosses your
+              chosen "approaching budget" threshold. Checked when you use the
+              app (upload, review, label) — not a continuous background
+              check.
+            </p>
+
+            <label className="flex items-center gap-2.5 text-sm font-medium text-ink">
+              <input
+                type="checkbox"
+                checked={alertEmailEnabled}
+                onChange={(e) => setAlertEmailEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-edge/30 accent-accent"
+              />
+              Email me budget alerts
+            </label>
+
+            <div className="max-w-[180px]">
+              <Input
+                type="number"
+                label="Approaching-budget threshold (%)"
+                min={0}
+                max={100}
+                value={alertThresholdPct}
+                onChange={(e) => setAlertThresholdPct(Number(e.target.value))}
+                disabled={!alertEmailEnabled}
+              />
+            </div>
+
+            {alertError && <Alert kind="error">{alertError}</Alert>}
+            {alertSuccess && <Alert kind="success">{alertSuccess}</Alert>}
+
+            <Button variant="outline" onClick={handleSaveAlertPreferences} loading={alertSaving}>
+              <Bell className="h-4 w-4" />
+              {alertSaving ? 'Saving' : 'Save alert preferences'}
+            </Button>
           </div>
         </Card>
 
