@@ -78,10 +78,28 @@ Next:
    chart, the advice card's wording with real numbers, or that the Budget
    bar colors actually look right against each category's chosen color.
    **Do this first** before trusting the feature is done.
-2. **Retrain the live model** (carried over from Session 52, still not
-   done) — the classifier still only outputs the original 7 categories.
-   Needs `POST /training/retrain` from an authenticated browser session,
-   which this environment can't do.
+2. **Retrain the live model — deliberately deferred, not just blocked.**
+   Investigated this properly same-session (user asked "next task" →
+   retrain): checked live labeled-transaction counts per category and found
+   **zero** labeled samples in all 5 of the truly-new categories (Housing,
+   Personal Care & Health, Travel, Education, Investments) and zero rows
+   currently sitting in the review queue — so retraining today would be a
+   no-op for those 5 categories regardless (`retrain_model()`'s own
+   sparse-class filter drops any category with `<2` samples). Separately,
+   confirmed there's genuinely no way to trigger `POST /training/retrain`
+   from this sandbox at all — it's the ONLY path that touches production
+   data and strictly requires a real Supabase JWT via `AuthMiddleware`; no
+   CLI/bootstrap/standalone-script alternative exists anywhere in the repo,
+   even though `backend/config.py`'s Supabase client does hold the
+   service-role key (a new script *could* be built to bypass the JWT
+   requirement, but doesn't exist today and wasn't built — asked the user
+   via `AskUserQuestion` whether to build one, retrain now anyway despite
+   the 0-sample issue, or wait; **user chose to wait**). Correct next step:
+   once real transactions land in the new categories (via the merchant
+   rules already live, or manual labeling) and get labeled, the user
+   retrains themselves via Model → Training in their own browser session.
+   Nothing to build here — this is a "wait for data" state, not a "blocked
+   on tooling" state.
 3. The 50/30/20 Need/Want/Savings bucket mapping
    (`src/categories.py::CATEGORY_BUCKET`) is a first-pass judgment call
    confirmed with the user in the abstract (e.g. Education→Need, Transfers &
