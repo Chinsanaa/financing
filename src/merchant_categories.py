@@ -543,6 +543,8 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     ("服务费", "Utilities & Services"),
     ("订阅", "Utilities & Services"),
     ("会员", "Utilities & Services"),
+    ("insurance", "Utilities & Services"),
+    ("保险", "Utilities & Services"),
     # --- Housing: rent, mortgage, property management, home repairs ---
     ("rent", "Housing"),
     ("mortgage", "Housing"),

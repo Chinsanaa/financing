@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
 from translate import merchant_label_english, description_label_english
+from src.categories import CATEGORY_BUCKET
 
 router = APIRouter()
 
@@ -75,6 +76,7 @@ async def get_summary(request: Request):
             "labeled_transactions": labeled_count,
             "labeling_percentage": round(100 * labeled_count / total_count, 1) if total_count > 0 else 0,
             "total_spend": total_spend,
+            "monthly_income": await _monthly_income(user_id),
         }
     except HTTPException:
         raise
@@ -353,6 +355,73 @@ async def put_category_budgets(request: Request, data: CategoryBudgetsUpdate):
         raise
     except Exception as e:
         raise internal_error(e, "dashboard/put_category_budgets")
+
+
+@router.get("/rule-503020")
+async def get_rule_503020(request: Request, month: Optional[str] = None):
+    """50/30/20 rule breakdown: Needs/Wants/Savings vs income-derived targets.
+
+    Buckets every categorized transaction for the month via the static
+    `CATEGORY_BUCKET` mapping (src/categories.py) — unlike
+    `budget_category_config.type`, this covers ALL spend, not just categories
+    the user happened to set a $ budget for, and it's the only place a
+    'Savings' bucket exists (that table's enum is still just Need/Want).
+
+    Savings = money spent in the Investments category + unspent income
+    (income minus everything actually spent that month, floored at 0) — the
+    standard "what you didn't spend also counts as saved" definition.
+    """
+    user_id = request.state.user_id
+
+    try:
+        start, end = _month_bounds(month)
+        resolved_month = f"{start.year:04d}-{start.month:02d}"
+        available_months = await _available_months(user_id)
+
+        income = await _monthly_income(user_id)
+        spend_by_cat = await _spend_by_category(user_id, start, end)
+
+        bucket_totals = {"Need": 0.0, "Want": 0.0, "Savings": 0.0}
+        bucket_categories: dict = {"Need": [], "Want": [], "Savings": []}
+        for cat_name, amount in spend_by_cat.items():
+            bucket = CATEGORY_BUCKET.get(cat_name)
+            if not bucket or amount <= 0:
+                continue
+            bucket_totals[bucket] += amount
+            bucket_categories[bucket].append({"category": cat_name, "amount": amount})
+
+        total_spend = sum(spend_by_cat.values())
+        unspent = max(income - total_spend, 0.0)
+        if unspent > 0:
+            bucket_totals["Savings"] += unspent
+            bucket_categories["Savings"].append({"category": "Unspent income", "amount": unspent})
+
+        for cats in bucket_categories.values():
+            cats.sort(key=lambda c: c["amount"], reverse=True)
+
+        def _bucket(name: str, target_pct: int) -> dict:
+            key = {"Need": "Need", "Want": "Want", "Savings": "Savings"}[name]
+            return {
+                "target_pct": target_pct,
+                "target_amount": round(income * target_pct / 100, 2) if income > 0 else None,
+                "spent": round(bucket_totals[key], 2),
+                "categories": bucket_categories[key],
+            }
+
+        return {
+            "month": resolved_month,
+            "available_months": available_months,
+            "income": income,
+            "buckets": {
+                "needs": _bucket("Need", 50),
+                "wants": _bucket("Want", 30),
+                "savings": _bucket("Savings", 20),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/rule-503020")
 
 
 @router.get("/savings")

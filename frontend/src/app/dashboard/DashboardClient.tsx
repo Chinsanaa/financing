@@ -25,6 +25,7 @@ import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist';
 const tabLoading = () => <SkeletonRows rows={6} />;
 const StatsTab = dynamic(() => import('@/components/tabs/StatsTab'), { loading: tabLoading, ssr: false });
 const BudgetTab = dynamic(() => import('@/components/tabs/BudgetTab'), { loading: tabLoading, ssr: false });
+const RuleTab = dynamic(() => import('@/components/tabs/RuleTab'), { loading: tabLoading, ssr: false });
 const SavingsTab = dynamic(() => import('@/components/tabs/SavingsTab'), { loading: tabLoading, ssr: false });
 const ActionTab = dynamic(() => import('@/components/tabs/ActionTab'), { loading: tabLoading, ssr: false });
 const ReportsTab = dynamic(() => import('@/components/tabs/ReportsTab'), { loading: tabLoading, ssr: false });
@@ -47,6 +48,7 @@ const SECTIONS: (TabItem & { subs: TabItem[] })[] = [
     icon: ChartPie,
     subs: [
       { id: 'budget', label: 'Budget' },
+      { id: 'rule-503020', label: '50/30/20' },
       { id: 'savings', label: 'Savings' },
       { id: 'subscriptions', label: 'Subscriptions' },
       { id: 'insights', label: 'Insights' },
@@ -61,6 +63,7 @@ const TAB_SECTION: Record<string, string> = {
   overview: 'overview',
   'transactions-model': 'transactions-model',
   budget: 'planning',
+  'rule-503020': 'planning',
   savings: 'planning',
   subscriptions: 'planning',
   insights: 'planning',
@@ -198,6 +201,7 @@ export default function DashboardClient() {
             />
           )}
           {activeTab === 'budget' && <BudgetTab />}
+          {activeTab === 'rule-503020' && <RuleTab />}
           {activeTab === 'savings' && <SavingsTab />}
           {activeTab === 'subscriptions' && <SubscriptionsTab />}
           {activeTab === 'insights' && <InsightsTab />}

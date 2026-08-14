@@ -34,6 +34,7 @@ interface Summary {
   labeled_transactions: number;
   labeling_percentage: number;
   total_spend: number;
+  monthly_income: number;
 }
 
 interface Category {
@@ -119,8 +120,8 @@ export default function StatsTab() {
   const stats = summary
     ? [
         { label: 'Total spend', value: summary.total_spend, prefix: CURRENCY_SYMBOL, decimals: 0 },
-        { label: 'Transactions', value: summary.total_transactions },
-        { label: 'Labeled', value: summary.labeled_transactions },
+        { label: 'Monthly income', value: summary.monthly_income, prefix: CURRENCY_SYMBOL, decimals: 0 },
+        { label: 'Labeled', value: summary.labeled_transactions, denominator: summary.total_transactions },
         { label: 'Labeling complete', value: summary.labeling_percentage, suffix: '%' },
       ]
     : [];
@@ -149,6 +150,7 @@ export default function StatsTab() {
                 />
                 {s.prefix}
                 {s.suffix}
+                {'denominator' in s && s.denominator !== undefined && ` / ${formatNumber(s.denominator, 0)}`}
               </p>
             </Card>
           ))}

@@ -64,36 +64,39 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 52): expanded the ML category taxonomy from 7 to 13
+Current (Session 53): added the 50/30/20 Planning tab, fixed the Budget
+tab's progress-bar/status coloring, changed the Overview stat tiles
+(Transactions → Monthly income, Labeled → labeled/total fraction), and
+added the missing insurance merchant rule. See Session 53 log for full
+detail.
+
+Next:
+1. **Live UI verification not done.** All of this session's frontend work
+   (new RuleTab, Budget tab color fix, StatsTab tile changes) was verified
+   via `tsc --noEmit` + `next build` + backend pytest only — no live browser
+   session against the real account to visually confirm the 50/30/20 pie
+   chart, the advice card's wording with real numbers, or that the Budget
+   bar colors actually look right against each category's chosen color.
+   **Do this first** before trusting the feature is done.
+2. **Retrain the live model** (carried over from Session 52, still not
+   done) — the classifier still only outputs the original 7 categories.
+   Needs `POST /training/retrain` from an authenticated browser session,
+   which this environment can't do.
+3. The 50/30/20 Need/Want/Savings bucket mapping
+   (`src/categories.py::CATEGORY_BUCKET`) is a first-pass judgment call
+   confirmed with the user in the abstract (e.g. Education→Need, Transfers &
+   Gifts→Want) — worth revisiting once the user has looked at a real month's
+   breakdown and has opinions about specific categories.
+4. Session 52's still-open items remain open: no live `classify_all()` run
+   against real transaction text for the Watsons/NYU Shanghai rule moves;
+   "Investments" category rules are unconfirmed against real merchant
+   strings; new-category merchant rules generally are first-pass guesses.
+
+Previous (Session 52): expanded the ML category taxonomy from 7 to 13
 categories (added Housing, Personal Care & Health, Entertainment, Travel,
 Education, Investments). See Session 52 log for full detail — decision
 history (user's first proposal, several rounds of trimming/merging via
 AskUserQuestion), the merchant-rule remapping, and the live migration.
-
-Next:
-1. **Retrain the live model.** The classifier itself (whatever TF-IDF/
-   semantic model is currently trained) still only knows the old 7 output
-   classes — it was not retrained this session (no way to trigger
-   `POST /training/retrain` outside an authenticated browser session from
-   this environment). Until the user retrains via the Model → Training tab,
-   new-category transactions will only get categorized by the merchant-rule
-   layer, not the ML layer, and needs_review may undercount. **Do this
-   first**, before evaluating whether the new categories are useful.
-2. Manually review how the two Watsons/屈臣氏-adjacent rule moves and the
-   NYU Shanghai special-case change (Tuition and Fees → Education, was
-   Utilities & Services) land on next classify — no test transactions existed
-   to verify against in this sandbox (only SQL-level verification of the
-   categories/merchant_rules tables, no live classify_all() run against real
-   transaction text).
-3. Watch whether "Investments" gets real usage — it shipped with only
-   generic keyword-based rules (余额宝/基金/理财/股票/brokerage), no confirmed
-   real merchant patterns, since this session had no visibility into what the
-   user's Alipay/WeChat investment transactions actually look like. Expect it
-   to need refinement once real data shows up in the review queue.
-4. The new categories' merchant rules are a reasonable starting guess, not
-   exhaustively researched — expect false positives/negatives until enough
-   labeled data accumulates per category (e.g. bare "streaming"/"membership"-
-   type keywords are inherently fuzzier than brand-name patterns).
 
 Previous (Session 51, updated same session): added an LLM fallback
 classification tier for transactions no rule or trained model can place,
@@ -189,7 +192,7 @@ Next:
    limiting (Session 49's lockout is client-side only — see that session's
    log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 52, 2026-08-14)
+## Current State (Session 53, 2026-08-14)
 
 | Item | Status |
 |---|---|
@@ -219,7 +222,7 @@ Next:
 | Frontend data layer | Single Supabase client for session persistence + axios auth interceptor (Session 40); no token props |
 | Upload UX | **FIXED** (Session 41): reload() called after upload/delete; skip tracking in LabelTab prevents infinite cycling |
 | JWT verification | **FIXED** (Session 45): `AuthMiddleware` verified `sub`/`aud` claims but never the ES256 signature itself (`verify_signature: False`, a Session 40 leftover) — any self-crafted token with an arbitrary `sub` was accepted as a valid session. Now verifies against Supabase's real JWKS via `backend/auth_utils.py::decode_supabase_jwt` (`jwt.PyJWKClient`); unused `supabase_jwt_secret` config removed |
-| Tests | 74 (`pytest tests/`, src/ pipeline) + 27 (`pytest backend/tests/`: JWT verification incl. the impersonation regression test, cross-user isolation on categories/settings, classification-coalescer threading tests, and — new this session — `routes/uploads.py` coverage: extension rejection, duplicate-hash 409, a failing file not blocking its neighbors, and sequential overlapping-date-range dedup) = 101 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
+| Tests | 99 (`pytest tests/`, src/ pipeline) + 101 (`pytest backend/tests/`, incl. new `test_dashboard_rule_503020.py`) = 200 passing. No frontend suite yet; frontend verified via `tsc --noEmit` + `next build` |
 | XLSX export | **NEW** (Session 41): GET /dashboard/export returns all transactions (translated, formatted), frontend xlsx() API + "Export Excel (all)" button in Reports |
 | Legal pages | **NEW** (Session 47): `/privacy` and `/terms`, static public App Router pages, drafted from the real data model; linked from the landing page footer and Settings |
 | Settings page | **CHANGED** (Session 47): duplicate "Monthly income" form removed (income stays editable via Budget tab / upload flow); added data export (reuses existing `GET /dashboard/export`) and change-password (`supabase.auth.updateUser`) sections. **CHANGED** (Session 48): change-password form now gated by the shared `PasswordChecklist`; Account card shows `username`. **CHANGED** (Session 50): removed the "Onboarding status" row (raw `profiles.onboarding_phase`) from the Account card — user-facing noise, not something users act on |
@@ -227,9 +230,121 @@ Next:
 | Password rules + consent | **NEW** (Session 48): shared `PasswordChecklist` component (9+ chars/A-Z/a-z/0-9/special) gates both signup and Settings change-password; signup requires a checked "I agree to Terms & Conditions and Privacy Policy" box (links to Session 47's pages) |
 | Forgot password | **NEW** (Session 48): `AuthClient` gained a third `'forgot'` mode calling `resetPasswordForEmail`; `/auth/verify` now branches on `type=recovery` to show a "set new password" form (`supabase.auth.updateUser`) instead of auto-redirecting to the dashboard |
 | Auth flow polish | **NEW** (Session 49): shared `PasswordInput` (show/hide eye toggle) used on all 6 password fields across signup/signin/Settings/recovery; live confirm-password mismatch text added to the two forms that lacked it (Settings change-password, recovery set-password — signup already had it); email/username/identifier trimmed before use; client-side soft lockout on sign-in after 5 failed attempts (escalating 30s→300s cooldown, resets on success). Two Supabase security-advisor findings fixed: `handle_new_user()`/`initialize_default_categories()`/`reassign_deleted_category_transactions()` (trigger-only functions) had EXECUTE revoked from `anon`/`authenticated` (harmless as direct RPC calls today, but needlessly public); "Leaked Password Protection" is disabled project-wide — flagged for the user, not fixable via any available tool (Dashboard-only setting) |
-| Category taxonomy | **CHANGED** (Session 52): 7 → 13 categories. `src/categories.py::ML_CATEGORIES` now: Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Housing, Personal Care & Health, Entertainment, Travel, Education, Investments, Other. `EXTRA_LABEL_CATEGORIES` removed (Entertainment/Travel/Health & Wellness are now real ML categories instead of deferred labels normalized to Other); `CATEGORY_NORMALIZE` now maps legacy `'Health & Wellness'` → `'Personal Care & Health'`. `initialize_default_categories()` trigger creates all 13 for new signups; existing users backfilled via migration `20260814010000_expand_category_taxonomy.sql`. **Classifier NOT yet retrained on the new classes** — see Next Suggested Step |
+| Category taxonomy | **CHANGED** (Session 52): 7 → 13 categories. `src/categories.py::ML_CATEGORIES` now: Groceries, Transportation, Utilities & Services, Eating Out, Shopping, Transfers & Gifts, Housing, Personal Care & Health, Entertainment, Travel, Education, Investments, Other. `EXTRA_LABEL_CATEGORIES` removed (Entertainment/Travel/Health & Wellness are now real ML categories instead of deferred labels normalized to Other); `CATEGORY_NORMALIZE` now maps legacy `'Health & Wellness'` → `'Personal Care & Health'`. `initialize_default_categories()` trigger creates all 13 for new signups; existing users backfilled via migration `20260814010000_expand_category_taxonomy.sql`. **Classifier still NOT retrained on the new classes** — see Next Suggested Step. **FIXED** (Session 53): `insurance`/`保险` had no merchant rule at all — added, mapped to Utilities & Services (migration `20260814020000_insurance_rule.sql`) |
+| 50/30/20 budgeting rule | **NEW** (Session 53): Planning → "50/30/20" tab. `src/categories.py::CATEGORY_BUCKET` maps all 13 ML categories to Need/Want/Savings (independent of the pre-existing `budget_category_config.type` Need/Want enum, which only covers categories a user has set a $ budget for — this new mapping buckets ALL of a month's spend). `GET /dashboard/rule-503020?month=` (new) returns per-bucket target ($=income×50/30/20%) vs actual spend; Savings = Investments-category spend + unspent income (`max(income − total_spend, 0)`), confirmed with the user since Investments-only would read ~0% most months. Frontend `RuleTab.tsx`: donut chart (3 fixed bucket colors, not per-category) + per-bucket progress rows + a rule-based advice card (prioritizes a savings shortfall, then whichever spend bucket runs hottest, names the top offending category; "on track" success state within ±3pp of all three targets) |
+| Budget tab colors | **FIXED** (Session 53): progress bars were a 3-way status color (danger red / amber `--chart-5` / accent) that ignored category identity — the amber especially read as "neon yellow" to the user. `ProgressBar` (`ui-feedback.tsx`) gained an optional `fillColor` prop (raw CSS color, additive — 3 other call sites unaffected) so the bar now always shows the category's own `chartColorFor()` color; over/approaching-budget status moved to the spend-amount TEXT color only (red when over, amber above 80%) instead of changing the bar |
+| Overview stat tiles | **CHANGED** (Session 53): the "Transactions" tile (raw count) replaced with "Monthly income" (`profiles.monthly_income`, reused via the existing `_monthly_income()` helper — now also returned by `GET /dashboard/summary`). Labeled explicitly as *monthly* rather than "Total income" since the parser drops all 收入/income transaction rows at parse time (`src/parse.py` keeps `收/支 == '支出'` only) — there's no real lifetime income figure to pair with the all-time "Total spend" tile next to it. The "Labeled" tile now shows a `labeled / total` fraction (e.g. "742 / 900") instead of just the labeled count, so the removed transaction total still surfaces |
 
 ## Session Log
+
+### Session 53 (2026-08-14) — 50/30/20 Planning tab, Budget bar colors, stat tiles
+
+**Scope**: follow-on to Session 52. Four independent asks in one session:
+(1) two merchant-rule corrections after the user compared the app's
+categories against Alipay/WeChat's own native category pickers (screenshots
+supplied) — landed on "no new categories, just fix the rules" after some
+back-and-forth (first said pets→Entertainment/insurance→Personal Care &
+Health, then corrected to pets staying Shopping/insurance→Utilities &
+Services); (2) a new 50/30/20 budgeting-rule view on the Planning tab;
+(3) two Budget-tab color bugs — bars using a hardcoded amber/"neon yellow"
+status color instead of the category's own color, and no text-only
+indicator for "approaching budget"; (4) Overview stat tiles: swap the raw
+"Transactions" count tile for income info, and change "Labeled" to a
+labeled/total fraction.
+
+**Process**: used plan mode. Two Explore agents in parallel researched the
+frontend (Planning tab structure, `BudgetTab`'s exact bar-color bug,
+existing category-color utilities, existing pie-chart/advice-box UI
+patterns) and the backend (budget endpoints, `budget_category_config`'s
+existing Need/Want-only enum, income plumbing) before designing. Confirmed
+two real design decisions with the user via `AskUserQuestion` before
+writing code: how to define the Savings bucket (Investments-category spend
+alone would read ~0% most months, since not every month has an investment
+transaction — went with spend + unspent income, confirmed), and the
+Need/Want/Savings mapping for all 13 categories (user accepted the proposed
+split as-is). Mid-plan, the user added two more requests (text-only
+approaching-budget color; the income/labeled-fraction stat tile change) —
+folded into the plan before exiting plan mode, including a flagged honesty
+tradeoff (see below) rather than silently picking an approach.
+
+**Key design choices**:
+- **No `budget_type` enum change.** `budget_category_config.type`
+  ('Need'/'Want' only) is a separate, pre-existing per-category-budget
+  feature that only covers categories the user has set a $ budget for —
+  wrong data source for bucketing ALL spend. Instead added a static
+  `CATEGORY_BUCKET` dict in `src/categories.py` mapping all 13
+  `ML_CATEGORIES` to Need/Want/Savings, applied to every dollar of a
+  month's categorized spend via the existing `_spend_by_category()` helper
+  (no new RPC/SQL).
+- **Savings = Investments-category spend + unspent income**
+  (`max(income − total_spend, 0)`) — confirmed with the user, matches the
+  standard "what you didn't spend also counts as saved" framing.
+- **Income tile honesty**: `total_spend` on the Overview tab is an
+  all-time sum; the only income figure anywhere is `profiles.monthly_income`
+  (a manually-entered monthly value) — real income transactions don't
+  exist in this app's data at all, since `src/parse.py` explicitly filters
+  to `收/支 == '支出'` (expense) only and drops all 收入 (income) rows at
+  parse time. Labeled the new tile "Monthly income", not "Total income", so
+  it doesn't imply the same timeframe as the all-time spend tile next to it
+  — flagged to the user in the plan rather than silently picking a label.
+
+**Code changes**:
+- `src/merchant_categories.py`: added `insurance`/`保险` →
+  Utilities & Services (previously had no rule at all); confirmed
+  `宠物`/`pet store` already correctly mapped to Shopping, no change needed
+  there despite the back-and-forth.
+- `src/categories.py`: new `CATEGORY_BUCKET` dict (Needs: Groceries,
+  Transportation, Utilities & Services, Housing, Personal Care & Health,
+  Education; Wants: Eating Out, Shopping, Entertainment, Travel, Transfers &
+  Gifts, Other; Savings: Investments).
+- `backend/routes/dashboard.py`: new `GET /dashboard/rule-503020?month=`
+  endpoint (reuses `_monthly_income()`, `_spend_by_category()`,
+  `_available_months()` — no new SQL). Returns per-bucket
+  `{target_pct, target_amount, spent, categories[]}`; `target_amount` is
+  `null` when income is unset (0) instead of dividing by zero or showing a
+  misleading 0% target. `GET /dashboard/summary` gained `monthly_income`.
+  New test file `backend/tests/test_dashboard_rule_503020.py` (3 cases:
+  basic bucketing, zero-income null-target handling, overspend-beyond-income
+  flooring unspent at 0).
+- `frontend/src/components/tabs/RuleTab.tsx` (new): donut chart (3 fixed
+  bucket colors via `chartFillColorForKey`, not per-category — these are
+  aggregate buckets, not category identities) + a legend/progress-bar
+  comparison list (actual $/% vs target $/% per bucket) + a rule-based
+  advice card. Advice logic (client-side, no LLM/backend text generation):
+  within ±3pp of all three targets → "on track" success card; else
+  prioritizes a savings shortfall first (the rule's aspirational goal),
+  then whichever spend bucket runs hottest over target, naming that
+  bucket's top-spend category by name.
+- `frontend/src/app/dashboard/DashboardClient.tsx`: wired in the new
+  `rule-503020` sub-tab under Planning, right after Budget.
+- `frontend/src/components/ui-feedback.tsx`: `ProgressBar` gained an
+  optional `fillColor` prop (raw CSS color value) — additive, the 3 other
+  existing call sites (`SavingsTab`, `LabelTab`, `UploadQueueItem`) pass
+  neither `color` nor `fillColor` and are unaffected.
+- `frontend/src/components/tabs/BudgetTab.tsx`: bar now always uses
+  `chartColorFor(cat.category)` via `fillColor` (was a 3-way status
+  Tailwind class — danger red / amber `--chart-5` / accent — that ignored
+  category identity entirely, which is what the user saw as "neon
+  yellow"). Over/approaching-budget status moved to the spend-amount TEXT
+  color only (danger red when over budget, amber above 80%, applied to both
+  the amount line and the caption line below it) — the bar itself no longer
+  changes color based on budget status.
+- `frontend/src/components/tabs/StatsTab.tsx`: "Transactions" tile →
+  "Monthly income" tile; "Labeled" tile now renders `labeled / total`
+  (e.g. "742 / 900") via a new optional `denominator` field on the stat-tile
+  entry type, instead of just the labeled count.
+- New migration `supabase/migrations/20260814020000_insurance_rule.sql`,
+  applied live to project `pxxqqffwummhkohnrvtz`: inserts the
+  `insurance`/`保险` global merchant rules (verified via `execute_sql`
+  after applying).
+
+**Verified**: `pytest tests/ backend/tests/` → 200 passing (99 src + 101
+backend, up from 197 — the 3 new rule-503020 tests). `npx tsc --noEmit` and
+`npm run build` both clean. Live-verified the new merchant_rules insert via
+`execute_sql`. **Not verified**: no live browser/Playwright session against
+the real account — the new Planning tab, the pie chart rendering, the
+Budget tab's actual color output, and the new stat tiles were not visually
+confirmed this session. See Next Suggested Step.
 
 ### Session 52 (2026-08-14) — Category taxonomy expanded 7 → 13
 

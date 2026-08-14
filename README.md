@@ -68,7 +68,7 @@ Two very different questions:
 The ten original tabs are grouped into five compact sections with sub-tabs:
 **Overview** (a monthly-spending line chart + category split), **Transactions**
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
-(Budget / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible onboarding
+(Budget / 50/30/20 / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible onboarding
 checklist (Upload → Categories → Label → Train) guides new accounts. Plus a
 separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
@@ -108,6 +108,13 @@ same color follows that category everywhere: the Overview pie chart, badges in
 Budget/Review/Label, and Reports. Categories without a chosen color get a stable
 automatic color. The dashboard layout is fluid — it fills large desktop screens
 (capped for ultrawides) and adapts down to tablet and phone.
+
+**50/30/20 rule**: the **Planning → 50/30/20** tab buckets each of the 13
+categories into Needs / Wants / Savings & Investing and compares the
+month's actual split (donut chart) against the 50/30/20 targets derived
+from your monthly income, plus a short rule-based guidance card (e.g.
+trim the largest "want" if savings are short). Savings counts both money
+spent in the Investments category and unspent income for the month.
 
 **Subscriptions**: the **Planning → Subscriptions** tab auto-detects recurring
 merchants (≥3 charges in the trailing 6 months at a monthly or weekly cadence,
