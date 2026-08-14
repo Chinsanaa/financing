@@ -16,6 +16,7 @@ import tempfile
 import os
 import shutil
 import hashlib
+import csv
 
 from src.parse import parse_alipay, parse_wechat_excel, parse_wechat_csv
 
@@ -310,20 +311,32 @@ def _read_headers(file_path: str) -> list:
         except Exception:
             return []
 
-    # WeChat CSVs have metadata rows before the actual headers.
-    # Read first 50 rows and find the row with transaction table headers.
-    try:
-        df = pd.read_csv(file_path, nrows=50, encoding='utf-8', header=None)
-        # Look for row containing WeChat transaction headers (Chinese or English)
-        for idx, row in df.iterrows():
-            row_str = ' '.join(str(v) for v in row.dropna() if pd.notna(v))
-            if '交易时间' in row_str or 'Transaction Time' in row_str:
-                return row.dropna().tolist()
-    except Exception:
-        pass
+    # Alipay/WeChat CSVs have metadata rows before the actual headers, and
+    # real exports are often GBK/GB18030-encoded rather than UTF-8. Scan raw
+    # lines (not pd.read_csv(header=None)) so a ragged preamble — a 1-field
+    # title line ahead of a 13-field header row — can never raise a
+    # ParserError; we only ever hand pandas a single already-matched line to
+    # split into fields. Same encoding fallback order as src/parse.py's
+    # _find_alipay_header/parse_generic_bank_csv, so a file that parses
+    # successfully later also detects successfully here.
+    for encoding in ('utf-8-sig', 'utf-8', 'gbk', 'gb18030'):
+        try:
+            with open(file_path, encoding=encoding) as f:
+                for i, line in enumerate(f):
+                    if i >= 50:
+                        break
+                    if ('交易时间' in line and ('收/支' in line or '交易类型' in line)) or 'Transaction Time' in line:
+                        return next(csv.reader([line]))
+        except UnicodeDecodeError:
+            continue
 
-    # Fallback: assume headers are in the first row
-    return pd.read_csv(file_path, nrows=0, encoding='utf-8').columns.tolist()
+    # Fallback: assume headers are in the first row, across the same encodings.
+    for encoding in ('utf-8-sig', 'utf-8', 'gbk', 'gb18030'):
+        try:
+            return pd.read_csv(file_path, nrows=0, encoding=encoding).columns.tolist()
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return []
 
 
 def detect_source(file_path: str) -> Optional[str]:
