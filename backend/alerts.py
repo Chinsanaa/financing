@@ -14,23 +14,31 @@ DEFAULT_ALERT_THRESHOLD_PCT = 80
 
 
 async def check_budget_alerts(user_id: str) -> None:
-    """Email newly-crossed over/approaching-budget categories for this user.
+    """Email + in-app notification for newly-crossed over/approaching-budget
+    categories for this user.
 
-    De-duplicated via the `budget_alerts` table (unique on user_id,
-    category_id, month, kind) so the same crossing is never emailed twice
-    in a month, no matter how many times this fires. Never raises — a
-    failure here must not affect the request that triggered it.
+    Email is de-duplicated via the `budget_alerts` table (unique on
+    user_id, category_id, month, kind); the in-app notification (bell) via
+    `notifications` (unique on user_id, dedup_key) — same crossing never
+    fires either channel twice in a month. The two channels are
+    independently gated (`alert_email_enabled` / `budget_inapp_enabled`),
+    so this fetches crossings whenever EITHER is on, then applies each
+    channel's own gate separately. Never raises — a failure here must not
+    affect the request that triggered it.
     """
     try:
         profile_resp = await run_query(
             lambda: supabase_client.table("profiles")
-            .select("alert_email_enabled, alert_threshold_pct")
+            .select("alert_email_enabled, alert_threshold_pct, budget_inapp_enabled")
             .eq("id", user_id)
             .execute()
         )
-        if not profile_resp.data or not profile_resp.data[0].get("alert_email_enabled"):
+        profile_row = profile_resp.data[0] if profile_resp.data else {}
+        email_enabled = bool(profile_row.get("alert_email_enabled"))
+        inapp_enabled = profile_row.get("budget_inapp_enabled", True)
+        if not email_enabled and not inapp_enabled:
             return
-        threshold_pct = float(profile_resp.data[0].get("alert_threshold_pct") or DEFAULT_ALERT_THRESHOLD_PCT)
+        threshold_pct = float(profile_row.get("alert_threshold_pct") or DEFAULT_ALERT_THRESHOLD_PCT)
 
         crossings = await _budget_crossings(user_id, threshold_pct)
         if not crossings:
@@ -38,6 +46,31 @@ async def check_budget_alerts(user_id: str) -> None:
 
         month_start, _ = _month_bounds(None)
         month = month_start.date().isoformat()
+
+        if inapp_enabled:
+            for crossing in crossings:
+                await run_query(
+                    lambda c=crossing: supabase_client.table("notifications")
+                    .upsert(
+                        {
+                            "user_id": user_id,
+                            "type": f"{c['kind']}_budget",
+                            "dedup_key": f"budget:{c['kind']}:{c['category_id']}:{month}",
+                            "payload": {
+                                "category": c["category"],
+                                "current": c["current"],
+                                "limit": c["limit"],
+                                **({"overage": c["overage"]} if c["kind"] == "over" else {"pct": c["pct"]}),
+                            },
+                        },
+                        on_conflict="user_id,dedup_key",
+                        ignore_duplicates=True,
+                    )
+                    .execute()
+                )
+
+        if not email_enabled:
+            return
 
         newly_crossed = []
         for crossing in crossings:

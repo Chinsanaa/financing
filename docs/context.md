@@ -64,24 +64,41 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 55): added `welcome`/`training_complete` notifications and
-replaced the top-of-page onboarding banner with a bottom-right step box +
-a spotlight/arrow tour overlay (`OnboardingTour.tsx` + `TourSpotlight.tsx`).
-See Session 55 log for full detail.
+Current (Session 56): first real live-usage feedback arrived, and it was
+useful in two different ways. (1) Real bug/design corrections: rebuilt
+notifications with actual read/unread + clear (see Current State table —
+this reverses Session 54's "no persisted table" call for a concrete
+reason, not speculatively), and removed the "View all in Planning" button
+the user explicitly said wasn't wanted. (2) A "missing feature" report
+that turned out NOT to be a code bug: the user said the 50/30/20 tab
+wasn't showing. Investigated via Render/Vercel deployment records before
+touching any code — **Render's backend only auto-deploys from `main`**, and
+every session's work (Sessions 52-55) sat on the feature branch until the
+PR merged at `2026-08-14T10:28Z`, minutes before this feedback arrived. So
+the live backend genuinely didn't have `GET /dashboard/rule-503020` (or
+any of sessions 52-55's other backend changes) until that merge deploy
+finished. Confirmed via `curl` against the live Render URL that the route
+now returns 401 (exists, needs auth) not 404 (doesn't exist) — the tab
+should just work now that both Render and Vercel are on the merged code.
+**No code change was made for this** — told the user to re-check rather
+than rebuild something the code reading says isn't broken. **Lesson for
+future sessions**: don't trust live-app testing against the feature branch
+as a verification signal for backend changes specifically — Render won't
+have them until merge, even though Vercel previews update per-push. If a
+"missing feature" report comes in on unmerged work, check deployment
+state before assuming a code bug.
 
 Next:
-1. **Live UI verification not done — THREE sessions of unverified frontend
-   work have now stacked up (53, 54, 55).** Verified via `tsc --noEmit` +
-   `next build` + `pytest` (207 passing) only, every session. This
-   session's tour overlay is the highest-risk piece yet to ship unverified:
-   spotlight positioning math (`TourSpotlight.tsx`'s `getBoundingClientRect`
-   + bubble-flip + caret-offset logic), the `data-tour-id` target
-   resolution actually finding the right elements at the right times, and
-   whether the whole thing looks intentional rather than glitchy have ZERO
-   real-browser confirmation. **This is the strongest recommendation yet
-   to get an actual browser pass (or a Playwright session with test
-   credentials) before building more UI on top** — the risk of a visually
-   broken but type-safe feature is real and compounding.
+1. **Live UI verification still not done — FOUR sessions of unverified
+   frontend work have now stacked up (53, 54, 55, 56).** Verified via
+   `tsc --noEmit` + `next build` + `pytest` (209 passing) only, every
+   session. This session's new notification dropdown (read/unread dot
+   styling, the clear button, badge-count-goes-to-zero-on-open behavior)
+   adds to Session 55's still-unverified tour overlay. **Now that the
+   50/30/20 deployment-timing mystery is resolved, an actual browser pass
+   is the single highest-value next step** — it would finally validate
+   (or catch real bugs in) four sessions of accumulated UI work at once,
+   now that the deploy-timing confound is gone.
 2. **Monthly spending overview is a settings toggle only — no delivery
    exists.** Confirmed with the user in Session 54 (`AskUserQuestion`):
    ship the toggle now, build real sending later. To make it real: a new
@@ -124,6 +141,12 @@ Next:
    against real transaction text for the Watsons/NYU Shanghai rule moves;
    "Investments" category rules are unconfirmed against real merchant
    strings; new-category merchant rules generally are first-pass guesses.
+
+Previous (Session 55): added `welcome`/`training_complete` notifications
+(later superseded by Session 56's persisted version) and replaced the
+top-of-page onboarding banner with a bottom-right step box + a
+spotlight/arrow tour overlay (`OnboardingTour.tsx` + `TourSpotlight.tsx`).
+Also added header icon tooltips. See Session 55 log for full detail.
 
 Previous (Session 54): reworked the notification system — Settings gained a
 3-category "Notification preferences" section (Budget alerts, Pending
@@ -237,7 +260,7 @@ Next:
    limiting (Session 49's lockout is client-side only — see that session's
    log for why routing login through the backend wasn't done unilaterally).
 
-## Current State (Session 55, 2026-08-14)
+## Current State (Session 56, 2026-08-14)
 
 | Item | Status |
 |---|---|
@@ -279,11 +302,105 @@ Next:
 | 50/30/20 budgeting rule | **NEW** (Session 53): Planning → "50/30/20" tab. `src/categories.py::CATEGORY_BUCKET` maps all 13 ML categories to Need/Want/Savings (independent of the pre-existing `budget_category_config.type` Need/Want enum, which only covers categories a user has set a $ budget for — this new mapping buckets ALL of a month's spend). `GET /dashboard/rule-503020?month=` (new) returns per-bucket target ($=income×50/30/20%) vs actual spend; Savings = Investments-category spend + unspent income (`max(income − total_spend, 0)`), confirmed with the user since Investments-only would read ~0% most months. Frontend `RuleTab.tsx`: donut chart (3 fixed bucket colors, not per-category) + per-bucket progress rows + a rule-based advice card (prioritizes a savings shortfall, then whichever spend bucket runs hottest, names the top offending category; "on track" success state within ±3pp of all three targets) |
 | Budget tab colors | **FIXED** (Session 53): progress bars were a 3-way status color (danger red / amber `--chart-5` / accent) that ignored category identity — the amber especially read as "neon yellow" to the user. `ProgressBar` (`ui-feedback.tsx`) gained an optional `fillColor` prop (raw CSS color, additive — 3 other call sites unaffected) so the bar now always shows the category's own `chartColorFor()` color; over/approaching-budget status moved to the spend-amount TEXT color only (red when over, amber above 80%) instead of changing the bar |
 | Overview stat tiles | **CHANGED** (Session 53): the "Transactions" tile (raw count) replaced with "Monthly income" (`profiles.monthly_income`, reused via the existing `_monthly_income()` helper — now also returned by `GET /dashboard/summary`). Labeled explicitly as *monthly* rather than "Total income" since the parser drops all 收入/income transaction rows at parse time (`src/parse.py` keeps `收/支 == '支出'` only) — there's no real lifetime income figure to pair with the all-time "Total spend" tile next to it. The "Labeled" tile now shows a `labeled / total` fraction (e.g. "742 / 900") instead of just the labeled count, so the removed transaction total still surfaces |
-| Notification system | **REWORKED** (Session 54): `profiles` gained 3 new booleans (`budget_inapp_enabled`, `pending_review_inapp_enabled` — both default `true`, preserving prior always-on behavior; `monthly_overview_email_enabled` — default `false`, preference-only, no sending logic exists yet). `GET /dashboard/action` now filters its `over_budget`/`approaching_budget`/`pending_review` items by these toggles (single source of truth — both the bell and the Action plan tab read it). Settings' single flat "Budget alerts" card became a 3-category "Notification preferences" section (Budget alerts, Pending review reminders, Monthly spending overview) using a new reusable `Switch` component. The header bell (`NotificationBell.tsx`) is no longer pure navigation — it's a real dropdown (reusing `CategoryColorPicker`'s ref/mousedown/Escape popover pattern) showing the same live `GET /dashboard/action` data inline, with a "View all in Planning" footer link into the unchanged `ActionTab`. No persisted notifications table was built — deliberately out of scope, nothing needed it (see Session 54 log). **EXTENDED** (Session 55): 2 more `GET /dashboard/action` item types, same live-computed pattern — `welcome` (shows for the first 48h of an account's life, keyed off `profiles.created_at` since `onboarding_phase` is confirmed dead/unused — see below) and `training_complete` (shows for 30 minutes after a `model_runs` row's `finished_at`, a deliberately-flagged exception to "derived from persistent state" since a training run finishing is momentary, not standing — a time-window heuristic instead of a new read/dismissed table) |
+| Notification system | **REWORKED** (Session 54): `profiles` gained 3 new booleans (`budget_inapp_enabled`, `pending_review_inapp_enabled` — both default `true`, preserving prior always-on behavior; `monthly_overview_email_enabled` — default `false`, preference-only, no sending logic exists yet). `GET /dashboard/action` filters its `over_budget`/`approaching_budget`/`pending_review` items by these toggles — this endpoint now feeds ONLY Planning → Action plan (live current-state view, unchanged mechanics since Session 54). **EXTENDED then SUPERSEDED** (Session 55 added `welcome`/`training_complete` as live-computed `GET /dashboard/action` items with time-window heuristics — reverted same-day, see Session 56). **REARCHITECTED** (Session 56): live user feedback asked for real read/unread tracking + a clear-all button, which pure live computation can't support — reverses Session 54's "no persisted notifications table" call, for the concrete reason that decision anticipated (a real need, not speculative). New `notifications` table (`user_id, type, dedup_key, payload, read_at, cleared_at`, `UNIQUE(user_id, dedup_key)` — same de-dup role `budget_alerts` already plays for email) backs the bell exclusively; `GET /dashboard/action` is untouched by it. Population is reactive: `backend/alerts.py::check_budget_alerts` (restructured — used to early-return entirely when email was off, now computes crossings whenever email OR in-app is on and gates each channel independently) inserts budget-crossing notifications; `training.py::run_training()` inserts one on `status='succeeded'`; `welcome` lazy-inserts on first `GET /dashboard/notifications` call (48h window, unchanged from Session 55's constant). New `GET /dashboard/notifications` (list + `unread_count`), `POST .../read` (marks all read, called when the bell dropdown opens), `POST .../clear` (removes them from the list permanently — confirmed with the user that "clear" means dismiss-for-good, not just mark-read; a cleared notification never reappears, only a genuinely new event does). `NotificationBell.tsx` rewritten: badge = real unread count (0 hides it), dropdown shows read/unread visually (small dot), "Clear notifications" button — the "View all in Planning" button from Session 54 is gone entirely per explicit user correction ("I wanted the action plan button to be in the planning section," not duplicated into the notification dropdown) |
 | Onboarding UI | **REWORKED** (Session 55): the bulky full-width `OnboardingChecklist` top banner is gone, replaced by `OnboardingTour` — the same real-data-derived completion logic (upload/categories/label/train), now in a small `fixed bottom-right` step box, plus a new `TourSpotlight` overlay: dims the page and spotlights (via a `box-shadow: 0 0 0 9999px` cutout) whichever button the current step needs next, with an arrow-bubble instruction pointing at it. Deliberately non-blocking — every overlay layer is `pointer-events: none` except the bubble's own "Skip tour" link, so the real button underneath stays clickable and a user can never get stuck if the target-resolution logic is wrong. New `data-tour-id` attributes added to 4 elements (`Tabs.tsx`'s `TabItem.tourId`, `TransactionsModelTab.tsx`'s step-pills, `UploadTab.tsx`'s dropzone) — none existed anywhere in the frontend before this. Confirmed `profiles.onboarding_phase` (the enum-based `upload/categories/labeling/complete` column from the original schema) is fully dead: nothing ever calls `POST /dashboard/onboarding-complete`, so every account sits at the `'upload'` default forever — not used for either this rework or the welcome notification above |
 | Header icon tooltips | **NEW** (Session 55, same session): new `frontend/src/components/ui/Tooltip.tsx` — CSS-only (`group-hover`/`group-focus-within`, no JS state, no portal) hover/focus label wrapping a single child. Applied to the 4 header icon-only buttons (Notifications, theme toggle, Settings, Sign out) — none had a visible label before, only `aria-label` for screen readers. The bell's tooltip suppresses itself while its own dropdown is open (`NotificationBell` gained an `onOpenChange` callback) to avoid showing a redundant hover label next to an already-open panel |
 
 ## Session Log
+
+### Session 56 (2026-08-14) — Real notification read/unread/clear + 50/30/20 deployment-timing investigation
+
+**Scope**: first live-usage feedback on the app (the user actually clicked
+around after the Session 52-55 branch merged to `main`). Three corrections:
+(1) the bell dropdown's "View all in Planning" button — explicitly not
+wanted, Action plan already lives in Planning normally; (2) real read/unread
+tracking with an unread-count badge and a clear-notifications button,
+which the prior live-computed design couldn't support; (3) the 50/30/20
+tab reportedly not showing at all.
+
+**Process**: used plan mode. Before writing anything, investigated the
+50/30/20 report using Render/Vercel MCP tools rather than assuming a code
+bug — `list_services`/`list_deploys` confirmed the `financing` Render
+backend only auto-deploys from `main`, and the merge that brought
+sessions 52-55's backend code to `main` had only just landed
+(`2026-08-14T10:28Z`) when the feedback arrived. `curl`'d the live Render
+URL directly: `GET /dashboard/rule-503020` → `401` (exists, needs auth),
+not `404` — confirming the endpoint really is live now. Re-read
+`DashboardClient.tsx`'s wiring (SECTIONS/TAB_SECTION/render switch) and
+found no bug. **Conclusion: deployment-timing, not a code bug** — told
+the user to re-check rather than rebuild something that wasn't actually
+broken. This is a useful general lesson, written into Next Suggested Step:
+Vercel previews update per-push, but Render only serves `main`, so testing
+a live app against unmerged backend work will show stale behavior that
+looks like a bug but isn't.
+
+For the notification rework, confirmed two real design decisions with the
+user via `AskUserQuestion` before writing code (both reverse or extend
+Session 54's explicit "no persisted table, no speculative infrastructure"
+stance — asked because in each case the answer determines the whole data
+model, not a case where "make your own judgment" was appropriate):
+1. **"Clear notifications" removes them from the list entirely** (not just
+   marks read) — a cleared notification never reappears; only a genuinely
+   new event does.
+2. **Notification scope**: budget crossings + welcome + training-complete
+   become real persisted notifications (discrete "things that happened").
+   `pending_review` stays live-only in Planning → Action plan — a
+   continuously fluctuating queue size doesn't fit read/unread/clear.
+
+**Code changes**:
+- New migration `supabase/migrations/20260814040000_add_notifications.sql`,
+  applied live: `notifications(id, user_id, type, dedup_key, payload
+  jsonb, read_at, cleared_at, created_at)`, `UNIQUE(user_id, dedup_key)` —
+  the same de-dup role `budget_alerts` already plays for email, now
+  generalized to an in-app notification log. RLS matches `budget_alerts`'s
+  4-policy pattern. Distinct table from `budget_alerts` on purpose — that
+  one stays a write-only email-dedup ledger, untouched.
+- `backend/alerts.py::check_budget_alerts`: restructured — previously
+  early-returned before computing crossings at all if
+  `alert_email_enabled` was false (email was the only consumer). Now
+  computes crossings whenever EITHER `alert_email_enabled` OR
+  `budget_inapp_enabled` is true, then independently upserts into
+  `budget_alerts`+sends email (gated on the email toggle, unchanged
+  behavior) and into `notifications` (gated on the in-app toggle, new).
+- `backend/routes/training.py::run_training()`: inserts a
+  `training_complete` notification (`dedup_key=f"training:{model_run_id}"`)
+  right after marking a run `succeeded`.
+- `backend/routes/dashboard.py`: removed the `welcome`/`training_complete`
+  blocks Session 55 added to `GET /dashboard/action` (superseded — that
+  endpoint goes back to exactly over_budget/approaching_budget/
+  pending_review, feeding only `ActionTab`, unchanged since Session 54).
+  New `GET /dashboard/notifications` (list + `unread_count`, plus a lazy
+  one-time `welcome` insert on first call, reusing Session 55's 48h
+  window constant), `POST /dashboard/notifications/read` (marks all
+  unread → read), `POST /dashboard/notifications/clear` (sets
+  `cleared_at`, removing them from the active list for good). New
+  `backend/tests/test_notifications.py` (6 cases: welcome lazy-insert +
+  no-duplicate, welcome outside the window, budget-crossing dedup via two
+  calls to `check_budget_alerts`, read clearing unread_count while keeping
+  items listed, clear emptying the list, a cleared notification not
+  reappearing). Removed the 4 tests Session 55 added to
+  `test_dashboard_action.py` for the now-reverted `GET /dashboard/action`
+  blocks.
+- `frontend/src/components/ui/NotificationBell.tsx`: rewritten to fetch
+  `GET /dashboard/notifications` instead of `/dashboard/action`. Badge =
+  real `unread_count` (hidden at 0, not just "how many live items exist").
+  Opening the dropdown calls `POST .../read`. Each row shows a small dot
+  for unread items. Footer is now a single "Clear notifications" button
+  (`POST .../clear`) — **the "View all in Planning" button and `onViewAll`
+  prop are gone entirely**, per the user's explicit correction.
+  `DashboardClient.tsx` updated to match (dropped the `onViewAll` prop);
+  `ActionTab.tsx` untouched.
+
+**Verified**: `pytest tests/ backend/tests/` → 209 passing (99 src + 110
+backend, up from 207 — net +2 after removing 4 superseded tests and adding
+6 new ones). `npx tsc --noEmit` and `npm run build` both clean. Backend
+notification dedup verified directly in tests (calling
+`check_budget_alerts` twice produces exactly one notification row).
+**Not verified**: no live browser session for the new dropdown's
+read/unread visuals or the clear button — see Next Suggested Step, this is
+now the 4th session of stacked-up unverified frontend work, though the
+50/30/20 investigation above at least resolves the deployment-timing
+confound that made earlier verification reports unreliable.
 
 ### Session 55 (2026-08-14) — Welcome/training notifications + guided onboarding tour
 

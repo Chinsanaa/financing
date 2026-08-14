@@ -126,18 +126,21 @@ re-detection runs. Detection logic lives in `src/recurring.py` (pure pandas,
 no DB access); `backend/routes/subscriptions.py` fetches transactions, runs
 detection, and upserts into the `recurring_merchants` cache table.
 
-**Notifications**: the header's notification bell shows a live count of
-over-budget/approaching-budget categories, a welcome message for the first
-48 hours of a new account, and a training-finished note for 30 minutes
-after a model run succeeds, opening a dropdown with those items plus any
-pending-review reminder — all computed on every load by
-`GET /dashboard/action` — no separate notifications table, it's the same
-live data **Planning → Action plan** shows, just reachable without leaving
-the page ("View all in Planning" in the dropdown links there for the fuller
-view). **Settings → Notification preferences** has three categories: Budget
+**Notifications**: the header's notification bell is a real notification
+inbox — over-budget/approaching-budget crossings, a one-time welcome
+message for new accounts, and a note when a model finishes training, all
+persisted in a `notifications` table with real read/unread tracking. The
+badge shows the unread count (hidden at 0); opening the dropdown marks
+everything read; a "Clear notifications" button removes them from the list
+for good — a cleared notification only reappears if a genuinely new event
+happens. This is separate from **Planning → Action plan**, which stays a
+live current-state view (over-budget/approaching-budget/pending-review,
+recomputed on every load, no history) — the two don't share data.
+**Settings → Notification preferences** has three categories: Budget
 alerts (in-app + email, with a configurable "approaching budget" threshold,
-default 80%), Pending review reminders (in-app only), and Monthly spending
-overview (email only — a settings toggle today, sending isn't built yet).
+default 80%), Pending review reminders (in-app only, Action-plan-only —
+not part of the bell), and Monthly spending overview (email only — a
+settings toggle today, sending isn't built yet).
 Budget alert emails are de-duplicated per category/month so the same
 crossing is never sent twice, and are checked reactively (when you upload,
 review, or label a transaction), not on a schedule, since no background
