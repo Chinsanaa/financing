@@ -23,9 +23,8 @@ COPY src/ ./src/
 # Expose port
 EXPOSE 8000
 
-# Health check (removed - Railway handles health via HTTP responses)
-# The slim Python image doesn't have curl, so we rely on Railway's
-# default health checks via HTTP status codes.
+# Health check: no explicit HEALTHCHECK instruction (the slim image has no
+# curl) — the host platform (Render) checks liveness via HTTP status on
+# GET /health instead.
 
-# Cache bust: 2026-07-07T06:00:00Z
 CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info

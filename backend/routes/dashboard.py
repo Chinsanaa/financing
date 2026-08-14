@@ -23,7 +23,7 @@ router = APIRouter()
 def _now_cn() -> datetime:
     """Naive China-clock 'now'. Transaction timestamps come from Alipay/WeChat
     exports in China local time and are stored naive, so month boundaries and
-    cutoffs must use the same clock — not the server's (UTC on Railway)."""
+    cutoffs must use the same clock — not the server's (UTC on Render)."""
     return datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
 
 

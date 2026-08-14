@@ -82,7 +82,7 @@ file rather than leaving a stale record.
 
 ```
 /frontend/              # Next.js app (Vercel) — the product UI
-/backend/               # FastAPI app (Railway) — API + per-user ML glue
+/backend/               # FastAPI app (Render) — API + per-user ML glue
 /src/                   # ML pipeline modules (imported by backend + tests)
 /supabase/              # migrations (schema, RLS, storage, fixes)
 /tests/                 # pytest suite for src/

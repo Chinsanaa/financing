@@ -9,7 +9,7 @@ data, security reports are taken seriously and triaged promptly.
 
 Covers:
 - `frontend/` (Next.js, deployed on Vercel)
-- `backend/` (FastAPI, deployed on Railway)
+- `backend/` (FastAPI, deployed on Render)
 - `src/` (ML pipeline)
 - `supabase/` (database schema, RLS policies, storage rules)
 
