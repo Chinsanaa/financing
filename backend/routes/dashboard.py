@@ -856,6 +856,8 @@ async def get_reports(
     date_to: Optional[str] = None,
     min_amount: Optional[float] = None,
     max_amount: Optional[float] = None,
+    sort_by: Optional[str] = "date",
+    sort_dir: Optional[str] = "desc",
 ):
     """Detailed reports: paginated transaction list.
 
@@ -866,11 +868,17 @@ async def get_reports(
     `search` (merchant/description substring), a `date_from`/`date_to`
     (`YYYY-MM-DD`) range, and a `min_amount`/`max_amount` range — all
     independent of each other and of the category filters, so any
-    combination can apply at once.
+    combination can apply at once. `sort_by` (`date`/`category`) and
+    `sort_dir` (`asc`/`desc`) control ordering; unrecognized values fall back
+    to the defaults (date, newest first) rather than erroring.
     """
     user_id = request.state.user_id
     page = max(1, page)
     per_page = min(max(1, per_page), 500)
+    if sort_by not in ("date", "category"):
+        sort_by = "date"
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
 
     try:
         start = (page - 1) * per_page
@@ -896,9 +904,13 @@ async def get_reports(
         if max_amount is not None:
             query = query.lte("amount", max_amount)
 
+        if sort_by == "category":
+            query = query.order("name", desc=(sort_dir == "desc"), foreign_table="categories")
+        else:
+            query = query.order("timestamp", desc=(sort_dir != "asc"))
+
         response = await run_query(
             lambda: query
-            .order("timestamp", desc=True)
             .range(start, start + per_page - 1)
             .execute()
         )

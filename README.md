@@ -90,9 +90,11 @@ Supabase Auth's own project-level rate limits.
 
 **Correcting categories**: the **Reports → All transactions** table is editable —
 click any category (including uncategorized rows) to reassign it; the change is
-saved immediately and flows through to the Overview and Budget views. The table
-can be searched (merchant/description) and filtered by date range and amount
-range, all combinable; select multiple rows with the checkbox column to
+saved immediately and flows through to the Overview and Budget views. A
+"Filters" button toggles a panel with search (merchant/description), date
+range, amount range, sort (by date or category), and rows-per-page (10/20/50/100),
+all combinable; pagination has first/previous/page-number/next/last controls.
+Select multiple rows with the checkbox column to
 re-categorize them all at once via the bulk action bar. **Split
 transactions**: any transaction can be split across multiple categories
 (e.g. a Costco run: groceries + household) via the "Split" action next to

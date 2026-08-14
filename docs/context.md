@@ -3763,3 +3763,71 @@ for repo cleanup, just the deployment docs and env vars fixed.
 live (health check, a login, one of the new features like Subscriptions
 or Insights) — first real chance to do this all session. After that,
 revisit features 5–7 or whatever's next.
+
+### Session 60 (2026-08-14) — Reports tab redesign: pagination, sort, collapsible filters, one-screen layout
+
+User asked for the Reports tab UI to be cleaned up to match reference
+screenshots (Stripe/TheyDo-style tables): a rows-per-page dropdown
+(default 20, was a fixed 100), full pagination (first/prev/3 page
+numbers/next/last, not just Prev/Next), a "sort by category" dropdown, a
+single "Filters" toggle button hiding/showing all filter+sort controls
+(was always-visible), and the whole view fitting on one screen without
+page scroll. Also asked to remove the visible horizontal scrollbar under
+the top-level section tabs.
+
+**What changed:**
+- `backend/routes/dashboard.py` (`GET /dashboard/reports`): added
+  `sort_by` (`date`/`category`, default `date`) and `sort_dir`
+  (`asc`/`desc`, default `desc`) query params, validated against an
+  allow-list (unrecognized values silently fall back to the defaults —
+  never interpolated into the query). `category` sort orders on the
+  joined `categories.name` via postgrest-py's `foreign_table=` kwarg
+  (confirmed supported in the installed postgrest-py 0.16.11). Default
+  params reproduce the old hardcoded `timestamp desc` ordering exactly —
+  backwards compatible for any other caller.
+- `frontend/src/components/tabs/ReportsTab.tsx`: `PER_PAGE` constant
+  replaced with `perPage` state (options 10/20/50/100, default 20);
+  added `sortValue` state driving `sort_by`/`sort_dir` on the query
+  (options: Date Newest/Oldest, Category A–Z/Z–A); the old always-visible
+  Search/From/To/Min/Max/checkbox row is now inside a `Card` gated by a
+  new `filtersOpen` state, toggled by a "Filters" button (also houses the
+  new sort/rows-per-page selects); pagination bar rebuilt with
+  First/Prev/up-to-3-page-numbers/Next/Last (`ChevronsLeft`/`ChevronsRight`
+  icons added); table `Card` capped at `max-h-[calc(100vh-22rem)]` with a
+  `sticky` `<thead>` and internal `overflow-auto` `<tbody>` as a safety
+  net so the outer page doesn't need to scroll at the default page size.
+- `frontend/src/components/ui/Tabs.tsx`: `TabBar`'s `<nav>` gets a new
+  `scrollbar-hide` class (added to `globals.css`) — tabs still scroll if
+  they ever overflow, the visible scrollbar track is just gone.
+- `backend/tests/fake_supabase.py`: the fake query builder's `.order()`
+  was a no-op stub with no `foreign_table` param — extended it to accept
+  `foreign_table` and to actually sort seeded rows (including by a nested
+  embedded dict, e.g. `row["categories"]["name"]`), so the new sort
+  behavior is genuinely test-covered rather than just not crashing.
+- `backend/tests/test_dashboard_reports_filters.py`: two new tests —
+  category sort produces alphabetical order, and an unrecognized
+  `sort_by`/`sort_dir` falls back to the old default ordering.
+
+**Decided**: kept the sort dropdown scoped to what was asked (date +
+category) rather than adding amount/merchant sort options that weren't
+requested — avoids scope creep on a UI the user is actively iterating on.
+
+**Verified**: full backend suite (112/112) and frontend `tsc --noEmit`
+both pass. **Not verified**: no live browser check — this sandbox has no
+`.env.local`/Supabase credentials configured, so the dashboard can't
+actually be logged into here. Needs a real manual pass (rows-per-page,
+sort, filter toggle, pagination boundaries, one-screen fit) once deployed
+or run locally with real credentials.
+
+**Open**:
+- Live browser verification of this Reports redesign is still pending —
+  first priority next time this is picked up with real credentials
+  available.
+- Everything else open from Session 59 (Railway config cleanup,
+  features 5–7) is unchanged.
+
+**Next suggested step**: manually verify the Reports tab in a real
+browser (ideally the deployed Render/Vercel app) — rows-per-page, sort,
+the Filters toggle, pagination edge cases, and whether the one-screen
+height budget (`calc(100vh-22rem)`) actually fits without page scroll at
+common viewport sizes; tune that value if not.

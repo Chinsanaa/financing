@@ -127,3 +127,39 @@ def test_non_split_transaction_has_null_splits_field(client, patch_jwks, make_to
     txn = response.json()["transactions"][0]
     assert txn["is_split"] is False
     assert txn["splits"] is None
+
+
+def test_sort_by_category_orders_alphabetically(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("categories", [
+        {"id": "cat-1", "user_id": USER_A, "name": "Zebra"},
+        {"id": "cat-2", "user_id": USER_A, "name": "Apple"},
+    ])
+    fake_db.seed("transactions", [
+        {"id": "t1", "user_id": USER_A, "merchant": "Shop Z", "description": "",
+         "amount": 10, "timestamp": "2026-06-01T00:00:00", "category_id": "cat-1",
+         "categories": {"name": "Zebra"}, "is_split": False, "label_source": "override"},
+        {"id": "t2", "user_id": USER_A, "merchant": "Shop A", "description": "",
+         "amount": 20, "timestamp": "2026-06-02T00:00:00", "category_id": "cat-2",
+         "categories": {"name": "Apple"}, "is_split": False, "label_source": "override"},
+    ])
+
+    response = client.get(
+        "/dashboard/reports?sort_by=category&sort_dir=asc", headers=_headers(make_token)
+    )
+
+    assert response.status_code == 200
+    merchants = [t["merchant"] for t in response.json()["transactions"]]
+    assert merchants == ["Shop A", "Shop Z"]
+
+
+def test_sort_by_unrecognized_value_falls_back_to_date_desc(client, patch_jwks, make_token, fake_db):
+    _seed_txn(fake_db, "t1", "Old Shop", "x", 10, "2026-01-01T00:00:00")
+    _seed_txn(fake_db, "t2", "New Shop", "y", 20, "2026-06-15T00:00:00")
+
+    response = client.get(
+        "/dashboard/reports?sort_by=nonsense&sort_dir=nonsense", headers=_headers(make_token)
+    )
+
+    assert response.status_code == 200
+    merchants = [t["merchant"] for t in response.json()["transactions"]]
+    assert merchants == ["New Shop", "Old Shop"]

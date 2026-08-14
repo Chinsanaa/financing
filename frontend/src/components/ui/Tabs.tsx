@@ -19,7 +19,7 @@ export function TabBar({
   layoutId?: string;
 }) {
   return (
-    <nav className="flex gap-1 overflow-x-auto" role="tablist">
+    <nav className="scrollbar-hide flex gap-1 overflow-x-auto" role="tablist">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = tab.id === active;
