@@ -76,6 +76,12 @@ def retrain_model(
     df_labeled = df_labeled[df_labeled[labeled_col] == True].copy()
     df_labeled['category'] = df_labeled['category'].replace(CATEGORY_NORMALIZE)
     df_labeled = df_labeled[df_labeled['category'].isin(valid_categories)]
+    # semantic.py/eval_grouped.py both re-filter on a 'labeled' column (their
+    # own CLI-mode convention); the Supabase caller's frame never has one,
+    # which raised KeyError there, silently disabling the semantic layer on
+    # every Supabase-backed run. Every row here already passed the labeled
+    # filter above, so this is just aligning the column name for them.
+    df_labeled['labeled'] = True
 
     # Labeled CSV stores the datetime as 'timestamp'; feature engineering
     # expects 'time'. Normalize once here.
@@ -94,6 +100,17 @@ def retrain_model(
         classes_to_keep = df_labeled['category'].value_counts()[df_labeled['category'].value_counts() >= 2].index
         df_labeled = df_labeled[df_labeled['category'].isin(classes_to_keep)].copy()
         print(f"   Kept {len(classes_to_keep)} categories, now training on {len(df_labeled)} samples")
+
+    # StratifiedKFold requires n_splits <= the smallest class's sample count
+    # (it needs at least one member of every class in each fold). A fixed
+    # n_splits=5 raised "n_splits=5 cannot be greater than the number of
+    # members in each class" for any category with 2-4 labeled examples —
+    # normal for a new user. Scale folds down to what the data can support.
+    min_class_count = df_labeled['category'].value_counts().min()
+    n_splits = max(2, min(5, min_class_count))
+    if n_splits < 5:
+        print(f"\n   Smallest category has {min_class_count} samples — using "
+              f"{n_splits}-fold CV instead of 5-fold.")
 
     # The row filters above (labeled/category/min-class) preserve the original
     # index labels, so df_labeled can end up with a gappy index (e.g. [1,2,3,4]).
@@ -159,7 +176,7 @@ def retrain_model(
     print(f"\n3. Training Logistic Regression with stratified CV...")
     clf = LogisticRegression(**LR_HYPERPARAMS)
 
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     cv_scores = []
     cv_f1_weighted = []
     cv_f1_macro = []
@@ -179,7 +196,7 @@ def retrain_model(
         cv_f1_weighted.append(f1_w)
         cv_f1_macro.append(f1_m)
 
-        print(f"   Fold {fold+1}/5: Accuracy {acc:.1%}, F1-weighted {f1_w:.3f}, F1-macro {f1_m:.3f}")
+        print(f"   Fold {fold+1}/{n_splits}: Accuracy {acc:.1%}, F1-weighted {f1_w:.3f}, F1-macro {f1_m:.3f}")
 
     # Train final model on all data
     clf.fit(X, y)
@@ -265,7 +282,7 @@ def retrain_model(
         f.write(f"Labeled samples: {len(df_labeled)}\n")
         f.write(f"Features: {X.shape[1]}\n")
         f.write(f"Categories: {len(set(y))}\n\n")
-        f.write(f"Cross-Validation Results (5-fold stratified):\n")
+        f.write(f"Cross-Validation Results ({n_splits}-fold stratified):\n")
         f.write(f"  Accuracy:    {sum(cv_scores)/len(cv_scores):.1%}\n")
         f.write(f"  F1-weighted: {sum(cv_f1_weighted)/len(cv_f1_weighted):.3f}\n")
         f.write(f"  F1-macro:    {sum(cv_f1_macro)/len(cv_f1_macro):.3f}\n\n")

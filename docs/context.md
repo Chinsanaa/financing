@@ -3987,3 +3987,56 @@ would settle both at once).
 **Next suggested step**: ask the user to re-try the upload now that this
 is fixed and merged; if it still fails, get the exact new error message
 since that would indicate a different issue than the one diagnosed here.
+
+### Session 64 (2026-08-14) — Fix: training crashed with "n_splits=5 cannot be greater than the number of members in each class"
+
+User reported an error when trying to train. Reproduced directly by calling
+`retrain_model()` with a small labeled set (realistic for a new user —
+several categories with only 2-4 examples). Root cause: `src/retrain.py`
+only dropped categories with **fewer than 2** samples, then always ran
+`StratifiedKFold(n_splits=5, ...)` — sklearn requires every class to have
+at least `n_splits` members, so any category with 2-4 labeled transactions
+raised `ValueError: n_splits=5 cannot be greater than the number of members
+in each class` and the whole training run failed (`model_runs.status`
+would land on `failed` with that message).
+
+While reproducing, found a second, silent bug in the same path: `semantic.py`'s
+`train_semantic_model()` and `eval_grouped.py`'s `run_report()` both filter
+their input on a `'labeled'` column (their CLI-mode convention), but
+`retrain.py`'s Supabase-backed caller only ever has `is_manually_labeled` —
+already noted in a comment at retrain.py:73-74, but the fix (dynamically
+picking whichever column exists) was only applied to retrain.py's own
+filtering, not propagated to the dataframe passed into the semantic layer.
+Every real (non-CLI) training run hit `KeyError: 'labeled'` there, caught by
+retrain.py's broad `except Exception` around the semantic block, which
+silently deleted the semantic artifacts and fell back to "review everything"
+— so graduated trust / auto-apply never actually worked for any Supabase user,
+with no visible error (just a `[WARN]` line in backend logs).
+
+**What changed (`src/retrain.py`):**
+- After the `< 2 samples` filter, recompute `min_class_count` and set
+  `n_splits = max(2, min(5, min_class_count))`; `StratifiedKFold` and all
+  downstream print/report strings (fold count, "N-fold stratified" label)
+  now use this instead of a hardcoded 5. A user with a thin category still
+  trains successfully, just with fewer CV folds and an honest CV-accuracy
+  estimate rather than a crash.
+- Right after filtering to labeled rows, set `df_labeled['labeled'] = True`
+  so `semantic.py`/`eval_grouped.py`'s redundant re-filter finds the column
+  they expect regardless of caller (CLI CSV vs. Supabase). No behavior change
+  for CLI mode (column already existed there); fixes the semantic layer for
+  every backend-triggered run.
+
+**Verified**: reproduced both bugs directly against `retrain_model()` with a
+15-row/4-category synthetic dataset mirroring a new user's data (confirmed
+the exact `ValueError` and `KeyError` before the fix, confirmed a clean run
+with semantic artifacts produced after). Full suite passes: `tests/` +
+`backend/tests/` = 216/216.
+
+**Open**: same live-browser backlog as Sessions 60-63 (unrelated to this
+fix). No new open items from this session — the fix is verified at the
+`retrain_model()` level directly, which is as close to certain as this
+sandbox allows without live Supabase credentials to trigger the real
+`/training/retrain` endpoint end-to-end.
+
+**Next suggested step**: ask the user to retry training now that this is
+merged; if a *different* error shows up, get the exact message/`model_runs.error_message`.
