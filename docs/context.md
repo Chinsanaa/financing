@@ -3831,3 +3831,57 @@ browser (ideally the deployed Render/Vercel app) — rows-per-page, sort,
 the Filters toggle, pagination edge cases, and whether the one-screen
 height budget (`calc(100vh-22rem)`) actually fits without page scroll at
 common viewport sizes; tune that value if not.
+
+### Session 61 (2026-08-14) — Budget tab: add 50/30/20 pie chart + breakdown below the category list
+
+User asked for "the pie chart and the other boxes" below the Budget tab's
+category list. Clarified via AskUserQuestion: pie chart = Needs/Wants/Savings
+split (not budget-allocation or plain spend-by-category), and the boxes =
+current % of income spent on each bucket vs the 50/30/20 targets, plus a
+guidance/advice box. This is exactly what the existing standalone 50/30/20
+tab (`RuleTab.tsx`, backed by `GET /dashboard/rule-503020`) already builds —
+so rather than duplicate ~150 lines of chart/logic, extracted it into a
+shared component and reused it in both places. Placement decision (made
+independently, not asked): kept the advice box as a full-width box below the
+chart card, matching the existing pattern in `RuleTab`, rather than the
+alternative the user floated of squeezing it into the same row — simpler and
+consistent with how the app already reads elsewhere.
+
+**What changed:**
+- New `frontend/src/components/tabs/RuleBreakdown.tsx`: extracted from the
+  old `RuleTab.tsx` — the `RuleData`/`Bucket` types, `useRuleData(month)`
+  hook (wraps `useApi` on `/dashboard/rule-503020`), and the presentational
+  piece (pie chart + per-bucket actual-vs-target rows + the advice box).
+  Takes `data`/`loading`/`error` plus an optional `header` slot (a ReactNode
+  rendered inside the top card, e.g. a month selector) so callers can attach
+  their own header without the component needing to know about it.
+- `frontend/src/components/tabs/RuleTab.tsx`: now just owns its own month
+  state/selector and delegates rendering to `<RuleBreakdown header={...} />`
+  — same visual output as before, ~100 fewer lines.
+- `frontend/src/components/tabs/BudgetTab.tsx`: added `useRuleData(month)`
+  (reusing the same `month` state the budget list already has, so both
+  sections always show the same selected month) and renders
+  `<RuleBreakdown />` below the existing "Budget by category" `Card`,
+  under a `50/30/20 breakdown — <month>` label, hidden while the budget
+  edit form (`editing`) is open to keep that form focused.
+
+**Decided**: no backend changes — `/dashboard/rule-503020` already returns
+everything needed (income, per-bucket spent/target, top categories per
+bucket for the advice text); this was purely a frontend reuse/composition
+task.
+
+**Verified**: frontend `tsc --noEmit` passes clean. No ESLint config exists
+in this repo (confirmed again this session — `next lint` only offers the
+interactive first-run setup prompt), so no lint step. **Not verified**: no
+live browser check — this sandbox still has no Supabase credentials
+configured, same limitation as Session 60.
+
+**Open**:
+- Live browser verification of both the Budget tab's new section and the
+  refactored 50/30/20 tab (make sure the extraction didn't visually regress
+  either) is still pending, alongside the Reports tab check from Session 60.
+- Everything else open from Sessions 59–60 is unchanged.
+
+**Next suggested step**: do the live-browser pass covering both this
+session's Budget tab addition and Session 60's Reports redesign together,
+since neither has been checked in a running browser yet.

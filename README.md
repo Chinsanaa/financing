@@ -106,7 +106,10 @@ can be removed at any time, which sends the transaction back to the
 review queue uncategorized. **Per-month
 budgets**: the **Budget** tab has a month selector so you can see how each past
 month tracked against your budget (budgets are global, so past months compare
-against your current budget). **Category colors**: pick a color per category in
+against your current budget). Below the category list, the same month's
+50/30/20 breakdown (donut chart, actual-vs-target per bucket, guidance card —
+see below) is shown for context, hidden while the budget edit form is open.
+**Category colors**: pick a color per category in
 **Model → Categories** (12 design-system choices, hex shown, no duplicates) — the
 same color follows that category everywhere: the Overview pie chart, badges in
 Budget/Review/Label, and Reports. Categories without a chosen color get a stable
