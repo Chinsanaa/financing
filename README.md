@@ -43,14 +43,23 @@ Supabase PostgreSQL + Auth + Storage
    were never written for) get one more, batched call to Groq's free-tier
    inference API (an open model, no cost) using the user's *current*
    category names, so it's immune to category renames. Always a
-   review-queue suggestion, never auto-applied. Confirming one writes back a
-   new per-user `merchant_rules` row ("rule generalization") — the next
-   transaction from that merchant hits the free rule path instead of costing
-   another LLM call. Requires `GROQ_API_KEY` (free at
-   [console.groq.com](https://console.groq.com)); skipped entirely if unset.
-   Renaming a category (`PUT /categories/{id}`) also updates any of that
-   user's existing `merchant_rules`/`special_rules` pointing at the old
-   name, so pre-existing rules survive the rename too.
+   review-queue suggestion, never auto-applied. Requires `GROQ_API_KEY`
+   (free at [console.groq.com](https://console.groq.com)); skipped entirely
+   if unset. Renaming a category (`PUT /categories/{id}`) also updates any
+   of that user's existing `merchant_rules`/`special_rules` pointing at the
+   old name, so pre-existing rules survive the rename too.
+
+**Rule generalization ("unique merchants only")**: labeling or accepting
+*any* transaction in the review queue — LLM suggestion or not — writes back
+a new per-user `merchant_rules` row, so the next transaction from that
+merchant hits the fast rule path instead of needing review again. It also
+immediately resolves every other pending transaction from that same
+merchant right then, so a merchant with several un-labeled rows clears
+from the queue in one action instead of resurfacing per-row.
+`DESCRIPTION_KEYWORD_RULES` (`src/merchant_categories.py`) also classifies
+by description keywords for unseen merchants, e.g. Shanghai Metro station
+names (Houtan, Jing'an Temple, Lujiazui, Hongqiao, Pudong, and others) →
+Transportation.
 
 Classification runs automatically after every upload (rules-only until a model
 is trained) and re-runs after every training run (`backend/ml.py`).

@@ -19,12 +19,14 @@ const cache = new Map<string, unknown>();
 // unmount (e.g. OnboardingTour) and not just the caller that mutated data.
 const subscribers = new Map<string, Set<() => void>>();
 
-export function invalidate(prefix = ''): void {
+export function invalidate(prefix = '', opts?: { except?: string[] }): void {
+  const except = opts?.except || [];
+  const skip = (path: string) => except.some((p) => path.startsWith(p));
   Array.from(cache.keys()).forEach((key) => {
-    if (key.startsWith(prefix)) cache.delete(key);
+    if (key.startsWith(prefix) && !skip(key)) cache.delete(key);
   });
   subscribers.forEach((callbacks, path) => {
-    if (path.startsWith(prefix)) callbacks.forEach((cb) => cb());
+    if (path.startsWith(prefix) && !skip(path)) callbacks.forEach((cb) => cb());
   });
 }
 

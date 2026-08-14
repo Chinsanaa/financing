@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, PartyPopper } from 'lucide-react';
 import { api } from '@/utils/api';
@@ -37,10 +37,23 @@ export default function LabelTab() {
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
+  // Progress is tracked separately from the (shrinking) `transactions` array:
+  // totalCount is captured once from the first successful load and stays
+  // fixed for the session, labeledCount only ever increases as items get
+  // labeled — so the "X of Y" display and progress bar can only go up,
+  // never regress as the local queue array shrinks.
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [labeledCount, setLabeledCount] = useState(0);
 
   const transactions = queueQ.data?.transactions || [];
   const categories = categoriesQ.data?.categories || [];
   const allSeen = transactions.length > 0 && skippedIds.size === transactions.length;
+
+  useEffect(() => {
+    if (queueQ.data && totalCount === null) {
+      setTotalCount(queueQ.data.transactions.length);
+    }
+  }, [queueQ.data, totalCount]);
 
   const removeCurrent = () => {
     const tx = transactions[currentIndex];
@@ -50,7 +63,11 @@ export default function LabelTab() {
         : prev
     );
     setCurrentIndex((i) => Math.min(i, Math.max(0, transactions.length - 2)));
-    invalidate('/dashboard'); // stats/action counts changed
+    setLabeledCount((c) => c + 1);
+    // Refresh stats/action counts, but not the review queue itself — its
+    // local state above is already correct, and a background refetch here
+    // would race the optimistic splice.
+    invalidate('/dashboard', { except: ['/dashboard/review-queue'] });
   };
 
   const handleAccept = async () => {
@@ -127,7 +144,8 @@ export default function LabelTab() {
   }
 
   const tx = transactions[Math.min(currentIndex, transactions.length - 1)];
-  const progress = Math.round(((currentIndex + 1) / transactions.length) * 100);
+  const displayTotal = totalCount ?? transactions.length;
+  const progress = displayTotal > 0 ? Math.round((labeledCount / displayTotal) * 100) : 0;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -140,7 +158,7 @@ export default function LabelTab() {
         <div className="mb-2 flex items-center justify-between">
           <span className="section-label">Progress</span>
           <span className="text-sm text-muted tabular-nums">
-            {currentIndex + 1} of {transactions.length}
+            {labeledCount} of {displayTotal}
           </span>
         </div>
         <ProgressBar percent={progress} />

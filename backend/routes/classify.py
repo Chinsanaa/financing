@@ -40,20 +40,20 @@ class SplitRequest(BaseModel):
     splits: List[SplitItem]
 
 
-async def _promote_llm_suggestion_to_rule(user_id: str, transaction: dict, category_id: str) -> None:
-    """When a user confirms a transaction that was an LLM suggestion
-    (label_source == 'llm'), write it back as a per-user merchant rule.
-
-    This is the "generalization" loop: the next transaction from this exact
-    merchant hits the fast, free, trusted rule path instead of calling the
-    LLM again. Best-effort — a failure here (e.g. a duplicate pattern) must
-    never block the label/accept action itself.
+async def _promote_to_merchant_rule(user_id: str, transaction: dict, category_id: str) -> None:
+    """When a user confirms or labels a transaction, write it back as a
+    per-user merchant rule so the next transaction from this exact merchant
+    hits the fast, free, trusted rule path instead of landing back in the
+    review queue (previously this only happened for label_source == 'llm';
+    now it applies to manual overrides too — "unique merchants only" means
+    a merchant shouldn't need labeling more than once, including on future
+    uploads, not just llm-sourced ones). Best-effort — a failure here (e.g.
+    a duplicate pattern) must never block the label/accept action itself.
     """
-    if transaction.get("label_source") != "llm":
-        return
     merchant = str(transaction.get("merchant") or "").strip().lower()
     if not merchant:
         return
+    source = "llm_confirmed" if transaction.get("label_source") == "llm" else "user_created"
     try:
         cat_resp = await run_query(
             lambda: supabase_client.table("categories").select("name").eq("id", category_id).eq("user_id", user_id).execute()
@@ -66,11 +66,57 @@ async def _promote_llm_suggestion_to_rule(user_id: str, transaction: dict, categ
                 "user_id": user_id,
                 "merchant_pattern": merchant,
                 "category_name": category_name,
-                "source": "llm_confirmed",
+                "source": source,
             }).execute()
         )
     except Exception as e:
-        logger.warning("Failed to promote LLM suggestion to a rule for user %s: %s", user_id, e)
+        logger.warning("Failed to promote a merchant rule for user %s: %s", user_id, e)
+
+
+async def _apply_to_merchant_siblings(
+    user_id: str, merchant: str, category_id: str, label_source: str, exclude_id: str
+) -> int:
+    """After a merchant is labeled/confirmed, immediately resolve every other
+    still-`needs_review` transaction from that same merchant too, so labeling
+    a merchant once clears it from the review queue entirely instead of a
+    different row from the same merchant resurfacing next fetch. Returns the
+    number of sibling rows updated. Best-effort in the sense that it never
+    raises — a failure here must not undo the primary label action, which
+    has already committed by the time this runs.
+    """
+    if not merchant:
+        return 0
+    try:
+        sibling_resp = await run_query(
+            lambda: supabase_client.table("transactions")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("merchant", merchant)
+            .eq("needs_review", True)
+            .neq("id", exclude_id)
+            .execute()
+        )
+        sibling_ids = [t["id"] for t in (sibling_resp.data or [])]
+        if not sibling_ids:
+            return 0
+
+        await run_query(
+            lambda: supabase_client.table("transaction_splits")
+            .delete().eq("user_id", user_id).in_("transaction_id", sibling_ids).execute()
+        )
+        await run_query(
+            lambda: supabase_client.table("transactions").update({
+                "category_id": category_id,
+                "label_source": label_source,
+                "needs_review": False,
+                "is_manually_labeled": True,
+                "is_split": False,
+            }).eq("user_id", user_id).in_("id", sibling_ids).execute()
+        )
+        return len(sibling_ids)
+    except Exception as e:
+        logger.warning("Failed to apply merchant-sibling labels for user %s: %s", user_id, e)
+        return 0
 
 
 async def _label_one(user_id: str, transaction_id: str, category_id: str, label_source: str) -> Optional[dict]:
@@ -111,7 +157,7 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
     if not response.data:
         return None
 
-    await _promote_llm_suggestion_to_rule(user_id, before, category_id)
+    await _promote_to_merchant_rule(user_id, before, category_id)
     return response.data[0]
 
 
@@ -133,6 +179,10 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
         if not updated:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
+        await _apply_to_merchant_siblings(
+            user_id, updated.get("merchant", ""), req.category_id, req.label_source, transaction_id
+        )
+
         background_tasks.add_task(check_budget_alerts, user_id)
 
         return {"transaction": updated}
@@ -150,7 +200,7 @@ async def bulk_label_transactions(request: Request, req: BulkLabelRequest, backg
     Reuses `_label_one`'s per-transaction fetch/update/promote sequence in a
     loop rather than a single `.in_("id", ids)` update — each transaction's
     own prior `label_source` needs fetching individually for the
-    LLM-rule-promotion check to stay correct per-row.
+    merchant-rule-promotion check to stay correct per-row.
     """
     user_id = request.state.user_id
 
@@ -201,7 +251,7 @@ async def split_transaction(request: Request, transaction_id: str, req: SplitReq
     transaction's own amount (within 0.01, same sign convention as
     transactions.amount — see src/parse.py). On success: replaces any
     existing splits, clears the transaction's own category_id, and sets
-    is_split=True. Does NOT run _promote_llm_suggestion_to_rule — ambiguous
+    is_split=True. Does NOT run _promote_to_merchant_rule — ambiguous
     which category to promote from a multi-category split.
     """
     user_id = request.state.user_id
@@ -320,7 +370,10 @@ async def accept_model_suggestion(request: Request, transaction_id: str, backgro
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         if before.get("category_id"):
-            await _promote_llm_suggestion_to_rule(user_id, before, before["category_id"])
+            await _promote_to_merchant_rule(user_id, before, before["category_id"])
+            await _apply_to_merchant_siblings(
+                user_id, before.get("merchant", ""), before["category_id"], confirmed_label_source, transaction_id
+            )
         background_tasks.add_task(check_budget_alerts, user_id)
 
         return {"transaction": response.data[0]}

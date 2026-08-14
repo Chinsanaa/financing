@@ -3987,3 +3987,146 @@ would settle both at once).
 **Next suggested step**: ask the user to re-try the upload now that this
 is fixed and merged; if it still fails, get the exact new error message
 since that would indicate a different issue than the one diagnosed here.
+
+### Session 64 (2026-08-14) — Fix: training crashed with "n_splits=5 cannot be greater than the number of members in each class"
+
+User reported an error when trying to train. Reproduced directly by calling
+`retrain_model()` with a small labeled set (realistic for a new user —
+several categories with only 2-4 examples). Root cause: `src/retrain.py`
+only dropped categories with **fewer than 2** samples, then always ran
+`StratifiedKFold(n_splits=5, ...)` — sklearn requires every class to have
+at least `n_splits` members, so any category with 2-4 labeled transactions
+raised `ValueError: n_splits=5 cannot be greater than the number of members
+in each class` and the whole training run failed (`model_runs.status`
+would land on `failed` with that message).
+
+While reproducing, found a second, silent bug in the same path: `semantic.py`'s
+`train_semantic_model()` and `eval_grouped.py`'s `run_report()` both filter
+their input on a `'labeled'` column (their CLI-mode convention), but
+`retrain.py`'s Supabase-backed caller only ever has `is_manually_labeled` —
+already noted in a comment at retrain.py:73-74, but the fix (dynamically
+picking whichever column exists) was only applied to retrain.py's own
+filtering, not propagated to the dataframe passed into the semantic layer.
+Every real (non-CLI) training run hit `KeyError: 'labeled'` there, caught by
+retrain.py's broad `except Exception` around the semantic block, which
+silently deleted the semantic artifacts and fell back to "review everything"
+— so graduated trust / auto-apply never actually worked for any Supabase user,
+with no visible error (just a `[WARN]` line in backend logs).
+
+**What changed (`src/retrain.py`):**
+- After the `< 2 samples` filter, recompute `min_class_count` and set
+  `n_splits = max(2, min(5, min_class_count))`; `StratifiedKFold` and all
+  downstream print/report strings (fold count, "N-fold stratified" label)
+  now use this instead of a hardcoded 5. A user with a thin category still
+  trains successfully, just with fewer CV folds and an honest CV-accuracy
+  estimate rather than a crash.
+- Right after filtering to labeled rows, set `df_labeled['labeled'] = True`
+  so `semantic.py`/`eval_grouped.py`'s redundant re-filter finds the column
+  they expect regardless of caller (CLI CSV vs. Supabase). No behavior change
+  for CLI mode (column already existed there); fixes the semantic layer for
+  every backend-triggered run.
+
+**Verified**: reproduced both bugs directly against `retrain_model()` with a
+15-row/4-category synthetic dataset mirroring a new user's data (confirmed
+the exact `ValueError` and `KeyError` before the fix, confirmed a clean run
+with semantic artifacts produced after). Full suite passes: `tests/` +
+`backend/tests/` = 216/216.
+
+**Open**: same live-browser backlog as Sessions 60-63 (unrelated to this
+fix). No new open items from this session — the fix is verified at the
+`retrain_model()` level directly, which is as close to certain as this
+sandbox allows without live Supabase credentials to trigger the real
+`/training/retrain` endpoint end-to-end.
+
+**Next suggested step**: ask the user to retry training now that this is
+merged; if a *different* error shows up, get the exact message/`model_runs.error_message`.
+
+### Session 65 (2026-08-14) — Labeling: unique merchants only + metro station rule + progress bar fix
+
+Three related requests about the "Label transactions" step. Root causes
+confirmed by reading the code, then two clarifying questions asked and
+answered before implementing (bulk-apply-immediately vs. future-only, and
+metro-station-names-only vs. also-province-names).
+
+**1. Same merchant kept getting re-suggested.** `_promote_llm_suggestion_to_rule`
+(`backend/routes/classify.py`) only wrote a `merchant_rules` row when
+`label_source == "llm"` — manual overrides (the normal way most
+transactions get labeled) never created a rule, so future uploads from
+that merchant kept landing back in the review queue. Separately,
+`/dashboard/review-queue`'s merchant dedup only applied within one fetch's
+pool, not against already-labeled merchants, so a merchant with multiple
+pending rows would resurface a *different* row after the first was labeled.
+
+**What changed:**
+- `backend/routes/classify.py`: renamed `_promote_llm_suggestion_to_rule` →
+  `_promote_to_merchant_rule` and removed its llm-only early return — it
+  now fires for any label source, writing `source="llm_confirmed"` when
+  the original was llm, else `source="user_created"` (both pre-existing
+  values in the `merchant_rule_source` enum, no migration needed). Added
+  `_apply_to_merchant_siblings()`: after a label/accept, immediately
+  resolves every other `needs_review=True` row for that same merchant too
+  (same category, `needs_review=False`, `is_manually_labeled=True`),
+  called from `label_transaction` and `accept_model_suggestion` (NOT from
+  `bulk_label_transactions`/`split_transaction` — those stay per-request
+  as before, per the plan's scoping).
+- `backend/tests/test_classify_llm_promotion.py`: the two tests asserting
+  the OLD "non-llm labels create no rule" behavior now assert the new
+  intended behavior (`source == "user_created"`); module docstring updated.
+- `backend/tests/test_classify_bulk_label.py`: same behavior-flip for its
+  own promotion test.
+- New `backend/tests/test_classify_merchant_siblings.py`: covers the
+  sibling bulk-resolve behavior (label and accept paths), that it doesn't
+  touch other merchants or already-resolved rows, and that it's scoped to
+  the authenticated user only.
+
+**2. Metro station names → Transportation.** `src/merchant_categories.py`'s
+`DESCRIPTION_KEYWORD_RULES` already does description-substring
+classification (used by `special_category()` → `apply_description_overrides`
+→ `classify_all`, which runs on every upload). Extended the existing
+`"Transportation"` entry with the user's most-frequent stations (Houtan,
+Jing'an Temple, Lujiazui, Hongqiao, Pudong) plus a modest set of other
+well-known Shanghai Metro stations, in both English/pinyin and Chinese
+forms — station names only, per the user's explicit choice, not generic
+province/city names (those risk false-positives, e.g. "上海" appears in
+countless unrelated merchants' legal business names). Flagged in a code
+comment: "hongqiao"/"pudong" are technically district names too (not just
+stations), included anyway since the user named them specifically — a
+narrower, accepted version of the broader risk they chose to avoid.
+New test cases in `tests/test_merchant_rules.py`
+(`test_metro_station_names_classify_as_transportation`).
+
+**3. Progress bar regressed after labeling.** `LabelTab.tsx` had no
+persisted total/labeled-count — both were derived from the same shrinking
+`transactions` array (`removeCurrent` splices the labeled item out, so
+the denominator legitimately shrank every time). Compounded by a real bug:
+`removeCurrent`'s `invalidate('/dashboard')` also matched
+`/dashboard/review-queue` (prefix collision), triggering a background
+refetch that raced the local optimistic splice.
+
+**What changed:**
+- `frontend/src/utils/useApi.ts`: `invalidate(prefix, opts?)` now accepts
+  an optional `{ except?: string[] }` to skip specific paths — default
+  behavior unchanged for every other existing caller.
+- `frontend/src/components/tabs/LabelTab.tsx`: replaced the
+  `currentIndex`/`transactions.length` progress pair with `totalCount`
+  (captured once from the first successful load, frozen for the session)
+  and `labeledCount` (increments by 1 per successful label/accept,
+  `removeCurrent`). Progress bar and "X of Y" now use these instead, so
+  they only ever increase. `removeCurrent` now calls
+  `invalidate('/dashboard', { except: ['/dashboard/review-queue'] })`.
+
+**Verified**: full `backend/tests` + `tests` suite (232/232) passes;
+frontend `tsc --noEmit` clean. **Not verified**: no live browser check
+(still no Supabase credentials in this sandbox) — same standing limitation
+as Sessions 60-64.
+
+**Open**: live-browser verification backlog now covers everything from
+Sessions 60-65 — Reports redesign, Budget-tab 50/30/20 section, bucket
+column/filter, Alipay upload fix, training crash fix, and this session's
+three Label-tab fixes. All worth checking together in one real pass.
+
+**Next suggested step**: the live-browser pass (same standing ask, now
+covering six sessions' worth of unverified UI). If the user reports the
+metro rule missing a station they use often, it's a one-line addition to
+the `DESCRIPTION_KEYWORD_RULES` Transportation tuple in
+`src/merchant_categories.py`.
