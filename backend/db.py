@@ -1,8 +1,32 @@
 """Small Supabase/PostgREST helpers shared by routes and ml.py."""
 from typing import Callable, List
+import httpx
 from starlette.concurrency import run_in_threadpool
 
 PAGE_SIZE = 1000  # PostgREST's default max-rows cap per request
+
+
+def _call_with_retry(build_query: Callable, retries: int = 1):
+    """Call `build_query()`, retrying once on a dropped connection.
+
+    The shared `supabase_client` (config.py) is created once at process
+    startup and its httpx connection pool lives for the process's whole
+    lifetime. When a pooled connection sits idle long enough, Supabase's
+    edge (or Render's network layer) can close it server-side without
+    telling the client; the *next* request to reuse that connection dies
+    immediately with `httpx.RemoteProtocolError: Server disconnected`
+    instead of transparently opening a fresh one. That single stale-socket
+    failure was surfacing as a real 500 to users (e.g. dashboard/training
+    tabs showing "Failed to load data") even though the query itself was
+    fine. `build_query` must be a zero-arg callable safe to invoke more
+    than once (rebuilds its own filter chain each call).
+    """
+    for attempt in range(retries + 1):
+        try:
+            return build_query()
+        except httpx.TransportError:
+            if attempt == retries:
+                raise
 
 
 async def run_query(build_query: Callable):
@@ -15,7 +39,7 @@ async def run_query(build_query: Callable):
     zero-arg callable that builds AND executes the query (e.g.
     `lambda: supabase_client.table(...).select(...).execute()`).
     """
-    return await run_in_threadpool(build_query)
+    return await run_in_threadpool(_call_with_retry, build_query)
 
 
 def fetch_all(make_query: Callable, page_size: int = PAGE_SIZE) -> List[dict]:
@@ -31,7 +55,9 @@ def fetch_all(make_query: Callable, page_size: int = PAGE_SIZE) -> List[dict]:
     rows: List[dict] = []
     offset = 0
     while True:
-        page = make_query().range(offset, offset + page_size - 1).execute().data or []
+        page = _call_with_retry(
+            lambda: make_query().range(offset, offset + page_size - 1).execute()
+        ).data or []
         rows.extend(page)
         if len(page) < page_size:
             return rows
