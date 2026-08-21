@@ -4186,3 +4186,64 @@ also covering this session's date formatting and manual-entry form).
 **Next suggested step**: apply the new migration to the live Supabase project
 (`ALTER TYPE transaction_source ADD VALUE 'manual'`) before the manual-entry
 form is used in production — it isn't applied automatically by this session.
+
+### Session 67 (2026-08-21) — Signup 500s (SMTP) + dropped-connection 500s ("Failed to load data")
+
+User reported two live production bugs in sequence.
+
+**1. Signup returning 500 (fixed outside this session, verified here).**
+Queried the live Supabase project's auth logs directly (`query_logs` on
+`auth_logs`, source `pxxqqffwummhkohnrvtz`): every recent `/signup` call
+across several different users failed identically with
+`error: 535 "Authentication credentials invalid"`, `error_code:
+unexpected_failure`, `status: 500` — a classic SMTP auth rejection from
+Supabase Auth's configured outgoing-mail provider (Dashboard → Authentication
+→ Emails → SMTP Settings), separate from `backend/.env`'s `RESEND_API_KEY`
+(only used for budget-alert emails, not Supabase Auth's own confirmation
+mail). User fixed the SMTP credentials in the Supabase dashboard and
+confirmed signup works again. Ruled out along the way: the `handle_new_user()`
+/ `initialize_default_categories()` trigger chain, `profiles` RLS, and the
+username uniqueness/format constraints — all healthy.
+
+**2. "Failed to load data" during a training run.** Pulled live Render logs
+(`list_logs` on `srv-d9sn3ov40ujc73di29ag`, the `financing` service) around
+the reported time. The training run itself succeeded end-to-end (`POST
+/training/retrain` → 200, background task completed, every `/training/{id}`
+poll → 200). But several unrelated `/dashboard/*` endpoints (`budget`,
+`rule-503020`, `notifications`, `summary`) 500'd minutes earlier with
+`httpcore.RemoteProtocolError: Server disconnected` — a stale pooled-httpx-
+connection bug: `backend/config.py`'s `supabase_client` is created once at
+process startup and its connection pool is reused for the process's whole
+lifetime; when a pooled connection sits idle, Supabase's edge / Render's
+network layer can close it server-side without telling the client, and the
+next request to reuse it fails outright instead of opening a fresh one.
+Whichever dashboard tab was open at that moment showed the frontend's
+generic `useApi` fallback ("Failed to load data",
+`frontend/src/utils/useApi.ts:50`) — not a training-specific bug.
+
+**Fix**: `backend/db.py` — added `_call_with_retry()` (catches
+`httpx.TransportError`, retries the query builder call once) and routed
+`run_query`, `fetch_all`, and `fetch_all_async` through it. Not touched:
+the handful of direct (non-`run_query`) `supabase_client` calls inside
+`training.py`'s background thread and `ml.py` — those already run off the
+request path, so a stale connection there doesn't surface as a user-facing
+"Failed to load data"; left as a known follow-up rather than expanding this
+fix's scope.
+
+**Verified**: `python3 -m py_compile backend/db.py` clean; syntax/AST parse
+clean. **Not verified**: no live reproduction of the stale-connection 500
+against the real backend from this session (would require the connection to
+actually go idle long enough) — the retry logic itself is untested against
+a live drop, only reasoned about from the log evidence and httpx's exception
+hierarchy.
+
+**Open**: whether to extend the same retry wrapper to `training.py`'s
+background-thread Supabase calls and `ml.py` (same client, same
+theoretical exposure, just off the request path so lower user impact).
+
+**Next suggested step**: watch Render logs for another
+`httpcore.RemoteProtocolError` after this deploys — if `run_query`'s retry
+is masking it (no more 500s reaching users) but Render logs still show
+occasional first-attempt drops, that confirms the fix is working as
+intended rather than the drops having simply stopped happening on their
+own.
