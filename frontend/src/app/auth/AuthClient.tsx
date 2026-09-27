@@ -18,7 +18,11 @@ import UsernameField from '@/components/auth/UsernameField';
 // deterrent, not the real security boundary — Supabase Auth applies its own
 // project-level rate limits server-side regardless of this. It just avoids
 // letting someone hammer the submit button in a tight loop from this tab.
-const MAX_ATTEMPTS_BEFORE_LOCKOUT = 5;
+// Generous on purpose (a typo or two shouldn't feel like a threat): the
+// remaining-attempts hint only appears from the 3rd failure, in a neutral
+// tone, and turns red only on the last attempt.
+const MAX_ATTEMPTS_BEFORE_LOCKOUT = 8;
+const WARN_AFTER_FAILED_ATTEMPTS = 3;
 const BASE_LOCKOUT_SECONDS = 30;
 const MAX_LOCKOUT_SECONDS = 300;
 
@@ -78,7 +82,11 @@ export default function AuthClient() {
     const attempts = failedAttempts + 1;
     if (attempts >= MAX_ATTEMPTS_BEFORE_LOCKOUT) {
       const seconds = Math.min(BASE_LOCKOUT_SECONDS * 2 ** lockoutCount, MAX_LOCKOUT_SECONDS);
-      setLockedUntil(Date.now() + seconds * 1000);
+      // `now` only ticks while locked, so refresh it here — otherwise the
+      // first second shows 30s + however long since it last ticked.
+      const t = Date.now();
+      setNow(t);
+      setLockedUntil(t + seconds * 1000);
       setLockoutCount((c) => c + 1);
       setFailedAttempts(0);
     } else {
@@ -354,13 +362,14 @@ export default function AuthClient() {
                     <PasswordChecklist password={password} />
                   </div>
                 )}
-                {!isSignup && failedAttempts > 0 && !isLocked && (
-                  <p className="mt-1.5 text-xs text-danger">
-                    {MAX_ATTEMPTS_BEFORE_LOCKOUT - failedAttempts} attempt
-                    {MAX_ATTEMPTS_BEFORE_LOCKOUT - failedAttempts === 1 ? '' : 's'} remaining
-                    before a temporary lockout.
-                  </p>
-                )}
+                {!isSignup && failedAttempts >= WARN_AFTER_FAILED_ATTEMPTS && !isLocked && (() => {
+                  const left = MAX_ATTEMPTS_BEFORE_LOCKOUT - failedAttempts;
+                  return (
+                    <p className={`mt-1.5 text-xs ${left === 1 ? 'text-danger' : 'text-muted'}`}>
+                      {left} attempt{left === 1 ? '' : 's'} left before a short pause.
+                    </p>
+                  );
+                })()}
               </div>
 
               <AnimatePresence initial={false}>

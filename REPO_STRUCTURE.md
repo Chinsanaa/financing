@@ -15,7 +15,7 @@ financing/
 │   ├── src/middleware.ts      # server-side auth gating
 │   ├── src/app/               # auth, dashboard (5 sections, tabs code-split), settings pages
 │   ├── src/components/        # ui-feedback.tsx atoms + ui/*.tsx + tabs/*.tsx
-│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror)
+│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror), chunkReload.ts (stale-tab recovery)
 │
 ├── backend/                   # FastAPI app → Render (see backend/README.md)
 │   ├── main.py                # app, JWT auth middleware, CORS, rate limiting

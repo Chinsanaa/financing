@@ -20,6 +20,21 @@ import PasswordInput from '@/components/auth/PasswordInput';
  * redirecting straight to the dashboard once the session is established, we
  * show a "set a new password" form — the whole point of a reset link.
  */
+// A `?code=` (PKCE) link can only be completed in the browser that requested
+// it — the matching code verifier lives in that browser's storage. Opened on
+// another device, supabase-js fails locally ("code verifier not found") or
+// the server rejects it ("invalid flow state"). Links built from
+// {{ .TokenHash }} in the Supabase email templates work on any device (see
+// docs/guides/DEPLOYMENT.md); this message covers older emails.
+function explainCodeExchangeError(message: string, isRecovery: boolean): string {
+  if (/code verifier|flow state/i.test(message)) {
+    return isRecovery
+      ? 'This reset link was opened on a different device or browser than the one you used to request it. Request a new reset link and open it here.'
+      : 'This link was opened on a different device or browser than the one you signed up with. Open it on that device, or sign in and request a new link.';
+  }
+  return message;
+}
+
 function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,7 +87,7 @@ function VerifyContent() {
       try {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) setError(error.message);
+          if (error) setError(explainCodeExchangeError(error.message, isRecovery));
           else if (isRecovery) setRecoveryReady(true);
           else redirectSoon();
         } else if (tokenHash) {
@@ -85,7 +100,7 @@ function VerifyContent() {
           else redirectSoon();
         }
       } catch (err: any) {
-        setError(err.message);
+        setError(explainCodeExchangeError(err?.message || 'Verification failed', isRecovery));
       } finally {
         setLoading(false);
       }

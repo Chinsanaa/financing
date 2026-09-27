@@ -4411,3 +4411,58 @@ after merge (reload Overview: numbers should appear instantly).
 one-time translation backfill) → click through Overview/Reports/Budget/
 Subscriptions → set up the cron-job.org pinger if not done. Then re-measure:
 first request after 30+ idle min should be <2s (was 33.5s).
+
+**Post-merge (PR #57 merged 2026-09-27).** `/health/deep` confirmed live
+(`{"status":"ok","db":true}`), but the first call still took 33.3s — the
+external pinger wasn't running yet (cron-job.org setup is on the user).
+
+**ChunkLoadError after deploy** (user report): a tab opened before the deploy
+requested `987.ca9dbbbce27b7cc7.js`; the new build serves
+`987.c0971bc59a5ecf1c.js` (verified: old → 404, new → 200). Stale tab, not a
+code bug — hard refresh fixes it. **Built (user chose):** `app/error.tsx`
+(first error boundary in the app — before, any render error showed Next's
+bare "Application error") + `utils/chunkReload.ts`: a ChunkLoadError reloads
+the page once; guarded by a sessionStorage timestamp (max once per 30s, and
+never if storage is unavailable) so it can't loop. Other errors show a
+"Something went wrong" alert with Reload / Try again. Logic verified with a
+fake-window Node check (all 9 cases); `tsc` + `next build` clean.
+
+**CSP warning for `vercel.live/_next-live/feedback/feedback.js`:** that's the
+Vercel Toolbar, injected only for the logged-in Vercel team member — visitors
+never load it. **Decided (user):** turn the toolbar off for production in the
+Vercel dashboard (Settings → General → Vercel Toolbar) rather than loosening
+`script-src` for every visitor. A strict nonce-based CSP remains a separate,
+larger security to-do (noted in `next.config.js`); it would not remove this
+warning.
+
+**Password reset fails on a different device** (user report, same session).
+Root cause: `@supabase/ssr` uses the PKCE flow — `resetPasswordForEmail`
+stores a code verifier in the requesting browser and the email link carries
+`?code=`; on another device `exchangeCodeForSession` can't find the verifier.
+Confirmed in auth logs: `/recover` 12:00:44 → `/verify` 303 at 12:01:38 →
+no `/token` exchange ever reached Supabase (fails client-side). Reproduced
+with a fresh headless-browser context: zero Supabase calls. **Fix:** (1)
+user switches the Supabase **Reset Password** (and **Confirm signup**) email
+templates to token-hash links
+`{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=recovery|email`
+— `/auth/verify` already supported `verifyOtp({token_hash})`, which is
+verified server-side and needs no browser state (checked: Supabase answers
+the call directly). Dashboard-only setting; no MCP tool can edit templates.
+(2) code: `/auth/verify` now explains the cross-device PKCE failure ("request
+a new reset link and open it here") instead of the raw library error — for
+older emails / if the template isn't changed. Documented in DEPLOYMENT.md.
+
+**Failed sign-in warning felt intimidating** (user request, same session).
+`AuthClient.tsx`: `MAX_ATTEMPTS_BEFORE_LOCKOUT` 5 → **8** (user's number);
+new `WARN_AFTER_FAILED_ATTEMPTS = 3` — failures 1–2 show only "Invalid login
+credentials", failures 3–6 a neutral gray "N attempts left before a short
+pause.", only the last attempt is red. Lockout duration/backoff unchanged
+(30s doubling, cap 300s). Checked first: sign-in calls Supabase
+`signInWithPassword` directly (not the backend's `/auth/login` 10/15min
+limiter), so 8 client-side attempts don't collide with a server limit.
+**Bug fixed along the way:** the lockout countdown started at "37s" instead
+of 30s — `now` only ticks while locked, so it was stale at lock time; now
+refreshed when the lock starts. Verified with headless Chromium (8 simulated
+invalid-credential responses): exact states above, lock shows 30s. Dropped a
+planned extra "Forgot your password?" link in the hint — the screenshot
+showed one already sits directly above it.
