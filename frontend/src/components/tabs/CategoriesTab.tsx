@@ -12,7 +12,7 @@ import Badge from '@/components/ui/Badge';
 import CategoryColorPicker from '@/components/ui/CategoryColorPicker';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
-import { hashCategoryKey, toneForKey } from '@/utils/categoryColors';
+import { chartFillColorForKey, hashCategoryKey, toneForKey } from '@/utils/categoryColors';
 
 interface Category {
   id: string;
@@ -154,7 +154,18 @@ export default function CategoriesTab() {
                   exit={{ opacity: 0, x: -24 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <Card className="flex h-full flex-col justify-between gap-3 p-4">
+                  {/* No hover/spotlight/overflow-hidden here: each creates a stacking
+                      context or clip that would trap the color-picker popover. */}
+                  <Card className="relative flex h-full flex-col justify-between gap-3 p-4 pl-5 transition-colors hover:border-edge/20">
+                    {/* Identity rail in the category's own color */}
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-3 left-0 w-1 rounded-r-full transition-colors duration-300"
+                      style={{
+                        backgroundColor: chartFillColorForKey(cat.color || hashCategoryKey(cat.name)),
+                        boxShadow: `0 0 12px ${chartFillColorForKey(cat.color || hashCategoryKey(cat.name))}`,
+                      }}
+                    />
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone={toneForKey(cat.color || hashCategoryKey(cat.name))}>
                         {cat.name}

@@ -28,6 +28,8 @@ src/
 │   └── settings/              # SettingsClient — income, account deletion
 ├── components/
 │   ├── ui-feedback.tsx        # shared Alert / Loading / ProgressBar
+│   ├── ui/                    # design-system components (Card, StatTile,
+│   │                          #   RollingNumber, Tabs, CommandPalette, …)
 │   └── tabs/                  # one component per dashboard tab
 └── utils/
     ├── supabase.ts            # browser client factory
@@ -41,9 +43,17 @@ src/
 
 The ten original tabs are grouped into five compact sections with sub-tabs:
 **Overview**, **Transactions & Model** (Upload / Categories / Label / Review /
-Training), **Planning** (Budget / Savings / Action plan), and **Reports**
-(CSV export + pagination). Each tab's component is code-split via
+Training), **Planning** (Budget / 50/30/20 / Savings / Subscriptions /
+Insights / Action plan, reached via the pill sub-tabs), and **Reports**
+(CSV export + pagination). ⌘K / Ctrl+K opens a command menu for every tab. Each tab's component is code-split via
 `next/dynamic` so only the active tab's JS loads.
+
+## Design system
+
+Read **`../docs/DESIGN_SYSTEM.md`** before adding UI: tokens (never raw hex),
+motion rules, effect classes (`.spotlight`, `.glow-border`, `.stagger-in`, …),
+components, and how to screenshot-verify the logged-in dashboard with mocked
+data. Success feedback uses `toast.success()` (sonner); errors stay inline.
 
 ## Data-fetching conventions
 

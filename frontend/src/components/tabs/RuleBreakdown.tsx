@@ -167,16 +167,18 @@ export default function RuleBreakdown({
           />
         ) : (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,220px),1fr]">
-            <div className="flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={180}>
+            <div className="relative flex items-center justify-center">
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
                     data={pieData}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={52}
-                    outerRadius={80}
-                    paddingAngle={2}
+                    innerRadius={62}
+                    outerRadius={90}
+                    paddingAngle={2.5}
+                    cornerRadius={4}
+                    animationDuration={900}
                     stroke="rgb(var(--surface))"
                     strokeWidth={2}
                   >
@@ -187,9 +189,20 @@ export default function RuleBreakdown({
                   <Tooltip content={<ChartTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
+              {/* Center: share of income spent so far */}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                  {hasIncome ? 'Of income' : 'Spent'}
+                </p>
+                <p className="font-display text-xl font-bold tabular-nums">
+                  {hasIncome
+                    ? `${pctOfIncome(buckets!.needs.spent + buckets!.wants.spent + buckets!.savings.spent)}%`
+                    : formatCurrencyWhole(buckets!.needs.spent + buckets!.wants.spent + buckets!.savings.spent)}
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-6">
               {(['needs', 'wants', 'savings'] as const).map((key) => {
                 const b = buckets![key];
                 const actualPct = pctOfIncome(b.spent);
@@ -209,7 +222,13 @@ export default function RuleBreakdown({
                         {b.target_amount !== null && ` of ${formatCurrencyWhole(b.target_amount)} (${b.target_pct}%) target`}
                       </p>
                     </div>
-                    <ProgressBar percent={hasIncome ? actualPct : 0} fillColor={BUCKET_COLOR[key]} />
+                    {/* Tick = the rule's target share (50/30/20) for this bucket */}
+                    <ProgressBar
+                      percent={hasIncome ? actualPct : 0}
+                      fillColor={BUCKET_COLOR[key]}
+                      marker={hasIncome ? b.target_pct : undefined}
+                      label={`${BUCKET_LABEL[key]} share of income`}
+                    />
                   </div>
                 );
               })}
@@ -221,16 +240,16 @@ export default function RuleBreakdown({
       {advice && (
         <div
           className={`flex items-start gap-3 rounded-card border p-5 ${
-            advice.onTrack ? 'border-success/25 bg-success/10' : 'border-[color:var(--chart-5)]/25 bg-[color:var(--chart-5)]/10'
+            advice.onTrack ? 'border-success/25 bg-success/10' : 'border-warn/25 bg-warn/10'
           }`}
         >
           {advice.onTrack ? (
             <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-success" />
           ) : (
-            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--chart-5)]" />
+            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-warn" />
           )}
           <div>
-            <p className={`font-medium ${advice.onTrack ? 'text-success' : 'text-[color:var(--chart-5)]'}`}>
+            <p className={`font-medium ${advice.onTrack ? 'text-success' : 'text-warn'}`}>
               {advice.onTrack ? 'On track' : 'Guidance'}
             </p>
             <p className="mt-0.5 text-sm text-muted">{advice.text}</p>

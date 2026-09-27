@@ -1,7 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Repeat, X } from 'lucide-react';
+import { AnimatePresence, m } from 'framer-motion';
+import { CalendarClock, Check, Repeat, X } from 'lucide-react';
+import { toast } from 'sonner';
+import RollingNumber from '@/components/ui/RollingNumber';
+import { useCategoryColors } from '@/utils/useCategoryColors';
 import { useApi, invalidate } from '@/utils/useApi';
 import { api } from '@/utils/api';
 import { Alert } from '@/components/ui-feedback';
@@ -10,7 +14,7 @@ import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
-import { formatCurrencyWhole } from '@/utils/format';
+import { formatCurrencyWhole, formatDate } from '@/utils/format';
 
 interface Subscription {
   id: string;
@@ -38,6 +42,7 @@ export default function SubscriptionsTab() {
   const [actionError, setActionError] = useState('');
 
   const subscriptions = data?.subscriptions || [];
+  const { chartColorFor } = useCategoryColors();
 
   const handleConfirm = async (id: string) => {
     setActioningId(id);
@@ -45,6 +50,7 @@ export default function SubscriptionsTab() {
     try {
       await api.subscriptions.confirm(id);
       invalidate('/subscriptions');
+      toast.success('Marked as a subscription');
     } catch (err: any) {
       setActionError(err?.response?.data?.detail || 'Could not confirm subscription');
     } finally {
@@ -58,6 +64,7 @@ export default function SubscriptionsTab() {
     try {
       await api.subscriptions.dismiss(id);
       invalidate('/subscriptions');
+      toast('Dismissed — it won\'t be suggested again');
     } catch (err: any) {
       setActionError(err?.response?.data?.detail || 'Could not dismiss subscription');
     } finally {
@@ -78,14 +85,17 @@ export default function SubscriptionsTab() {
       <SectionHeader
         label="Planning"
         title="Subscriptions"
+        description="Merchants that charge you on a regular schedule, detected automatically."
         action={
           data && subscriptions.length > 0 ? (
-            <div className="text-right">
-              <p className="font-display text-xl font-bold tabular-nums">
-                {formatCurrencyWhole(data.monthly_total)}
+            <Card className="px-5 py-3 text-right">
+              <p className="font-display text-2xl font-bold">
+                <RollingNumber value={data.monthly_total} currency />
               </p>
-              <p className="text-xs text-muted">est. per month</p>
-            </div>
+              <p className="text-xs text-muted">
+                est. per month · ≈ {formatCurrencyWhole(data.monthly_total * 12)} a year
+              </p>
+            </Card>
           ) : undefined
         }
       />
@@ -101,17 +111,40 @@ export default function SubscriptionsTab() {
         />
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
-          {subscriptions.map((sub) => (
-            <Card key={sub.id} className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">{sub.merchant}</p>
-                    {sub.is_confirmed && <Badge tone="success">Confirmed</Badge>}
+          <AnimatePresence initial={false}>
+          {subscriptions.map((sub) => {
+            const tint = sub.categories?.name ? chartColorFor(sub.categories.name) : 'rgb(var(--muted))';
+            return (
+            <m.div
+              key={sub.id}
+              layout
+              exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
+            >
+            <Card hover className="h-full p-4">
+              <div className="flex items-start gap-3">
+                {/* Monogram tinted with the category color */}
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-base font-bold"
+                  style={{ color: tint, backgroundColor: `color-mix(in srgb, ${tint} 15%, transparent)` }}
+                  aria-hidden="true"
+                >
+                  {sub.merchant.trim().charAt(0).toUpperCase() || '?'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-semibold">{sub.merchant}</p>
+                    {sub.is_confirmed && <Badge tone="success"><Check className="mr-1 h-3 w-3" />Confirmed</Badge>}
                   </div>
-                  <p className="mt-0.5 text-xs text-muted">
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                    <Repeat className="h-3 w-3" />
                     {CADENCE_LABEL[sub.cadence] || sub.cadence}
                     {sub.categories?.name ? ` · ${sub.categories.name}` : ''}
+                    {sub.last_seen && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <CalendarClock className="h-3 w-3" /> last {formatDate(sub.last_seen)}
+                      </>
+                    )}
                   </p>
                 </div>
                 <p className="font-display text-lg font-bold tabular-nums">
@@ -120,7 +153,7 @@ export default function SubscriptionsTab() {
               </div>
 
               {!sub.is_confirmed && (
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex gap-2 pl-[52px]">
                   <Button
                     variant="outline"
                     size="sm"
@@ -140,7 +173,10 @@ export default function SubscriptionsTab() {
                 </div>
               )}
             </Card>
-          ))}
+            </m.div>
+            );
+          })}
+          </AnimatePresence>
         </div>
       )}
     </div>

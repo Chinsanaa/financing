@@ -66,10 +66,10 @@ function NotificationRow({ n }: { n: Notification }) {
   if (n.type === 'approaching_budget') {
     return (
       <li className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">
-        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--chart-5)]" />
+        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">Approaching budget: {n.payload.category}</p>
-          <p className="text-xs text-[color:var(--chart-5)]">{n.payload.pct}% used</p>
+          <p className="text-xs text-warn">{n.payload.pct}% used</p>
         </div>
         {dot}
       </li>

@@ -7,10 +7,15 @@ export default function DashboardLoading() {
       <span className="sr-only">Loading dashboard…</span>
       <div className="border-b border-edge/8">
         <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-          <Skeleton className="h-7 w-32" />
-          <div className="flex gap-3">
-            <Skeleton className="h-9 w-9 rounded-full" />
-            <Skeleton className="h-9 w-24 rounded-full" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-7 w-7 rounded-lg" />
+            <Skeleton className="hidden h-5 w-24 sm:block" />
+          </div>
+          <Skeleton className="hidden h-10 w-72 rounded-full md:block" />
+          <div className="flex gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-11 w-11 rounded-full" />
+            ))}
           </div>
         </div>
         <div className="mx-auto flex w-full max-w-[1800px] gap-2 px-4 pb-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
@@ -20,6 +25,12 @@ export default function DashboardLoading() {
         </div>
       </div>
       <div className="mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        {/* Mirrors the Overview hero card. */}
+        <div className="mb-6 rounded-card border border-edge/8 bg-surface p-6 sm:p-8">
+          <Skeleton className="mb-4 h-4 w-40" />
+          <Skeleton className="mb-3 h-12 w-64" />
+          <Skeleton className="h-4 w-56" />
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonCard key={i} />

@@ -314,23 +314,41 @@ export default function UploadTab() {
         onDragOver={handleDrag}
         onDrop={handleDrop}
         data-tour-id="upload-choose-files"
-        className={`rounded-card border-2 border-dashed p-12 text-center transition-all duration-200 ${
+        className={`group relative overflow-hidden rounded-card p-12 text-center transition-all duration-300 ${
           running ? 'pointer-events-none opacity-60' : ''
-        } ${
-          dragActive
-            ? 'border-accent bg-accent/5 shadow-glow'
-            : 'border-edge/15 bg-surface hover:border-edge/30'
-        }`}
+        } ${dragActive ? 'is-active bg-accent/[0.06] shadow-glow' : 'bg-surface'}`}
       >
-        <div className="space-y-4">
+        {/* Animated dashed border (marching ants) — see .dash-march */}
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
+          <rect
+            className={`dash-march transition-colors duration-300 ${
+              dragActive ? 'stroke-accent' : 'stroke-edge/20 group-hover:stroke-edge/40'
+            }`}
+            x="1"
+            y="1"
+            rx="15"
+            strokeWidth="2"
+            style={{ width: 'calc(100% - 2px)', height: 'calc(100% - 2px)' }}
+          />
+        </svg>
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute left-1/2 top-0 h-48 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(var(--accent)/0.18),transparent)] transition-opacity duration-300 ${
+            dragActive ? 'opacity-100' : 'opacity-40'
+          }`}
+        />
+        <div className="relative space-y-4">
           <m.div
-            animate={dragActive ? { scale: 1.1, y: -4 } : { scale: 1, y: 0 }}
-            className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-accent/12 text-accent-strong"
+            animate={dragActive ? { scale: 1.15, y: -6, rotate: -6 } : { scale: 1, y: 0, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-gradient-to-b from-accent/20 to-accent/5 text-accent-strong"
           >
             <UploadCloud className="h-7 w-7" />
           </m.div>
           <div>
-            <p className="font-medium">Drag and drop your files here</p>
+            <p className="font-display text-lg font-semibold">
+              {dragActive ? 'Drop to upload' : 'Drag and drop your files here'}
+            </p>
             <p className="mt-1 text-sm text-muted">or choose them from your computer</p>
           </div>
           <input

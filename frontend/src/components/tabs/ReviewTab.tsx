@@ -205,8 +205,27 @@ export default function ReviewTab() {
                         )}
                       </td>
                       {!isShowingLabeled && (
-                        <td className="px-4 py-3 text-center text-xs text-muted tabular-nums">
-                          {tx.confidence > 0 ? `${Math.round(tx.confidence * 100)}%` : '—'}
+                        <td className="px-4 py-3 text-xs text-muted tabular-nums">
+                          {tx.confidence > 0 ? (
+                            // Meter + number: level is readable without relying on color.
+                            <div className="mx-auto flex w-24 items-center gap-2">
+                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-edge/10">
+                                <div
+                                  className={`progress-fill h-full rounded-full ${
+                                    tx.confidence >= 0.8
+                                      ? 'bg-success'
+                                      : tx.confidence >= 0.5
+                                      ? 'bg-warn'
+                                      : 'bg-danger'
+                                  }`}
+                                  style={{ width: `${Math.round(tx.confidence * 100)}%` }}
+                                />
+                              </div>
+                              <span className="w-8 text-right">{Math.round(tx.confidence * 100)}%</span>
+                            </div>
+                          ) : (
+                            <span className="block text-center">—</span>
+                          )}
                         </td>
                       )}
                       <td className="px-4 py-3 text-center">

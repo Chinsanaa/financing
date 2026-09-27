@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, Play } from 'lucide-react';
+import { toast } from 'sonner';
+import { celebrate } from '@/utils/celebrate';
+import RollingNumber from '@/components/ui/RollingNumber';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
 import { formatDateTime } from '@/utils/format';
@@ -75,6 +78,16 @@ export default function TrainingTab() {
             invalidate('/dashboard'); // fresh model reclassified transactions
             if (run.status === 'succeeded') {
               setMessage('Training finished — your transactions have been re-classified.');
+              // A real milestone: celebrate it (no-op under reduced motion).
+              celebrate();
+              toast.success('Your model is trained', {
+                description:
+                  run.cv_accuracy != null
+                    ? `Cross-validated accuracy ${(run.cv_accuracy * 100).toFixed(1)}%.`
+                    : 'Transactions have been re-classified.',
+              });
+            } else {
+              toast.error('Training failed', { description: run.error_message || 'See the run details below.' });
             }
           }
         } catch {
@@ -100,10 +113,38 @@ export default function TrainingTab() {
       {(error || loadError) && <Alert kind="error">{error || loadError}</Alert>}
       {message && <Alert kind="success">{message}</Alert>}
 
-      <Button onClick={handleRetrain} loading={training} size="lg">
-        {!training && <Play className="h-4 w-4" />}
-        {training ? 'Training in progress' : 'Start training'}
-      </Button>
+      {/* Launch panel: while a run is live the brain "thinks" (pulsing rings) */}
+      <Card glow={training} className="relative flex flex-col items-center gap-5 overflow-hidden p-8 text-center sm:flex-row sm:text-left">
+        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
+          {training && (
+            <>
+              <span className="absolute inset-0 rounded-2xl bg-accent/25 animate-ping-soft" />
+              <span className="absolute inset-0 rounded-2xl bg-violet/20 animate-ping-soft [animation-delay:1.2s]" />
+            </>
+          )}
+          <span
+            className={`relative flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-gradient-to-b from-accent/25 to-accent/5 text-accent-strong ${
+              training ? 'animate-pulse' : ''
+            }`}
+          >
+            <BrainCircuit className="h-8 w-8" />
+          </span>
+        </div>
+        <div className="flex-1">
+          <p className="font-display text-lg font-semibold">
+            {training ? 'Learning your spending patterns…' : 'Ready when you are'}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {training
+              ? 'This usually takes under a minute. You can leave this page — it keeps running.'
+              : 'The more transactions you label, the smarter it gets.'}
+          </p>
+        </div>
+        <Button onClick={handleRetrain} loading={training} size="lg">
+          {!training && <Play className="h-4 w-4" />}
+          {training ? 'Training' : 'Start training'}
+        </Button>
+      </Card>
 
       <div className="space-y-3">
         <p className="section-label">Training history</p>
@@ -117,8 +158,8 @@ export default function TrainingTab() {
             description="Label some transactions first, then start your first training run."
           />
         ) : (
-          runs.map((run) => (
-            <Card key={run.id} className="space-y-3 p-4">
+          runs.map((run, i) => (
+            <Card key={run.id} hover={i === 0} className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">Run {run.id.slice(0, 8)}</p>
@@ -138,20 +179,20 @@ export default function TrainingTab() {
                 <div className="grid grid-cols-3 gap-2 rounded-lg bg-surface-2 p-3 text-sm">
                   <div>
                     <p className="section-label mb-0.5">CV accuracy</p>
-                    <p className="font-display font-semibold tabular-nums">
-                      {(run.cv_accuracy * 100).toFixed(1)}%
+                    <p className="font-display text-lg font-semibold">
+                      <RollingNumber value={run.cv_accuracy * 100} decimals={1} suffix="%" />
                     </p>
                   </div>
                   <div>
                     <p className="section-label mb-0.5">F1-macro</p>
-                    <p className="font-display font-semibold tabular-nums">
-                      {run.f1_macro != null ? run.f1_macro.toFixed(3) : '—'}
+                    <p className="font-display text-lg font-semibold">
+                      {run.f1_macro != null ? <RollingNumber value={run.f1_macro} decimals={3} /> : '—'}
                     </p>
                   </div>
                   <div>
                     <p className="section-label mb-0.5">Samples</p>
-                    <p className="font-display font-semibold tabular-nums">
-                      {run.n_labeled_samples ?? '—'}
+                    <p className="font-display text-lg font-semibold">
+                      {run.n_labeled_samples != null ? <RollingNumber value={run.n_labeled_samples} /> : '—'}
                     </p>
                   </div>
                 </div>

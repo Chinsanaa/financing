@@ -7,12 +7,13 @@ type Variant = 'primary' | 'ghost' | 'outline' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
+  // btn-sheen: a light sweep crosses the button on hover (globals.css)
   primary:
-    'bg-accent text-accent-ink font-semibold hover:shadow-glow hover:brightness-110 active:scale-[0.98]',
-  ghost: 'text-ink hover:bg-edge/5 active:scale-[0.98]',
+    'btn-sheen bg-accent text-accent-ink font-semibold shadow-[0_1px_0_0_rgb(255_255_255/0.25)_inset] hover:shadow-glow active:scale-[0.97]',
+  ghost: 'text-ink hover:bg-edge/5 active:scale-[0.97]',
   outline:
-    'border border-edge/15 text-ink hover:border-edge/30 hover:bg-edge/5 active:scale-[0.98]',
-  danger: 'bg-danger/10 text-danger hover:bg-danger/20 active:scale-[0.98]',
+    'border border-edge/15 text-ink hover:border-accent/40 hover:bg-edge/5 active:scale-[0.97]',
+  danger: 'bg-danger/10 text-danger hover:bg-danger/20 active:scale-[0.97]',
 };
 
 const SIZES: Record<Size, string> = {
@@ -37,7 +38,7 @@ export default function Button({
 }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-pill transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-pill transition-[transform,box-shadow,background-color,border-color,color] duration-150 ease-out disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       disabled={disabled || loading}
       {...rest}
     >

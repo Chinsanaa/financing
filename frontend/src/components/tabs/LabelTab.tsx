@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { Check, PartyPopper } from 'lucide-react';
+import { Check, Keyboard, PartyPopper } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
@@ -32,7 +32,7 @@ interface Category {
 export default function LabelTab() {
   const queueQ = useApi<{ transactions: Transaction[] }>('/dashboard/review-queue');
   const categoriesQ = useApi<{ categories: Category[] }>('/categories/');
-  const { toneFor } = useCategoryColors();
+  const { toneFor, chartColorFor } = useCategoryColors();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -120,6 +120,38 @@ export default function LabelTab() {
     setCurrentIndex(0);
   };
 
+  // Keyboard shortcuts — 1–9 pick a category, Enter accepts the suggestion,
+  // S skips. The ref always holds this render's handlers, so the single
+  // listener never calls a stale closure.
+  const keysRef = useRef({ handleAccept, handleOverride, handleSkip, categories, acting, allSeen, tx: transactions[currentIndex] });
+  keysRef.current = { handleAccept, handleOverride, handleSkip, categories, acting, allSeen, tx: transactions[currentIndex] };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = keysRef.current;
+      const target = e.target as HTMLElement | null;
+      if (
+        e.metaKey || e.ctrlKey || e.altKey ||
+        target?.closest('input, textarea, select, [contenteditable], [role="dialog"]')
+      ) return;
+      if (!k.tx || k.acting || k.allSeen) return;
+      if (/^[1-9]$/.test(e.key)) {
+        const cat = k.categories[Number(e.key) - 1];
+        if (cat) {
+          e.preventDefault();
+          k.handleOverride(cat.id);
+        }
+      } else if (e.key === 'Enter' && k.tx.suggested_category && target?.tagName !== 'BUTTON') {
+        e.preventDefault();
+        k.handleAccept();
+      } else if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        k.handleSkip();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   if (queueQ.loading || categoriesQ.loading) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
@@ -168,15 +200,24 @@ export default function LabelTab() {
         <Alert kind="error">{actionError || queueQ.error}</Alert>
       )}
 
+      {/* Stacked deck: two faux cards peek out behind the current one */}
+      <div className="relative">
+        {transactions.length > 1 && (
+          <div aria-hidden="true" className="absolute inset-x-6 -bottom-2 h-full rounded-card border border-edge/8 bg-surface/60" />
+        )}
+        {transactions.length > 2 && (
+          <div aria-hidden="true" className="absolute inset-x-12 -bottom-4 h-full rounded-card border border-edge/5 bg-surface/30" />
+        )}
       <AnimatePresence mode="wait">
         <m.div
           key={tx.id}
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          className="relative"
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, x: 60, rotate: 3, transition: { duration: 0.16, ease: [0.55, 0, 1, 0.45] } }}
+          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Card className="space-y-4 p-6">
+          <Card className="space-y-4 p-6 shadow-card">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="section-label mb-1">Merchant</p>
@@ -196,14 +237,17 @@ export default function LabelTab() {
             </div>
 
             {tx.suggested_category && (
-              <div className="flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/5 px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-accent/25 bg-accent/5 px-4 py-3 text-sm">
                 <span className="text-muted">Model suggests</span>
                 <Badge tone={toneFor(tx.suggested_category)}>
                   {tx.suggested_category}
                 </Badge>
                 {tx.confidence > 0 && (
-                  <span className="text-muted">
-                    {Math.round(tx.confidence * 100)}% confident
+                  <span className="ml-auto flex items-center gap-2 text-xs text-muted">
+                    <span className="w-20">
+                      <ProgressBar percent={tx.confidence * 100} height="h-1.5" label="Model confidence" />
+                    </span>
+                    <span className="tabular-nums">{Math.round(tx.confidence * 100)}% sure</span>
                   </span>
                 )}
               </div>
@@ -211,6 +255,7 @@ export default function LabelTab() {
           </Card>
         </m.div>
       </AnimatePresence>
+      </div>
 
       <div className="space-y-3">
         {allSeen ? (
@@ -230,20 +275,26 @@ export default function LabelTab() {
             {tx.suggested_category && (
               <Button onClick={handleAccept} loading={acting} className="w-full" size="lg">
                 <Check className="h-4 w-4" /> Accept suggestion
+                <span className="ml-1 rounded border border-accent-ink/20 px-1.5 text-[11px] font-medium opacity-70">Enter</span>
               </Button>
             )}
 
             <div>
               <p className="section-label mb-2">Or pick a category</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {categories.map((cat) => (
+                {categories.map((cat, i) => (
                   <button
                     key={cat.id}
                     onClick={() => handleOverride(cat.id)}
                     disabled={acting}
-                    className="rounded-lg border border-edge/10 bg-surface px-3 py-2.5 text-sm font-medium transition-all hover:border-accent/40 hover:bg-accent/5 disabled:opacity-50"
+                    className="group flex items-center gap-2 rounded-lg border border-edge/10 bg-surface px-3 py-2.5 text-left text-sm font-medium transition-all duration-150 hover:-translate-y-px hover:border-accent/40 hover:bg-accent/5 active:scale-[0.98] disabled:opacity-50"
                   >
-                    {cat.name}
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full transition-transform duration-200 group-hover:scale-125"
+                      style={{ backgroundColor: chartColorFor(cat.name) }}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{cat.name}</span>
+                    {i < 9 && <span className="kbd hidden sm:inline-flex">{i + 1}</span>}
                   </button>
                 ))}
               </div>
@@ -251,9 +302,12 @@ export default function LabelTab() {
 
             {transactions.length > 1 && (
               <Button variant="ghost" onClick={handleSkip} className="w-full">
-                Skip for now
+                Skip for now <span className="kbd">S</span>
               </Button>
             )}
+            <p className="hidden items-center justify-center gap-1.5 text-xs text-muted sm:flex">
+              <Keyboard className="h-3.5 w-3.5" /> Tip: press 1–9 to pick a category without the mouse
+            </p>
           </>
         )}
       </div>
