@@ -133,6 +133,12 @@ min from GitHub Actions. GitHub can delay scheduled runs, so it can't
 guarantee Render never sleeps, but it reliably prevents the Supabase pause.
 Run it by hand from the repo's **Actions** tab (`workflow_dispatch`).
 
+**Vercel Toolbar vs. CSP:** if the browser console shows
+`vercel.live/_next-live/feedback/feedback.js` blocked by `script-src`, that's
+the Vercel Toolbar (shown only to logged-in team members). Turn it off in
+Vercel → Project → Settings → General → Vercel Toolbar instead of adding
+`vercel.live` to the CSP for every visitor.
+
 Render's free plan includes 750 instance-hours/month — enough for one
 service running 24/7, so keeping it awake costs nothing.
 

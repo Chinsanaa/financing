@@ -4411,3 +4411,26 @@ after merge (reload Overview: numbers should appear instantly).
 one-time translation backfill) → click through Overview/Reports/Budget/
 Subscriptions → set up the cron-job.org pinger if not done. Then re-measure:
 first request after 30+ idle min should be <2s (was 33.5s).
+
+**Post-merge (PR #57 merged 2026-09-27).** `/health/deep` confirmed live
+(`{"status":"ok","db":true}`), but the first call still took 33.3s — the
+external pinger wasn't running yet (cron-job.org setup is on the user).
+
+**ChunkLoadError after deploy** (user report): a tab opened before the deploy
+requested `987.ca9dbbbce27b7cc7.js`; the new build serves
+`987.c0971bc59a5ecf1c.js` (verified: old → 404, new → 200). Stale tab, not a
+code bug — hard refresh fixes it. **Built (user chose):** `app/error.tsx`
+(first error boundary in the app — before, any render error showed Next's
+bare "Application error") + `utils/chunkReload.ts`: a ChunkLoadError reloads
+the page once; guarded by a sessionStorage timestamp (max once per 30s, and
+never if storage is unavailable) so it can't loop. Other errors show a
+"Something went wrong" alert with Reload / Try again. Logic verified with a
+fake-window Node check (all 9 cases); `tsc` + `next build` clean.
+
+**CSP warning for `vercel.live/_next-live/feedback/feedback.js`:** that's the
+Vercel Toolbar, injected only for the logged-in Vercel team member — visitors
+never load it. **Decided (user):** turn the toolbar off for production in the
+Vercel dashboard (Settings → General → Vercel Toolbar) rather than loosening
+`script-src` for every visitor. A strict nonce-based CSP remains a separate,
+larger security to-do (noted in `next.config.js`); it would not remove this
+warning.
