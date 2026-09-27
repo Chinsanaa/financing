@@ -205,6 +205,8 @@ translated once per distinct string in the background (`backend/translations.py`
 and stored in `transactions.merchant_en`/`description_en`; pages never call
 Google Translate.
 
+**Onboarding tour:** shown once per account right after sign-up; progress is stored on the account (`profiles.tour_step`) and each step advances only when the user does it (or taps Skip).
+
 **Design rule:** NO gradients, ONLY solid colors, no purple — see `docs/DESIGN_SYSTEM.md`.
 
 **Frontend data cache:** `useApi` dedupes concurrent GETs and mirrors responses

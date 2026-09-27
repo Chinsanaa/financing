@@ -5,6 +5,7 @@ import { AnimatePresence, m } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
+import { advanceTour } from '@/utils/tour';
 import { Alert } from '@/components/ui-feedback';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
@@ -63,6 +64,7 @@ export default function ReviewTab() {
       setActionError('');
       await api.classifyTx.label(txnId, categoryId);
       removeRow(txnId);
+      advanceTour('label');
     } catch (err: any) {
       setActionError(err.response?.data?.detail || 'Failed to label transaction');
     } finally {

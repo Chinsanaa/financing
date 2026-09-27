@@ -5,6 +5,7 @@ import { m } from 'framer-motion';
 import { FileSpreadsheet, UploadCloud, Trash2, PenLine } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
+import { advanceTour } from '@/utils/tour';
 import { formatDate } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
@@ -271,6 +272,9 @@ export default function UploadTab() {
     setBatchProgress(null);
     invalidate('/dashboard');
     setSummary(buildSummary(outcomes));
+    // Onboarding tour: only a file that actually imported completes "Upload"
+    // (duplicates / failures don't).
+    if (outcomes.some((o) => o.status === 'done')) advanceTour('upload');
   };
 
   const handleDelete = async (uploadId: string) => {

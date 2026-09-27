@@ -7,6 +7,7 @@ import { celebrate } from '@/utils/celebrate';
 import RollingNumber from '@/components/ui/RollingNumber';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
+import { advanceTour } from '@/utils/tour';
 import { formatDateTime } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
@@ -56,7 +57,8 @@ export default function TrainingTab() {
       const modelRunId: string = res.data.model_run_id;
       setMessage('Training started! Results appear below when it finishes.');
       await reload(true);
-      invalidate('/training'); // onboarding checklist's "Train" step
+      invalidate('/training');
+      advanceTour('train'); // last tour step — the tour ends here
 
       stopPolling();
       pollRef.current = setInterval(async () => {
@@ -140,7 +142,7 @@ export default function TrainingTab() {
               : 'The more transactions you label, the smarter it gets.'}
           </p>
         </div>
-        <Button onClick={handleRetrain} loading={training} size="lg">
+        <Button onClick={handleRetrain} loading={training} size="lg" data-tour-id="train-start">
           {!training && <Play className="h-4 w-4" />}
           {training ? 'Training' : 'Start training'}
         </Button>

@@ -105,7 +105,7 @@ export default function CategoriesTab() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6">
+    <div className="mx-auto w-full max-w-4xl space-y-6" data-tour-id="categories-list">
       <SectionHeader label="Model" title="Categories" />
       <p className="-mt-4 text-sm text-muted">
         The labels your model learns to predict. Keep them broad enough to be learnable.

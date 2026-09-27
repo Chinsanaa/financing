@@ -4560,3 +4560,53 @@ CLAUDE.md guardrail added.
 computed-style scan of `/`, `/auth`, `/privacy`, 404 in dark + light: 0
 gradients / gradient masks / backdrop blurs / orbit animations, no "F"
 square, flat body background; screenshots eyeballed.
+
+### Session 71 (2026-09-27) — Onboarding tour rebuilt: once per signup, no auto-skipping
+
+**Why:** user reported the walkthrough as "very glitchy"; it should appear
+once when a user signs up, be smooth, and never skip steps unless the user
+taps Skip.
+
+**Root causes found:** (1) dismissal lived in `localStorage` → reappeared on
+every new device/browser, and it showed for ANY account with unfinished
+steps, not just new signups; (2) steps were *inferred from account data* —
+live data showed 686 rows labeled by merchant rules, so "Label" ticked itself
+off right after the first upload; "Categories" completed by merely opening
+the tab; (3) steps 2–4 pointed at wizard pills that only exist on one tab, so
+the hint bubble vanished elsewhere; (4) it hid itself on every data reload
+and several steps could complete at once (jumping highlight); the dim
+overlay also darkened the tour's own box.
+
+**Decided (with user):** steps advance only when the user actually does them
+(Categories gets an explicit "Looks good, next" button); only new signups
+see it — existing accounts are marked finished.
+
+**Built:** migration `20260927040000_onboarding_tour_state.sql` (applied
+live): `profiles.tour_step` (0–3) + `tour_finished_at`; both existing
+accounts backfilled finished; new signups get the defaults (step 0, active).
+Backend: `GET /dashboard/tour`, `POST /dashboard/tour/advance {completed}`
+(compare-and-set: only moves when `completed` IS the current step — no-op
+otherwise), `POST /dashboard/tour/skip`; replaced the never-called
+`/onboarding-status` + `/onboarding-complete`. Frontend: `utils/tour.ts`
+(shared store, cleared on sign-out); `OnboardingTour` rewritten — the step
+box always carries the instruction, sits above the dim layer, shows "Take me
+there" when you're on another tab, auto-navigates only when a step is
+*completed* (never on page load, so reloading elsewhere doesn't drag you);
+`TourSpotlight` is visual-only (solid lime ring, scrolls the target into
+view). Steps are completed by: UploadTab (≥1 file actually imported),
+LabelTab/ReviewTab (hand label), TrainingTab (training started → tour ends).
+Edge case handled: if the label queue is empty, the empty state offers a
+user-pressed "Continue the tour" (otherwise a new user could be stuck).
+Page gets extra bottom padding while the tour shows so page-bottom controls
+scroll clear of the box. Also removes the old duplicate `/dashboard/summary`
++ `/training/` fetches the tour made.
+
+**Verified:** 7 new backend tests (`test_tour.py`; 150 passing). Headless
+browser walkthrough against a fake backend with the same compare-and-set
+rules and 686 pre-labeled rows: 1→2→3→4 strictly in order (server saw
+exactly advance:upload, categories, label, train), upload did NOT skip
+Label, reload keeps the step, in-app tab switch + reload on Overview don't
+drag the user, "Take me there" works, tour ends after training and stays
+gone after reload, Skip ends it for good, an existing (finished) account
+never sees it, wizard Next button not covered by the box. **Not verified:**
+a real signup end-to-end on production (needs merge + a new account).
