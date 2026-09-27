@@ -1,0 +1,20 @@
+# Backup keep-alive for the free-tier backend (primary pinger: cron-job.org,
+# see docs/guides/DEPLOYMENT.md). GitHub may delay scheduled runs by 10+ min
+# under load, so on its own this can't guarantee Render never sleeps — but it
+# easily keeps Supabase's 7-day inactivity pause from ever triggering.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /health/deep (wakes Render + touches Supabase)
+        run: |
+          curl -fsS --retry 3 --retry-delay 20 --max-time 90 \
+            https://financing-lxgt.onrender.com/health/deep

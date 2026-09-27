@@ -72,6 +72,8 @@ financing/
 │   ├── test_feature_engineering.py, test_matching_optimization.py
 │   └── conftest.py
 │
+├── .github/workflows/keepalive.yml  # pings /health/deep every 10 min (free-tier keep-alive)
+│
 ├── scripts/
 │   └── test_local.sh          # local backend run helper (not a test suite)
 │

@@ -8,7 +8,8 @@ import jwt
 from typing import Optional
 from slowapi.errors import RateLimitExceeded
 
-from config import settings
+from config import settings, supabase_client
+from db import run_query
 from errors import logger
 from auth_utils import decode_supabase_jwt
 from limiter import limiter
@@ -61,7 +62,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
 
     PUBLIC_PATHS = frozenset({
-        "/", "/health", "/docs", "/redoc", "/openapi.json",
+        "/", "/health", "/health/deep", "/docs", "/redoc", "/openapi.json",
         "/auth/signup", "/auth/login", "/auth/resolve-identifier",
     })
 
@@ -141,6 +142,27 @@ app.add_middleware(
 def health_check():
     """Health check endpoint (no auth required)."""
     return {"status": "ok"}
+
+
+@app.get("/health/deep")
+async def deep_health_check():
+    """Keep-alive target for the external pinger (no auth required).
+
+    Render's free plan sleeps after ~15 idle minutes (a ~30s cold start for
+    the next visitor) and Supabase's free plan pauses a project after ~7
+    days without database activity. Pinging this every 10 minutes prevents
+    both: the request keeps Render awake and the one-row query counts as DB
+    activity. `/health` stays DB-free because Render uses it as the liveness
+    check — a Supabase hiccup must not make Render restart the container.
+    """
+    try:
+        await run_query(
+            lambda: supabase_client.table("categories").select("id").limit(1).execute()
+        )
+    except Exception as e:
+        logger.warning(f"Deep health check DB query failed: {e}")
+        return JSONResponse({"status": "degraded", "db": False}, status_code=503)
+    return {"status": "ok", "db": True}
 
 
 # --- Include Route Groups ---

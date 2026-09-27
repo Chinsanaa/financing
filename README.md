@@ -189,6 +189,12 @@ npm run dev                  # http://localhost:3000
 Guides: `docs/guides/START_LOCAL.md` (setup), `docs/guides/TEST_LOCAL.md`
 (manual test flows), `docs/guides/DEPLOYMENT.md` (Render + Vercel + Supabase).
 
+**Free-tier keep-alive:** Render's free plan sleeps after ~15 idle min (~30s
+cold start) and Supabase pauses after ~7 idle days. Point a pinger
+(cron-job.org, every 10 min) at `GET /health/deep`. It wakes the backend and
+runs a one-row DB query. `.github/workflows/keepalive.yml` is a backup.
+See DEPLOYMENT.md Step 2.5.
+
 ## Tests
 
 ```bash
