@@ -4,6 +4,7 @@ Notes on postgrest-py usage: negated filters use the `.not_` PROPERTY
 (e.g. `.not_.is_("category_id", "null")`). Calling `.not_(...)` raises
 TypeError — it is not a method.
 """
+import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
@@ -56,29 +57,31 @@ async def get_summary(request: Request):
     user_id = request.state.user_id
 
     try:
-        # Total transactions
-        total = await run_query(
-            lambda: supabase_client.table("transactions").select("id", count="exact").eq("user_id", user_id).execute()
+        # Four independent queries, run concurrently (one round-trip of
+        # latency instead of four). Counts use limit(1): count="exact" gives
+        # the total in the header, so there's no need to ship up to 1,000 ids.
+        total, labeled, spend_resp, monthly_income = await asyncio.gather(
+            run_query(
+                lambda: supabase_client.table("transactions")
+                .select("id", count="exact").eq("user_id", user_id).limit(1).execute()
+            ),
+            # Labeled = has a trusted category (not still pending review)
+            run_query(
+                lambda: supabase_client.table("transactions")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .eq("needs_review", False)
+                .not_.is_("category_id", "null")
+                .limit(1)
+                .execute()
+            ),
+            # Total spend, summed in Postgres (migration
+            # 20260811090000_transaction_sum_rpcs.sql).
+            run_query(lambda: supabase_client.rpc("sum_user_transactions", {"p_user_id": user_id}).execute()),
+            _monthly_income(user_id),
         )
         total_count = total.count if total.count is not None else len(total.data)
-
-        # Labeled = has a trusted category (not still pending review)
-        labeled = await run_query(
-            lambda: supabase_client.table("transactions")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .eq("needs_review", False)
-            .not_.is_("category_id", "null")
-            .execute()
-        )
         labeled_count = labeled.count if labeled.count is not None else len(labeled.data)
-
-        # Total spend, summed in Postgres (see migration
-        # 20260811090000_transaction_sum_rpcs.sql) instead of pulling every
-        # row and summing in Python.
-        spend_resp = await run_query(
-            lambda: supabase_client.rpc("sum_user_transactions", {"p_user_id": user_id}).execute()
-        )
         total_spend = float(spend_resp.data or 0)
 
         return {
@@ -86,7 +89,7 @@ async def get_summary(request: Request):
             "labeled_transactions": labeled_count,
             "labeling_percentage": round(100 * labeled_count / total_count, 1) if total_count > 0 else 0,
             "total_spend": total_spend,
-            "monthly_income": await _monthly_income(user_id),
+            "monthly_income": monthly_income,
         }
     except HTTPException:
         raise
@@ -152,32 +155,23 @@ async def get_trends(request: Request, days: int = 30, granularity: str = "day",
         else:
             cutoff = _now_cn() - timedelta(days=days)
 
-        # Filter server-side; never pull the full transaction history.
-        rows = await fetch_all_async(
-            lambda: supabase_client.table("transactions")
-            .select("timestamp, amount")
-            .eq("user_id", user_id)
-            .or_("category_id.not.is.null,is_split.eq.true")
-            .gte("timestamp", cutoff.isoformat())
+        # Bucketed and summed in Postgres (migration
+        # 20260927020000_dashboard_aggregate_rpcs.sql): ~12 rows back
+        # instead of every transaction in the window, 1,000 per round trip.
+        resp = await run_query(
+            lambda: supabase_client.rpc(
+                "spend_trend_for_user",
+                {
+                    "p_user_id": user_id,
+                    "p_start": cutoff.isoformat(),
+                    "p_granularity": "month" if granularity == "month" else "day",
+                },
+            ).execute()
         )
-
-        if not rows:
-            return {"trends": []}
-
-        df = pd.DataFrame(rows)
-        if granularity == "month":
-            df["bucket"] = pd.to_datetime(df["timestamp"]).dt.to_period("M").astype(str)
-        else:
-            df["bucket"] = pd.to_datetime(df["timestamp"]).dt.date.astype(str)
-        grouped = df.groupby("bucket")["amount"].sum().sort_index().reset_index()
-
         return {
             "trends": [
-                {
-                    "date": str(row["bucket"]),
-                    "total_spend": float(row["amount"]),
-                }
-                for _, row in grouped.iterrows()
+                {"date": row["bucket"], "total_spend": float(row["total"])}
+                for row in (resp.data or [])
             ]
         }
     except HTTPException:
@@ -238,15 +232,12 @@ def _month_bounds(month: Optional[str] = None) -> tuple:
 async def _available_months(user_id: str) -> list:
     """Distinct 'YYYY-MM' values that actually have transactions, newest first,
     so the frontend can populate a month selector."""
-    rows = await fetch_all_async(
-        lambda: supabase_client.table("transactions")
-        .select("timestamp")
-        .eq("user_id", user_id)
+    # Computed in Postgres (migration 20260927020000_dashboard_aggregate_rpcs.sql)
+    # — used to page the user's ENTIRE history here on every Budget load.
+    resp = await run_query(
+        lambda: supabase_client.rpc("available_months_for_user", {"p_user_id": user_id}).execute()
     )
-    if not rows:
-        return []
-    months = pd.to_datetime(pd.DataFrame(rows)["timestamp"]).dt.to_period("M").astype(str)
-    return sorted(months.unique().tolist(), reverse=True)
+    return [m if isinstance(m, str) else m["available_months_for_user"] for m in (resp.data or [])]
 
 
 @router.get("/budget")
@@ -264,22 +255,24 @@ async def get_budget(request: Request, month: Optional[str] = None):
     try:
         start, end = _month_bounds(month)
         resolved_month = f"{start.year:04d}-{start.month:02d}"
-        available_months = await _available_months(user_id)
-
-        # Monthly income's single source of truth is profiles.monthly_income
-        # (written by PATCH /settings/profile). budget_config.income is legacy
-        # and was never written by anything.
-        budget_config = await _budget_config(user_id)
-
-        cat_budget_resp = await run_query(
-            lambda: supabase_client.table("budget_category_config")
-            .select("*, categories(name)")
-            .eq("user_id", user_id)
-            .execute()
+        # Independent reads, run concurrently. Monthly income's single source
+        # of truth is profiles.monthly_income (written by PATCH
+        # /settings/profile); budget_config.income is legacy, never written.
+        available_months, budget_config, cat_budget_resp, monthly_income, spending_by_cat = await asyncio.gather(
+            _available_months(user_id),
+            _budget_config(user_id),
+            run_query(
+                lambda: supabase_client.table("budget_category_config")
+                .select("*, categories(name)")
+                .eq("user_id", user_id)
+                .execute()
+            ),
+            _monthly_income(user_id),
+            _spend_by_category(user_id, start, end),
         )
 
         budget_config_out = {
-            "monthly_income": await _monthly_income(user_id),
+            "monthly_income": monthly_income,
             "currency": budget_config["currency"] if budget_config else "CNY",
         }
 
@@ -290,8 +283,6 @@ async def get_budget(request: Request, month: Optional[str] = None):
                 "month": resolved_month,
                 "available_months": available_months,
             }
-
-        spending_by_cat = await _spend_by_category(user_id, start, end)
 
         category_budgets = []
         for row in cat_budget_resp.data:
@@ -386,10 +377,11 @@ async def get_rule_503020(request: Request, month: Optional[str] = None):
     try:
         start, end = _month_bounds(month)
         resolved_month = f"{start.year:04d}-{start.month:02d}"
-        available_months = await _available_months(user_id)
-
-        income = await _monthly_income(user_id)
-        spend_by_cat = await _spend_by_category(user_id, start, end)
+        available_months, income, spend_by_cat = await asyncio.gather(
+            _available_months(user_id),
+            _monthly_income(user_id),
+            _spend_by_category(user_id, start, end),
+        )
 
         bucket_totals = {"Need": 0.0, "Want": 0.0, "Savings": 0.0}
         bucket_categories: dict = {"Need": [], "Want": [], "Savings": []}
@@ -440,41 +432,39 @@ async def get_savings(request: Request):
     user_id = request.state.user_id
 
     try:
-        budget_config = await _budget_config(user_id)
-
         now = _now_cn()
         month_start = _month_start(now)
-
-        # Current month spend, summed in Postgres (see migration
-        # 20260811090000_transaction_sum_rpcs.sql) instead of pulling every
-        # row and summing in Python.
-        spend_resp = await run_query(
-            lambda: supabase_client.rpc(
-                "sum_user_transactions", {"p_user_id": user_id, "p_start": month_start.isoformat()}
-            ).execute()
-        )
-        current_spend = float(spend_resp.data or 0)
-
         # Simple anomaly detection: compare to average of last 3 months
         three_months_ago = _months_ago_start(3, now)
 
-        # Per-month totals computed in Postgres — a handful of rows (one per
-        # month) instead of every raw transaction in the window.
-        monthly_resp = await run_query(
-            lambda: supabase_client.rpc(
-                "monthly_spend_by_user",
-                {
-                    "p_user_id": user_id,
-                    "p_start": three_months_ago.isoformat(),
-                    "p_end": month_start.isoformat(),
-                },
-            ).execute()
+        # All independent — run concurrently. Current-month spend and
+        # per-month totals are computed in Postgres (migration
+        # 20260811090000_transaction_sum_rpcs.sql).
+        budget_config, spend_resp, monthly_resp, income = await asyncio.gather(
+            _budget_config(user_id),
+            run_query(
+                lambda: supabase_client.rpc(
+                    "sum_user_transactions", {"p_user_id": user_id, "p_start": month_start.isoformat()}
+                ).execute()
+            ),
+            run_query(
+                lambda: supabase_client.rpc(
+                    "monthly_spend_by_user",
+                    {
+                        "p_user_id": user_id,
+                        "p_start": three_months_ago.isoformat(),
+                        "p_end": month_start.isoformat(),
+                    },
+                ).execute()
+            ),
+            _monthly_income(user_id),
         )
+        current_spend = float(spend_resp.data or 0)
+
         monthly_totals = [float(row["total"]) for row in (monthly_resp.data or [])]
         avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
 
         savings_goal = float(budget_config["saving_goal_monthly"]) if budget_config and budget_config["saving_goal_monthly"] else 0
-        income = await _monthly_income(user_id)
 
         return {
             "savings_goal_monthly": savings_goal,
@@ -574,8 +564,26 @@ async def get_action(request: Request):
         budget_inapp_enabled = profile_row.get("budget_inapp_enabled", True)
         pending_review_inapp_enabled = profile_row.get("pending_review_inapp_enabled", True)
 
+        async def _review_count():
+            if not pending_review_inapp_enabled:
+                return 0
+            resp = await run_query(
+                lambda: supabase_client.table("transactions")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .eq("needs_review", True)
+                .limit(1)
+                .execute()
+            )
+            return resp.count if resp.count is not None else len(resp.data)
+
+        async def _crossings():
+            return await _budget_crossings(user_id, threshold_pct) if budget_inapp_enabled else []
+
+        crossings, review_count = await asyncio.gather(_crossings(), _review_count())
+
         if budget_inapp_enabled:
-            for crossing in await _budget_crossings(user_id, threshold_pct):
+            for crossing in crossings:
                 action = {
                     "type": _CROSSING_KIND_TO_ACTION_TYPE[crossing["kind"]],
                     "category": crossing["category"],
@@ -589,15 +597,6 @@ async def get_action(request: Request):
                 actions.append(action)
 
         if pending_review_inapp_enabled:
-            # Review queue count
-            review_resp = await run_query(
-                lambda: supabase_client.table("transactions")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .eq("needs_review", True)
-                .execute()
-            )
-            review_count = review_resp.count if review_resp.count is not None else len(review_resp.data)
             if review_count > 0:
                 actions.append({
                     "type": "pending_review",

@@ -67,7 +67,8 @@ financing/
 │       ├── 20260811090000_transaction_sum_rpcs.sql     # Postgres-side sum/monthly-spend RPCs
 │       ├── … (2026-08-13/14 feature migrations)
 │       ├── 20260927000000_restore_perf_indexes.sql     # user_id+timestamp/needs_review/category indexes, FK indexes, RLS initplan fix
-│       └── 20260927010000_add_english_label_columns.sql # transactions.merchant_en/description_en (stored translations)
+│       ├── 20260927010000_add_english_label_columns.sql # transactions.merchant_en/description_en (stored translations)
+│       └── 20260927020000_dashboard_aggregate_rpcs.sql  # available_months/spend_trend RPCs, search_path fix
 │
 ├── tests/                     # pytest suite for src/ (74 tests)
 │   ├── test_parse.py, test_validate.py, test_semantic.py, test_calibration.py

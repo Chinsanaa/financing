@@ -364,10 +364,34 @@ class FakeSupabaseClient:
         # heavily enough to need one.
         self.rpc_handlers: dict[str, Any] = {
             "spend_by_category_for_user": self._default_spend_by_category_for_user,
+            "available_months_for_user": self._default_available_months_for_user,
+            "spend_trend_for_user": self._default_spend_trend_for_user,
         }
 
     def table(self, name: str) -> FakeQueryBuilder:
         return self._tables.setdefault(name, FakeTable(name)).query()
+
+    def _user_txns(self, user_id: str) -> list:
+        transactions = self._tables.get("transactions")
+        return [t for t in (transactions.rows if transactions else []) if t.get("user_id") == user_id]
+
+    def _default_available_months_for_user(self, params: dict) -> list:
+        # Mirrors the SQL: distinct 'YYYY-MM', newest first (PostgREST returns
+        # a SETOF text as a list of scalars).
+        months = {t["timestamp"][:7] for t in self._user_txns(params["p_user_id"]) if t.get("timestamp")}
+        return sorted(months, reverse=True)
+
+    def _default_spend_trend_for_user(self, params: dict) -> list:
+        width = 7 if params.get("p_granularity") == "month" else 10
+        totals: dict[str, float] = {}
+        for t in self._user_txns(params["p_user_id"]):
+            ts = t.get("timestamp")
+            if not ts or ts < params["p_start"]:
+                continue
+            if not (t.get("category_id") or t.get("is_split")):
+                continue
+            totals[ts[:width]] = totals.get(ts[:width], 0) + float(t.get("amount", 0))
+        return [{"bucket": b, "total": v} for b, v in sorted(totals.items())]
 
     def _default_spend_by_category_for_user(self, params: dict) -> list:
         user_id = params.get("p_user_id")

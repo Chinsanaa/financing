@@ -4353,3 +4353,30 @@ transactions returned the raw (possibly Chinese) merchant — now English.
 10 new tests (`backend/tests/test_translations.py`); backend 138 passing,
 ML suite 95 passing (3 jieba-dependent modules can't build in the sandbox —
 same on main).
+
+**Phase 4 (same session) — fewer, parallel round trips.** Migration
+`20260927020000_dashboard_aggregate_rpcs.sql` (applied live): new RPCs
+`available_months_for_user` and `spend_trend_for_user` (bucket with
+`"timestamp" AT TIME ZONE 'UTC'` — matches the old pandas bucketing; verified
+live: 0 mismatches over 8 months of real data), EXECUTE revoked from
+anon/authenticated (service_role only), `search_path` pinned on the 3 older
+aggregate RPCs (security-advisor lint 0011), `recurring_merchants.merchant_en`.
+Backend: `/dashboard/trends` + `_available_months` use the RPCs (the latter
+paged the WHOLE history on every Budget/50-30-20 load); `summary`, `budget`,
+`rule-503020`, `savings`, `action` run independent queries with
+`asyncio.gather`; count queries use `.limit(1)` (count comes from the header —
+no need to ship 1,000 ids); `GZipMiddleware(minimum_size=1000)`.
+`/subscriptions/`: serves the cached `recurring_merchants` table immediately
+and re-runs detection in a background asyncio task (at most one visit
+stale); only a user with nothing cached waits for detection inline. Also
+returns English merchant names now (was raw, possibly Chinese — the open item
+from Phase 3). 5 new tests (`test_dashboard_perf.py`); backend 143 passing.
+**Not done (low value today):** insights' `transaction_splits` fetch still
+has no date filter (0 splits live); `/dashboard/notifications` still does its
+profile read → welcome upsert → select in sequence (they depend on each
+other). Couldn't time endpoints end-to-end from the sandbox (needs a user
+JWT) — verify after merge in the browser.
+
+**Next:** Phase 5 — frontend (in-flight dedupe of the double
+`/dashboard/summary`, sessionStorage cache, token reuse, LazyMotion,
+TourSpotlight polling).
