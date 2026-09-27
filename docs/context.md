@@ -4289,3 +4289,125 @@ the primary pinger: **cron-job.org every 10 min — user must set this up
 **Next:** Phase 2 indexes (+ advisor FK indexes, RLS `(select auth.uid())`
 rewrite) → Phase 3 stored translations → Phase 4 SQL RPCs / gather / gzip →
 Phase 5 frontend dedupe + sessionStorage + LazyMotion.
+
+**Phase 1 merged** (PR #56, 2026-09-27). First probe right after merge still
+hit the old build and took 33.5s again (cold start re-confirmed).
+
+**Phase 2 (same session) — indexes, applied live** via migration
+`20260927000000_restore_perf_indexes.sql` (`restore_perf_indexes`):
+`transactions(user_id,timestamp)`, partial `transactions(user_id) WHERE
+needs_review`, `transactions(user_id,category_id)`; FK indexes on
+`transaction_splits(user_id)`, `transaction_splits(category_id)`,
+`budget_alerts(category_id)`, `recurring_merchants(category_id)`; the 16 RLS
+policies on budget_alerts/transaction_splits/notifications/
+recurring_merchants rewritten `auth.uid()` → `(select auth.uid())` (same
+semantics, evaluated once per statement). Verified: performance advisor went
+from 20 WARN/INFO findings on these to 0; 12-month query plan now uses
+`transactions_user_id_timestamp_idx` — **6.5ms → 1.1ms**.
+
+**Honest scale note:** live DB is only 1,436 transactions / 2 users, so this
+is future-proofing, not a user-visible speedup today. The felt slowness is
+cold starts (Phase 1), live translation (Phase 3), sequential round trips
+(Phase 4).
+
+**Do NOT drop these indexes because the advisor says "unused index"** — it
+reports that for every freshly created index (stats start at zero, and were
+also reset by the 2026-09-27 project restore). That exact misreading is what
+removed the original indexes in `20260707000000_...`.
+
+Unrelated pre-existing security-advisor WARNs seen while checking (not
+touched this session): 3 RPCs with mutable `search_path`
+(`sum_user_transactions`, `monthly_spend_by_user`,
+`spend_by_category_for_user`), `get_email_for_username` /
+`is_username_available` / `rls_auto_enable` executable by anon, leaked-password
+protection off (dashboard-only setting).
+
+**Next:** Phase 3 — store English translations at upload time.
+
+**Phase 3 (same session) — stored translations** (user chose "store in DB at
+upload"). Reports / Review / Export / Insights no longer call Google
+Translate on page load. New nullable `transactions.merchant_en` /
+`description_en` (migration `20260927010000_add_english_label_columns.sql`,
+applied live — additive, safe for the old deployed code). New
+`backend/translations.py`: per-user coalesced background worker (same
+pattern as `ml.request_classification`) that translates each DISTINCT
+string once and writes it to every matching row. Triggered after uploads,
+after manual entries, and lazily by the read endpoints whenever a returned
+row still has a NULL column — which is how the **one-time backfill** of the
+existing 1,436 rows (~125 distinct Chinese merchants + ~827 descriptions)
+happens: automatically, the first time Reports is opened after deploy.
+Failures stay NULL (retried later, 30-min in-process backoff per string so a
+Google outage doesn't cause a call storm). Read path =
+`src/translate.py::merchant_label_stored/description_label_stored` (curated
+map first, so improving `merchant_display.py` still applies instantly; never
+shows Chinese — "Unknown merchant" until translated). Also fixed:
+`translate_to_english` no longer caches failures (lru_cache pinned blank
+labels until restart); removed now-unused live `merchant_label_english` /
+`description_label_english`; dashboard imports `src.translate` (single
+module, not two). **Bug fixed along the way:** Insights' flagged
+transactions returned the raw (possibly Chinese) merchant — now English.
+**Still open:** Subscriptions tab also shows raw merchant names
+(`recurring_merchants.merchant`) — fold into Phase 4's subscriptions rewrite.
+**Known trade-off:** right after deploy, not-yet-translated rows show
+"Unknown merchant"/blank description for the few minutes the backfill takes.
+10 new tests (`backend/tests/test_translations.py`); backend 138 passing,
+ML suite 95 passing (3 jieba-dependent modules can't build in the sandbox —
+same on main).
+
+**Phase 4 (same session) — fewer, parallel round trips.** Migration
+`20260927020000_dashboard_aggregate_rpcs.sql` (applied live): new RPCs
+`available_months_for_user` and `spend_trend_for_user` (bucket with
+`"timestamp" AT TIME ZONE 'UTC'` — matches the old pandas bucketing; verified
+live: 0 mismatches over 8 months of real data), EXECUTE revoked from
+anon/authenticated (service_role only), `search_path` pinned on the 3 older
+aggregate RPCs (security-advisor lint 0011), `recurring_merchants.merchant_en`.
+Backend: `/dashboard/trends` + `_available_months` use the RPCs (the latter
+paged the WHOLE history on every Budget/50-30-20 load); `summary`, `budget`,
+`rule-503020`, `savings`, `action` run independent queries with
+`asyncio.gather`; count queries use `.limit(1)` (count comes from the header —
+no need to ship 1,000 ids); `GZipMiddleware(minimum_size=1000)`.
+`/subscriptions/`: serves the cached `recurring_merchants` table immediately
+and re-runs detection in a background asyncio task (at most one visit
+stale); only a user with nothing cached waits for detection inline. Also
+returns English merchant names now (was raw, possibly Chinese — the open item
+from Phase 3). 5 new tests (`test_dashboard_perf.py`); backend 143 passing.
+**Not done (low value today):** insights' `transaction_splits` fetch still
+has no date filter (0 splits live); `/dashboard/notifications` still does its
+profile read → welcome upsert → select in sequence (they depend on each
+other). Couldn't time endpoints end-to-end from the sandbox (needs a user
+JWT) — verify after merge in the browser.
+
+**Next:** Phase 5 — frontend (in-flight dedupe of the double
+`/dashboard/summary`, sessionStorage cache, token reuse, LazyMotion,
+TourSpotlight polling).
+
+**Phase 5 (same session) — frontend.** `utils/useApi.ts`: concurrent GETs
+for the same path share one request (the Overview fired
+`/dashboard/summary` twice — OnboardingTour + StatsTab); `invalidate()` also
+drops matching in-flight requests so a refetch after a mutation can't reuse
+a pre-mutation response. New `utils/apiCache.ts`: cache mirrored to
+**sessionStorage** (user's choice — per-tab, gone on tab close), key prefix
+`apiCache:v1:`, every access try/catch'd; cleared on Supabase `SIGNED_OUT`
+(covers header + Settings sign-out) and on any 401 (`utils/api.ts`).
+framer-motion: all 13 importers use `m.*` + a root `MotionProvider`
+(`LazyMotion`, `domMax` loaded as an async chunk — needed for `layoutId`).
+Fixed a latent collision this would have caused: `AuthClient`'s tab map used
+a local `m` (renamed `tabMode`). `TourSpotlight`: keeps its 400ms poll
+(targets mount late) but only re-renders when the rect actually changes.
+**Measured (`next build` First Load JS):** `/` 152→130 kB, `/auth` 228→205
+kB, `/dashboard` 230→207 kB. Headless-Chromium check of `/` and `/auth`
+(built app): renders, auth tab switch + `layoutId` pill work, no JS errors.
+**Dropped from the plan, with reasons:** (1) caching the access token instead
+of `getSession()` per request — `getSession()` is a local cookie read unless
+the token expired (then refreshing is correct); a hand-rolled cache risks
+sending expired tokens → 401 → forced logout. (2) "two Supabase clients" —
+`@supabase/ssr` 0.0.10's `createBrowserClient` is already a browser
+singleton (`isSingleton = true`), so no race existed.
+**Not verified:** the logged-in dashboard in a browser (needs a real
+account) — dedupe/sessionStorage behavior must be confirmed by the user
+after merge (reload Overview: numbers should appear instantly).
+
+**Next suggested step:** merge PR #57 → open Reports once (starts the
+one-time translation backfill) → click through Overview/Reports/Budget/
+Subscriptions → set up the cron-job.org pinger if not done. Then re-measure:
+first request after 30+ idle min should be <2s (was 33.5s).

@@ -4,7 +4,7 @@ Hard rule: the web UI should never display Chinese text. If translation fails,
 return a safe English placeholder instead of leaking original CJK text.
 """
 import re
-from functools import lru_cache
+from typing import Optional
 
 
 _CJK_RE = re.compile(r'[一-鿿㐀-䶿豈-﫿]')
@@ -24,24 +24,39 @@ def _mostly_ascii(text: str) -> bool:
         return False
 
 
-@lru_cache(maxsize=4096)
-def translate_to_english(text: str) -> str:
-    """Translate text to English; return unchanged if already non-CJK.
+_TRANSLATION_CACHE_MAX = 4096
+_translation_cache: dict = {}
 
-    Caches results to avoid repeated API calls for the same text.
-    Returns empty string if translation fails.
+
+def translate_to_english(text: str) -> str:
+    """Translate text to English via Google (a live network call); return
+    unchanged if already non-CJK.
+
+    Only successful translations are cached — a failure (timeout, 429)
+    returns '' uncached so the next attempt can succeed. (The previous
+    lru_cache also memoized failures, pinning a blank label until restart.)
+
+    Write-path only: request handlers must use the `*_stored` label
+    functions below, which never touch the network.
     """
     text = str(text or '').strip()
     if not text:
         return ''
     if not has_cjk(text):
         return text
+    cached = _translation_cache.get(text)
+    if cached is not None:
+        return cached
     try:
         from deep_translator import GoogleTranslator
-        translated = GoogleTranslator(source='auto', target='en').translate(text[:500])
-        return (translated or '').strip()
+        translated = (GoogleTranslator(source='auto', target='en').translate(text[:500]) or '').strip()
     except Exception:
         return ''
+    if translated:
+        if len(_translation_cache) >= _TRANSLATION_CACHE_MAX:
+            _translation_cache.clear()
+        _translation_cache[text] = translated
+    return translated
 
 
 def _sanitize_english(text: str, fallback: str) -> str:
@@ -62,30 +77,52 @@ def shorten(text: str, max_len: int = 28) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
-def merchant_label_english(merchant: str) -> str:
-    """English-only merchant name (never Chinese).
+# --- Stored translations (transactions.merchant_en / description_en) ---
+#
+# Translating on every page load meant one serial Google call per Chinese
+# string (~200 for one Reports page). Instead, backend/translations.py
+# translates each distinct string ONCE in the background after upload and
+# stores the result on the row; the request path only formats stored text.
 
-    Returns 'Unknown merchant' if merchant is empty or untranslatable.
-    Delegates to display_merchant for curated mappings.
+
+def english_for_storage(text: str) -> Optional[str]:
+    """Value to store in a `*_en` column for `text`, or None to retry later.
+
+    Non-CJK text (and empty text) is stored as-is so the row never needs
+    another pass; CJK text is machine-translated (network call). None means
+    translation failed — the column stays NULL and a later pass retries.
     """
-    from merchant_display import display_merchant
+    text = str(text or '').strip()
+    if not text or not has_cjk(text):
+        return text
+    translated = _sanitize_english(translate_to_english(text), '')
+    return translated or None
+
+
+def merchant_label_stored(merchant: str, merchant_en: Optional[str]) -> str:
+    """English-only merchant label from the stored translation — no network.
+
+    Curated names (src/merchant_display.py) still win, so improving that map
+    takes effect immediately without re-translating stored rows.
+    """
+    from src.merchant_display import curated_merchant_name
     merchant = str(merchant or '').strip()
     if not merchant:
         return 'Unknown merchant'
-    result = display_merchant(merchant)
-    return result if result else 'Unknown merchant'
+    curated = curated_merchant_name(merchant)
+    if curated:
+        return curated
+    if not has_cjk(merchant):
+        return merchant
+    return shorten(_sanitize_english(merchant_en, 'Unknown merchant'), 28)
 
 
-def description_label_english(description: str) -> str:
-    """English-only description (never Chinese).
-
-    Returns empty string if description is empty, slash-only, or untranslatable.
-    """
+def description_label_stored(description: str, description_en: Optional[str]) -> str:
+    """English-only description from the stored translation — no network."""
     description = str(description or '').strip()
     if not description or description == '/':
         return ''
     if not has_cjk(description):
         return shorten(description, 80)
-    translated = translate_to_english(description)
-    translated = _sanitize_english(translated, '')
+    translated = _sanitize_english(description_en, '')
     return shorten(translated, 80) if translated else ''

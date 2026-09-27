@@ -1,6 +1,7 @@
 """FastAPI backend for financing SaaS - multi-tenant transaction classification."""
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
@@ -135,6 +136,9 @@ app.add_middleware(
     allow_headers=["*"],
     max_age=600,  # let browsers cache preflight OPTIONS responses for 10 min
 )
+# Added last = outermost: compresses every response, including auth/CORS
+# errors. JSON lists (Reports pages, up to 500 rows) shrink ~5-10x.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # --- Health Check ---

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Badge, { categoryColor } from '@/components/ui/Badge';
@@ -54,7 +54,7 @@ export default function DemoStrip() {
               <div className="flex shrink-0 items-center gap-3">
                 <AnimatePresence mode="wait">
                   {done ? (
-                    <motion.span
+                    <m.span
                       key="badge"
                       initial={{ opacity: 0, scale: 0.7 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -62,15 +62,15 @@ export default function DemoStrip() {
                       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                     >
                       <Badge tone={categoryColor(row.category)}>{row.category}</Badge>
-                    </motion.span>
+                    </m.span>
                   ) : (
-                    <motion.span
+                    <m.span
                       key="pending"
                       exit={{ opacity: 0 }}
                       className="text-xs text-muted"
                     >
                       Uncategorized
-                    </motion.span>
+                    </m.span>
                   )}
                 </AnimatePresence>
                 <span className="text-sm font-medium tabular-nums">{row.amount}</span>

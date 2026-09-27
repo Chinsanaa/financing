@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { BrainCircuit, Languages, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/utils/supabase';
 import { apiClient } from '@/utils/api';
@@ -229,7 +229,7 @@ export default function AuthClient() {
 
       {/* Form panel */}
       <div className="flex items-center justify-center px-4 py-16 sm:px-8 xl:px-12">
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -238,20 +238,20 @@ export default function AuthClient() {
           {mode !== 'forgot' && (
             <div className="mb-8 inline-flex rounded-pill bg-surface-2 p-1" role="tablist" aria-label="Sign in or create account">
               {[
-                { m: 'signin' as Mode, label: 'Sign in' },
-                { m: 'signup' as Mode, label: 'Create account' },
-              ].map(({ m, label }) => (
+                { tabMode: 'signin' as Mode, label: 'Sign in' },
+                { tabMode: 'signup' as Mode, label: 'Create account' },
+              ].map(({ tabMode, label }) => (
                 <button
                   key={label}
                   role="tab"
-                  aria-selected={mode === m}
-                  onClick={() => switchMode(m)}
+                  aria-selected={mode === tabMode}
+                  onClick={() => switchMode(tabMode)}
                   className={`relative rounded-pill px-4 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
-                    mode === m ? 'text-ink font-medium' : 'text-muted hover:text-ink'
+                    mode === tabMode ? 'text-ink font-medium' : 'text-muted hover:text-ink'
                   }`}
                 >
-                  {mode === m && (
-                    <motion.span
+                  {mode === tabMode && (
+                    <m.span
                       layoutId="auth-mode"
                       className="absolute inset-0 rounded-pill bg-surface border border-edge/10 shadow-card"
                       transition={{ type: 'spring', stiffness: 500, damping: 40 }}
@@ -365,7 +365,7 @@ export default function AuthClient() {
 
               <AnimatePresence initial={false}>
                 {isSignup && (
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
@@ -381,7 +381,7 @@ export default function AuthClient() {
                       autoComplete="new-password"
                       error={confirmMismatch ? 'Passwords do not match' : undefined}
                     />
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
 
@@ -426,7 +426,7 @@ export default function AuthClient() {
               </Button>
             </form>
           )}
-        </motion.div>
+        </m.div>
       </div>
     </div>
   );

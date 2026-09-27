@@ -195,6 +195,14 @@ cold start) and Supabase pauses after ~7 idle days. Point a pinger
 runs a one-row DB query. `.github/workflows/keepalive.yml` is a backup.
 See DEPLOYMENT.md Step 2.5.
 
+**Translations are stored, not live:** English merchant/description text is
+translated once per distinct string in the background (`backend/translations.py`)
+and stored in `transactions.merchant_en`/`description_en`; pages never call
+Google Translate.
+
+**Frontend data cache:** `useApi` dedupes concurrent GETs and mirrors responses
+to sessionStorage (per-tab; cleared on sign-out/401) so reloads render instantly.
+
 ## Tests
 
 ```bash

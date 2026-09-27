@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
@@ -168,7 +168,7 @@ export default function ReviewTab() {
               <tbody className="divide-y divide-edge/8">
                 <AnimatePresence initial={false}>
                   {data.transactions.map((tx) => (
-                    <motion.tr
+                    <m.tr
                       key={tx.id}
                       layout
                       exit={{ opacity: 0, x: -32 }}
@@ -248,7 +248,7 @@ export default function ReviewTab() {
                           </button>
                         )}
                       </td>
-                    </motion.tr>
+                    </m.tr>
                   ))}
                 </AnimatePresence>
               </tbody>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Check } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 
 export type Step = { id: string; title: string };
 
@@ -33,13 +33,13 @@ export default function Stepper({
                 }`}
               >
                 {done ? (
-                  <motion.span
+                  <m.span
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 25 }}
                   >
                     <Check className="h-4 w-4" />
-                  </motion.span>
+                  </m.span>
                 ) : (
                   i + 1
                 )}

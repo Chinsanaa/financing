@@ -199,6 +199,10 @@ def schedule_classification(request: Request, user_id: str) -> None:
         request_classification(user_id)
     except Exception as e:
         logger.warning("Could not schedule classification for %s: %s", user_id, e)
+    # Translate the new rows' merchant/description once, in the background,
+    # so Reports/Review never call Google Translate on page load.
+    from translations import request_translation
+    request_translation(user_id)
 
 
 @router.get("/{upload_id}")

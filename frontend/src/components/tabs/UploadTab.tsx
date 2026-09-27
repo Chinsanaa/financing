@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { FileSpreadsheet, UploadCloud, Trash2, PenLine } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
@@ -323,12 +323,12 @@ export default function UploadTab() {
         }`}
       >
         <div className="space-y-4">
-          <motion.div
+          <m.div
             animate={dragActive ? { scale: 1.1, y: -4 } : { scale: 1, y: 0 }}
             className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-accent/12 text-accent-strong"
           >
             <UploadCloud className="h-7 w-7" />
-          </motion.div>
+          </m.div>
           <div>
             <p className="font-medium">Drag and drop your files here</p>
             <p className="mt-1 text-sm text-muted">or choose them from your computer</p>
@@ -363,7 +363,7 @@ export default function UploadTab() {
       </div>
 
       {showManualForm && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="space-y-4 p-6">
             <SectionHeader label="Manual entry" title="Add an expense" />
             <form onSubmit={handleManualSubmit} className="space-y-4">
@@ -429,11 +429,11 @@ export default function UploadTab() {
               </div>
             </form>
           </Card>
-        </motion.div>
+        </m.div>
       )}
 
       {queue.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+        <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
           <div className="space-y-2">
             {queue.map((item) => (
               <UploadQueueItem key={item.id} item={item} onRemove={removeFromQueue} disabled={running} />
@@ -467,7 +467,7 @@ export default function UploadTab() {
               </>
             )}
           </div>
-        </motion.div>
+        </m.div>
       )}
 
       {queueError && <Alert kind="error">{queueError}</Alert>}

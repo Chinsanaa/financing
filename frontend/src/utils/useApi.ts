@@ -2,39 +2,61 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
+import { clearApiCache, readCached, writeCached, dropCached } from './apiCache';
 
 /**
  * Tiny stale-while-revalidate data hook (no external deps).
  *
  * - First mount of a path: fetch + spinner.
- * - Re-mount (tab switch back): render the cached data instantly, refresh
- *   in the background. Kills the "every tab switch refetches with a
- *   full-page spinner" behavior.
+ * - Re-mount (tab switch back) or page reload in the same tab: render the
+ *   cached data instantly, refresh in the background. The cache lives in
+ *   memory and is mirrored to sessionStorage (see apiCache.ts), so a reload
+ *   doesn't start from a blank spinner.
+ * - Concurrent requests for the same path share one network call (e.g.
+ *   OnboardingTour and StatsTab both mount with /dashboard/summary).
  * - Mutations call `invalidate(prefix)` and/or `reload()`.
  */
 
-const cache = new Map<string, unknown>();
+export { clearApiCache };
+
 // Mounted useApi(path) instances register a background-revalidate callback here,
 // keyed by their exact path, so invalidate() can reach components that never
 // unmount (e.g. OnboardingTour) and not just the caller that mutated data.
 const subscribers = new Map<string, Set<() => void>>();
+// In-flight GETs by path — a second caller awaits the first's promise.
+const inflight = new Map<string, Promise<unknown>>();
 
 export function invalidate(prefix = '', opts?: { except?: string[] }): void {
   const except = opts?.except || [];
   const skip = (path: string) => except.some((p) => path.startsWith(p));
-  Array.from(cache.keys()).forEach((key) => {
-    if (key.startsWith(prefix) && !skip(key)) cache.delete(key);
+  dropCached((key) => key.startsWith(prefix) && !skip(key));
+  // A GET that started before the mutation may carry pre-mutation data —
+  // don't let the refetches below piggyback on it.
+  Array.from(inflight.keys()).forEach((key) => {
+    if (key.startsWith(prefix) && !skip(key)) inflight.delete(key);
   });
   subscribers.forEach((callbacks, path) => {
     if (path.startsWith(prefix) && !skip(path)) callbacks.forEach((cb) => cb());
   });
 }
 
+function fetchShared(path: string): Promise<unknown> {
+  const pending = inflight.get(path);
+  if (pending) return pending;
+  const request = api
+    .get(path)
+    .then((res) => {
+      writeCached(path, res.data);
+      return res.data;
+    })
+    .finally(() => inflight.delete(path));
+  inflight.set(path, request);
+  return request;
+}
+
 export function useApi<T>(path: string | null) {
-  const [data, setData] = useState<T | null>(
-    path && cache.has(path) ? (cache.get(path) as T) : null
-  );
-  const [loading, setLoading] = useState<boolean>(!!path && !cache.has(path));
+  const [data, setData] = useState<T | null>(() => (path ? (readCached(path) as T | undefined) ?? null : null));
+  const [loading, setLoading] = useState<boolean>(() => !!path && readCached(path) === undefined);
   const [error, setError] = useState('');
 
   const load = useCallback(
@@ -42,9 +64,7 @@ export function useApi<T>(path: string | null) {
       if (!path) return;
       if (!background) setLoading(true);
       try {
-        const res = await api.get(path);
-        cache.set(path, res.data);
-        setData(res.data as T);
+        setData((await fetchShared(path)) as T);
         setError('');
       } catch (err: any) {
         setError(err?.response?.data?.detail || 'Failed to load data');
@@ -57,8 +77,9 @@ export function useApi<T>(path: string | null) {
 
   useEffect(() => {
     if (!path) return;
-    if (cache.has(path)) {
-      setData(cache.get(path) as T);
+    const cached = readCached(path);
+    if (cached !== undefined) {
+      setData(cached as T);
       setLoading(false);
       load(true); // revalidate in the background
     } else {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Check, PartyPopper } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
@@ -169,7 +169,7 @@ export default function LabelTab() {
       )}
 
       <AnimatePresence mode="wait">
-        <motion.div
+        <m.div
           key={tx.id}
           initial={{ opacity: 0, x: 24 }}
           animate={{ opacity: 1, x: 0 }}
@@ -209,7 +209,7 @@ export default function LabelTab() {
               </div>
             )}
           </Card>
-        </motion.div>
+        </m.div>
       </AnimatePresence>
 
       <div className="space-y-3">

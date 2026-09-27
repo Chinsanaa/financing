@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { LucideIcon } from 'lucide-react';
 
 export type TabItem = { id: string; label: string; icon?: LucideIcon; tourId?: string };
@@ -37,7 +37,7 @@ export function TabBar({
             {Icon && <Icon className="h-4 w-4" />}
             {tab.label}
             {isActive && (
-              <motion.span
+              <m.span
                 layoutId={layoutId}
                 className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent"
                 transition={{ type: 'spring', stiffness: 500, damping: 40 }}
@@ -77,7 +77,7 @@ export function PillTabs({
             }`}
           >
             {isActive && (
-              <motion.span
+              <m.span
                 layoutId={layoutId}
                 className="absolute inset-0 rounded-pill bg-surface border border-edge/10 shadow-card"
                 transition={{ type: 'spring', stiffness: 500, damping: 40 }}
@@ -93,12 +93,12 @@ export function PillTabs({
 
 export function TabPanel({ children }: { children: ReactNode }) {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
