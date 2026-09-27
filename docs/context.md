@@ -4451,3 +4451,18 @@ the call directly). Dashboard-only setting; no MCP tool can edit templates.
 (2) code: `/auth/verify` now explains the cross-device PKCE failure ("request
 a new reset link and open it here") instead of the raw library error — for
 older emails / if the template isn't changed. Documented in DEPLOYMENT.md.
+
+**Failed sign-in warning felt intimidating** (user request, same session).
+`AuthClient.tsx`: `MAX_ATTEMPTS_BEFORE_LOCKOUT` 5 → **8** (user's number);
+new `WARN_AFTER_FAILED_ATTEMPTS = 3` — failures 1–2 show only "Invalid login
+credentials", failures 3–6 a neutral gray "N attempts left before a short
+pause.", only the last attempt is red. Lockout duration/backoff unchanged
+(30s doubling, cap 300s). Checked first: sign-in calls Supabase
+`signInWithPassword` directly (not the backend's `/auth/login` 10/15min
+limiter), so 8 client-side attempts don't collide with a server limit.
+**Bug fixed along the way:** the lockout countdown started at "37s" instead
+of 30s — `now` only ticks while locked, so it was stale at lock time; now
+refreshed when the lock starts. Verified with headless Chromium (8 simulated
+invalid-credential responses): exact states above, lock shows 30s. Dropped a
+planned extra "Forgot your password?" link in the hint — the screenshot
+showed one already sits directly above it.
