@@ -116,6 +116,21 @@ def client():
     return TestClient(main.app)
 
 
+@pytest.fixture(autouse=True)
+def translation_requests(monkeypatch):
+    """Record background-translation requests instead of starting worker
+    threads (which would outlive the test and hit the network). Tests of the
+    worker itself call translations.translate_user_transactions directly."""
+    import translations
+    import routes.transactions as transactions_module
+
+    calls: list = []
+    record = lambda user_id: calls.append(user_id) or True
+    monkeypatch.setattr(translations, "request_translation", record)
+    monkeypatch.setattr(transactions_module, "request_translation", record)
+    return calls
+
+
 @pytest.fixture
 def fake_db(monkeypatch):
     """Swap the real service-role Supabase client for the in-memory fake in
@@ -138,8 +153,10 @@ def fake_db(monkeypatch):
     import routes.transactions as transactions_module
     import alerts as alerts_module
     import main as main_module
+    import translations as translations_module
 
     monkeypatch.setattr(main_module, "supabase_client", fake)
+    monkeypatch.setattr(translations_module, "supabase_client", fake)
     monkeypatch.setattr(auth_module, "supabase_client", fake)
     monkeypatch.setattr(categories_module, "supabase_client", fake)
     monkeypatch.setattr(classify_module, "supabase_client", fake)

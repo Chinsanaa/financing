@@ -3,6 +3,7 @@ Short English display names for common merchants (charts & tables).
 Falls back to Google Translate when no mapping exists.
 """
 import math
+from typing import Optional
 
 # Exact merchant strings from exports (highest priority)
 EXACT_NAMES: dict[str, str] = {
@@ -404,6 +405,16 @@ SUBSTRING_RULES: list[tuple[str, str]] = [
 ]
 
 
+def curated_merchant_name(text: str) -> Optional[str]:
+    """Hand-curated English name for a merchant, or None (no network)."""
+    if text in EXACT_NAMES:
+        return EXACT_NAMES[text]
+    for pattern, label in SUBSTRING_RULES:
+        if pattern in text:
+            return label
+    return None
+
+
 def display_merchant(name: str) -> str:
     """Return a short English display name for a merchant."""
     if name is None:
@@ -414,12 +425,9 @@ def display_merchant(name: str) -> str:
     if not text:
         return text
 
-    if text in EXACT_NAMES:
-        return EXACT_NAMES[text]
-
-    for pattern, label in SUBSTRING_RULES:
-        if pattern in text:
-            return label
+    curated = curated_merchant_name(text)
+    if curated:
+        return curated
 
     # Lazy import avoids circular load with translate.py (which imports this module).
     from src.translate import _sanitize_english, has_cjk, shorten, translate_to_english

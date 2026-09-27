@@ -8,6 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, field_validator
 from config import supabase_client
+from translations import request_translation
 from db import run_query
 from errors import internal_error
 from limiter import limiter
@@ -70,6 +71,7 @@ async def create_manual_transaction(request: Request, body: ManualTransactionCre
         )
         if not resp.data:
             raise HTTPException(status_code=500, detail="Failed to create transaction")
+        request_translation(user_id)
 
         return {"transaction": resp.data[0]}
     except HTTPException:

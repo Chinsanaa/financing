@@ -7,7 +7,6 @@ TypeError — it is not a method.
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
-from starlette.concurrency import run_in_threadpool
 from config import supabase_client
 from db import fetch_all_async, run_query
 from errors import internal_error
@@ -15,7 +14,8 @@ from limiter import limiter
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
-from translate import merchant_label_english, description_label_english
+from src.translate import merchant_label_stored, description_label_stored
+from translations import request_translation_if_missing
 from src.categories import CATEGORY_BUCKET
 
 router = APIRouter()
@@ -753,7 +753,7 @@ async def get_insights(request: Request):
 
         plain_rows = await fetch_all_async(
             lambda: supabase_client.table("transactions")
-            .select("id, merchant, amount, timestamp, is_split, categories(name)")
+            .select("id, merchant, merchant_en, amount, timestamp, is_split, categories(name)")
             .eq("user_id", user_id)
             .not_.is_("category_id", "null")
             .gte("timestamp", window_start.isoformat())
@@ -778,6 +778,13 @@ async def get_insights(request: Request):
 
         if not plain_rows and not split_rows:
             return {"category_trends": [], "flagged_transactions": []}
+
+        # English display names (stored translations, no network) — raw
+        # merchant text can be Chinese, which the UI must never show.
+        merchant_labels = {
+            r["id"]: merchant_label_stored(r["merchant"], r.get("merchant_en")) for r in plain_rows
+        }
+        request_translation_if_missing(user_id, plain_rows)
 
         plain_df = pd.DataFrame(plain_rows)
         if not plain_df.empty:
@@ -830,7 +837,7 @@ async def get_insights(request: Request):
             for _, txn in group[group["amount"] > threshold].iterrows():
                 flagged_transactions.append({
                     "id": txn["id"],
-                    "merchant": txn["merchant"],
+                    "merchant": merchant_labels.get(txn["id"], txn["merchant"]),
                     "category": cat,
                     "amount": float(txn["amount"]),
                     "timestamp": txn["timestamp"].isoformat(),
@@ -890,7 +897,7 @@ async def get_reports(
         start = (page - 1) * per_page
         query = (
             supabase_client.table("transactions")
-            .select("id, timestamp, merchant, description, amount, category_id, categories(name), is_split, label_source",
+            .select("id, timestamp, merchant, description, merchant_en, description_en, amount, category_id, categories(name), is_split, label_source",
                     count="exact")
             .eq("user_id", user_id)
         )
@@ -971,8 +978,8 @@ async def get_reports(
                 rows.append({
                     "id": txn["id"],
                     "date": txn["timestamp"],
-                    "merchant": merchant_label_english(txn["merchant"]),
-                    "description": description_label_english(txn["description"]),
+                    "merchant": merchant_label_stored(txn["merchant"], txn.get("merchant_en")),
+                    "description": description_label_stored(txn["description"], txn.get("description_en")),
                     "amount": float(txn["amount"]),
                     "category": category_label,
                     "category_id": txn["category_id"],
@@ -986,10 +993,10 @@ async def get_reports(
                 })
             return rows
 
-        # merchant/description labeling can hit a live Google Translate call
-        # per untranslated string (see src/translate.py) — run the whole
-        # batch off the event loop so it doesn't block other requests.
-        transactions = await run_in_threadpool(build_rows)
+        # Labels come from stored translations (no network); rows still
+        # missing one get filled in the background for the next load.
+        request_translation_if_missing(user_id, response.data or [])
+        transactions = build_rows()
 
         return {
             "transactions": transactions,
@@ -1023,7 +1030,7 @@ async def export_transactions(request: Request):
         def make_query():
             return (
                 supabase_client.table("transactions")
-                .select("id, timestamp, merchant, description, amount, category_id, categories(name), is_split, label_source")
+                .select("id, timestamp, merchant, description, merchant_en, description_en, amount, category_id, categories(name), is_split, label_source")
                 .eq("user_id", user_id)
                 .order("timestamp", desc=True)
             )
@@ -1059,11 +1066,7 @@ async def export_transactions(request: Request):
         # Freeze header
         ws.freeze_panes = "A2"
 
-        # Add data rows. Building the rows can hit a live Google Translate
-        # call per untranslated merchant/description (see src/translate.py)
-        # over the user's ENTIRE transaction history — run the whole batch
-        # off the event loop so it doesn't block other requests, then append
-        # to the workbook (cheap, no network calls) back on the loop.
+        # Add data rows (labels from stored translations — no network).
         def _fmt_date(ts):
             if not ts:
                 return ""
@@ -1073,8 +1076,8 @@ async def export_transactions(request: Request):
             return [
                 [
                     _fmt_date(txn["timestamp"]),
-                    merchant_label_english(txn["merchant"]),
-                    description_label_english(txn["description"]),
+                    merchant_label_stored(txn["merchant"], txn.get("merchant_en")),
+                    description_label_stored(txn["description"], txn.get("description_en")),
                     f"Split ({split_counts.get(txn['id'], 0)})" if txn.get("is_split") else (txn["categories"]["name"] if txn["categories"] else "Uncategorized"),
                     float(txn["amount"]),
                     txn["label_source"] or "",
@@ -1082,7 +1085,8 @@ async def export_transactions(request: Request):
                 for txn in all_txns
             ]
 
-        for row in await run_in_threadpool(build_rows):
+        request_translation_if_missing(user_id, all_txns)
+        for row in build_rows():
             ws.append(row)
 
         # Format amount column
@@ -1132,7 +1136,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
             # Show manually labeled transactions for user review/correction
             response = await run_query(
                 lambda: supabase_client.table("transactions")
-                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name), is_split")
+                .select("id, timestamp, merchant, description, merchant_en, description_en, amount, confidence, category_id, categories(name), is_split")
                 .eq("user_id", user_id)
                 .eq("is_manually_labeled", True)
                 .order("timestamp", desc=True)  # Most recent labels first
@@ -1148,7 +1152,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
             # the queue — unique merchants make better labeling coverage.
             pool = await run_query(
                 lambda: supabase_client.table("transactions")
-                .select("id, timestamp, merchant, description, amount, confidence, category_id, categories(name), is_split")
+                .select("id, timestamp, merchant, description, merchant_en, description_en, amount, confidence, category_id, categories(name), is_split")
                 .eq("user_id", user_id)
                 .eq("needs_review", True)
                 .order("confidence")  # Least confident first
@@ -1178,8 +1182,8 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 {
                     "id": txn["id"],
                     "date": txn["timestamp"],
-                    "merchant": merchant_label_english(txn["merchant"]),
-                    "description": description_label_english(txn["description"]),
+                    "merchant": merchant_label_stored(txn["merchant"], txn.get("merchant_en")),
+                    "description": description_label_stored(txn["description"], txn.get("description_en")),
                     "amount": float(txn["amount"]),
                     "confidence": float(txn["confidence"]) if txn["confidence"] else 0,
                     "category": (("Split" if txn.get("is_split") else (txn["categories"]["name"] if txn["categories"] else None)) if show_labeled else None),
@@ -1188,9 +1192,8 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 for txn in rows
             ]
 
-        # merchant/description labeling can hit a live Google Translate call
-        # per untranslated string — run the batch off the event loop.
-        transactions = await run_in_threadpool(build_rows)
+        request_translation_if_missing(user_id, rows)
+        transactions = build_rows()
 
         return {
             "transactions": transactions,

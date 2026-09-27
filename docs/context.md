@@ -4323,3 +4323,33 @@ touched this session): 3 RPCs with mutable `search_path`
 protection off (dashboard-only setting).
 
 **Next:** Phase 3 — store English translations at upload time.
+
+**Phase 3 (same session) — stored translations** (user chose "store in DB at
+upload"). Reports / Review / Export / Insights no longer call Google
+Translate on page load. New nullable `transactions.merchant_en` /
+`description_en` (migration `20260927010000_add_english_label_columns.sql`,
+applied live — additive, safe for the old deployed code). New
+`backend/translations.py`: per-user coalesced background worker (same
+pattern as `ml.request_classification`) that translates each DISTINCT
+string once and writes it to every matching row. Triggered after uploads,
+after manual entries, and lazily by the read endpoints whenever a returned
+row still has a NULL column — which is how the **one-time backfill** of the
+existing 1,436 rows (~125 distinct Chinese merchants + ~827 descriptions)
+happens: automatically, the first time Reports is opened after deploy.
+Failures stay NULL (retried later, 30-min in-process backoff per string so a
+Google outage doesn't cause a call storm). Read path =
+`src/translate.py::merchant_label_stored/description_label_stored` (curated
+map first, so improving `merchant_display.py` still applies instantly; never
+shows Chinese — "Unknown merchant" until translated). Also fixed:
+`translate_to_english` no longer caches failures (lru_cache pinned blank
+labels until restart); removed now-unused live `merchant_label_english` /
+`description_label_english`; dashboard imports `src.translate` (single
+module, not two). **Bug fixed along the way:** Insights' flagged
+transactions returned the raw (possibly Chinese) merchant — now English.
+**Still open:** Subscriptions tab also shows raw merchant names
+(`recurring_merchants.merchant`) — fold into Phase 4's subscriptions rewrite.
+**Known trade-off:** right after deploy, not-yet-translated rows show
+"Unknown merchant"/blank description for the few minutes the backfill takes.
+10 new tests (`backend/tests/test_translations.py`); backend 138 passing,
+ML suite 95 passing (3 jieba-dependent modules can't build in the sandbox —
+same on main).
