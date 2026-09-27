@@ -4247,3 +4247,45 @@ is masking it (no more 500s reaching users) but Render logs still show
 occasional first-attempt drops, that confirms the fix is working as
 intended rather than the drops having simply stopped happening on their
 own.
+
+### Session 68 (2026-09-27) — Performance audit + fix plan; Phase 0–1 (keep-alive)
+
+**Why:** user reported the site loads VERY slowly. Full audit (live
+measurement + frontend + backend code); plan approved by the user with a
+phased todo list (plan copy: see PR description).
+
+**Measured live:** Render free-plan backend cold start = **33.5s** first
+request, ~0.5s after. Supabase project `pxxqqffwummhkohnrvtz` was
+**INACTIVE (auto-paused after ~7 idle days)** — app fully broken, not just
+slow; the user restored it manually the same day.
+
+**Root causes, ranked:** (1) Render sleeps after 15 idle min, nothing keeps
+it awake; (2) Supabase free-tier auto-pause; (3) Reports/Review/Export call
+Google Translate live, per row, serially (`src/translate.py`, memory-only
+`lru_cache`); (4) `transactions(user_id,timestamp)` + `(user_id,needs_review)`
+indexes were dropped in `20260707000000_...` as "never used" — **that call was
+wrong**, it was judged on a near-empty DB; Supabase advisors also flag
+unindexed `transaction_splits(user_id/category_id)` FKs + 16 RLS policies
+using per-row `auth.uid()`; (5) full-history reads per page load
+(`_available_months`, trends, subscriptions GET which also writes, insights
+splits); (6) sequential DB calls, no `asyncio.gather`; (7) frontend: duplicate
+`/dashboard/summary` fetch (no in-flight dedupe), no cache across reloads,
+`getSession()` per request, eager framer-motion, 400ms tour polling.
+
+**Decided (with user):** free keep-alive ping over paying for Render Starter
+($7/mo — revisit if the free CPU is still slow after Phase 4); store English
+translations in the DB at upload time (+ one-time backfill, user OK needed
+before running on live data); persist the frontend data cache in
+**sessionStorage only** (cleared on tab close/logout — financial data
+shouldn't linger on disk).
+
+**Built (Phase 1):** `GET /health/deep` (public, one-row `categories` query →
+`{"status":"ok","db":true}` or 503) — `/health` left DB-free since Render
+uses it as the liveness check. `.github/workflows/keepalive.yml` pings it
+every 10 min (backup; GitHub cron can lag). DEPLOYMENT.md Step 2.5 documents
+the primary pinger: **cron-job.org every 10 min — user must set this up
+(needs their own account)**. 2 new tests; backend suite 128 passing.
+
+**Next:** Phase 2 indexes (+ advisor FK indexes, RLS `(select auth.uid())`
+rewrite) → Phase 3 stored translations → Phase 4 SQL RPCs / gather / gzip →
+Phase 5 frontend dedupe + sessionStorage + LazyMotion.

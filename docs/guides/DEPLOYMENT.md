@@ -113,6 +113,29 @@ and the running container; saving them triggers an automatic redeploy.
 **Save the Render backend URL** (e.g. `https://financing-lxgt.onrender.com`
 for this project): you'll need it for the frontend.
 
+### Step 2.5: Keep-alive pinger (free plans only)
+
+Render's free plan sleeps after ~15 idle minutes (the next visitor waits
+~30s for a cold start; measured 33.5s on 2026-09-27). Supabase's free plan
+pauses the whole project after ~7 days without DB activity (login and all
+data then fail until someone clicks Restore). One pinger fixes both:
+`GET /health/deep` (no auth) wakes Render **and** runs a one-row DB query.
+
+**Primary — cron-job.org (free, ~2 min setup, reliable timing):**
+1. Sign up at https://cron-job.org → **Create cronjob**
+2. URL: `https://financing-lxgt.onrender.com/health/deep`
+3. Schedule: every **10 minutes**; request timeout: the maximum allowed
+4. Enable "notify on failure" (a 503 means the DB query failed — check
+   whether Supabase got paused)
+
+**Backup — `.github/workflows/keepalive.yml`** runs the same ping every 10
+min from GitHub Actions. GitHub can delay scheduled runs, so it can't
+guarantee Render never sleeps, but it reliably prevents the Supabase pause.
+Run it by hand from the repo's **Actions** tab (`workflow_dispatch`).
+
+Render's free plan includes 750 instance-hours/month — enough for one
+service running 24/7, so keeping it awake costs nothing.
+
 ---
 
 ## Part 3: Deploy Next.js Frontend to Vercel

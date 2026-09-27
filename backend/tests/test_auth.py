@@ -184,3 +184,24 @@ def test_forged_token_401_via_middleware(client, patch_jwks):
         "/categories/", headers={"Authorization": f"Bearer {forged_token}"}
     )
     assert response.status_code == 401
+
+
+def test_deep_health_is_public_and_touches_db(client, fake_db):
+    # The external keep-alive pinger has no token; the route must bypass
+    # auth and actually run a DB query (that's what keeps Supabase awake).
+    response = client.get("/health/deep")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "db": True}
+
+
+def test_deep_health_reports_db_failure_as_503(client, monkeypatch):
+    import main
+
+    class _Broken:
+        def table(self, name):
+            raise RuntimeError("supabase paused")
+
+    monkeypatch.setattr(main, "supabase_client", _Broken())
+    response = client.get("/health/deep")
+    assert response.status_code == 503
+    assert response.json()["db"] is False
