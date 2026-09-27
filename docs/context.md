@@ -4434,3 +4434,20 @@ Vercel dashboard (Settings → General → Vercel Toolbar) rather than loosening
 `script-src` for every visitor. A strict nonce-based CSP remains a separate,
 larger security to-do (noted in `next.config.js`); it would not remove this
 warning.
+
+**Password reset fails on a different device** (user report, same session).
+Root cause: `@supabase/ssr` uses the PKCE flow — `resetPasswordForEmail`
+stores a code verifier in the requesting browser and the email link carries
+`?code=`; on another device `exchangeCodeForSession` can't find the verifier.
+Confirmed in auth logs: `/recover` 12:00:44 → `/verify` 303 at 12:01:38 →
+no `/token` exchange ever reached Supabase (fails client-side). Reproduced
+with a fresh headless-browser context: zero Supabase calls. **Fix:** (1)
+user switches the Supabase **Reset Password** (and **Confirm signup**) email
+templates to token-hash links
+`{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=recovery|email`
+— `/auth/verify` already supported `verifyOtp({token_hash})`, which is
+verified server-side and needs no browser state (checked: Supabase answers
+the call directly). Dashboard-only setting; no MCP tool can edit templates.
+(2) code: `/auth/verify` now explains the cross-device PKCE failure ("request
+a new reset link and open it here") instead of the raw library error — for
+older emails / if the template isn't changed. Documented in DEPLOYMENT.md.

@@ -133,6 +133,20 @@ min from GitHub Actions. GitHub can delay scheduled runs, so it can't
 guarantee Render never sleeps, but it reliably prevents the Supabase pause.
 Run it by hand from the repo's **Actions** tab (`workflow_dispatch`).
 
+**Supabase email templates (cross-device links):** with `@supabase/ssr` the
+default links are PKCE (`?code=...`), which only work in the browser that
+requested them — a password reset opened on a phone fails ("code verifier
+not found"). Use token-hash links instead (Supabase → Authentication →
+Email Templates), which `/auth/verify` already handles:
+
+- **Reset Password** → link:
+  `{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=recovery`
+- **Confirm signup** → link:
+  `{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=email`
+
+and make sure Authentication → URL Configuration → **Site URL** is
+`https://financingmn.vercel.app`.
+
 **Vercel Toolbar vs. CSP:** if the browser console shows
 `vercel.live/_next-live/feedback/feedback.js` blocked by `script-src`, that's
 the Vercel Toolbar (shown only to logged-in team members). Turn it off in
