@@ -216,9 +216,7 @@ export default function SettingsClient() {
 
   return (
     <div className="relative min-h-screen">
-      <div className="aurora" aria-hidden="true" />
-      <div className="grain" aria-hidden="true" />
-      <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg/70 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
           <h1 className="font-display text-lg font-bold tracking-tight">Settings</h1>
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -234,7 +232,7 @@ export default function SettingsClient() {
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
           <span
             aria-hidden="true"
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-violet font-display text-2xl font-bold text-accent-ink shadow-glow"
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-accent font-display text-2xl font-bold text-accent-ink"
           >
             {(profile?.username || user?.email || '?').charAt(0).toUpperCase()}
           </span>

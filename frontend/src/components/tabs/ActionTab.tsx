@@ -50,10 +50,6 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
 
       {actions.length === 0 ? (
         <div className="relative flex items-center gap-4 overflow-hidden rounded-card border border-success/25 bg-success/10 p-6">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -left-10 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(closest-side,rgb(var(--success)/0.25),transparent)]"
-          />
           <span className="relative flex h-12 w-12 shrink-0 items-center justify-center">
             <span className="absolute inset-0 rounded-full bg-success/25 animate-ping-soft" />
             <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-success text-bg">

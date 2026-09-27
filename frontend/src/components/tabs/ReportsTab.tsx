@@ -523,7 +523,7 @@ export default function ReportsTab() {
         ) : (
           <div className="overflow-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10 border-b border-edge/8 bg-surface-2/95 backdrop-blur">
+              <thead className="sticky top-0 z-10 border-b border-edge/8 bg-surface-2">
                 <tr>
                   <th className="w-10 px-4 py-3">
                     <input

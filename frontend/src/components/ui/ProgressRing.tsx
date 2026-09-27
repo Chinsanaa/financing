@@ -47,7 +47,6 @@ export default function ProgressRing({
           stroke={color}
           strokeWidth={stroke}
           strokeLinecap="round"
-          style={{ filter: `drop-shadow(0 0 6px ${color})` }}
           initial={{ pathLength: reduce ? pct / 100 : 0 }}
           animate={{ pathLength: pct / 100 }}
           transition={{ type: 'spring', stiffness: 60, damping: 18, delay: 0.15 }}

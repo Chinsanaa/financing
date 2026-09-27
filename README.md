@@ -86,8 +86,8 @@ account deletion). The UI is a dark-first design with a light theme toggle,
 skeleton loading states, and a marketing landing page at `/` for signed-out
 visitors, with `/privacy` and `/terms` legal pages linked from its footer.
 Visual language, tokens, motion rules and components are documented in
-**`docs/DESIGN_SYSTEM.md`** ("Aurora Lime" v2: ambient aurora backdrop,
-pointer spotlight cards, rolling numbers, a **⌘K / Ctrl+K command menu** to
+**`docs/DESIGN_SYSTEM.md`** ("Flat Lime" v3: **no gradients, solid colors
+only, no purple**, rolling numbers, a **⌘K / Ctrl+K command menu** to
 jump anywhere, and **keyboard labeling** — 1–9 pick a category, Enter accepts,
 S skips).
 
@@ -204,6 +204,8 @@ See DEPLOYMENT.md Step 2.5.
 translated once per distinct string in the background (`backend/translations.py`)
 and stored in `transactions.merchant_en`/`description_en`; pages never call
 Google Translate.
+
+**Design rule:** NO gradients, ONLY solid colors, no purple — see `docs/DESIGN_SYSTEM.md`.
 
 **Frontend data cache:** `useApi` dedupes concurrent GETs and mirrors responses
 to sessionStorage (per-tab; cleared on sign-out/401) so reloads render instantly.

@@ -11,9 +11,6 @@
   --dur-fast: 150ms; /* hovers, presses */
   --dur-base: 240ms; /* state changes */
   --dur-slow: 480ms; /* entrances, charts */
-  /* Ambient backdrop strength (aurora + grain) per theme */
-  --aurora-strength: 0.1;
-  --grain-opacity: 0.025;
 
   --bg: 250 250 248;
   --surface: 255 255 255;
@@ -24,31 +21,30 @@
   --accent: 132 204 22; /* lime-500: readable fill on light */
   --accent-ink: 10 10 15;
   --accent-strong: 77 124 15; /* text-safe accent on light */
-  --violet: 124 58 237;
   --cyan: 8 145 178;
   --danger: 220 38 38;
   --success: 22 163 74;
   --warn: 180 83 9; /* amber — "approaching" states; same hue as --chart-5 */
   /* Categorical chart series (validated for light surface) */
   --chart-1: #4d7c0f;
-  --chart-2: #7c3aed;
+  --chart-2: #2563eb;
   --chart-3: #0891b2;
   --chart-4: #db2777;
   --chart-5: #b45309;
   /* Category palette — user-selectable, keyed by name in categoryColors.ts.
      Validated (lightness band, chroma, contrast) for light surfaces. */
   --cat-lime: 63 98 18;
-  --cat-violet: 124 58 237;
+  --cat-blue: 29 78 216;
   --cat-cyan: 8 145 178;
   --cat-pink: 219 39 119;
   --cat-amber: 161 98 7;
   --cat-sky: 7 89 133;
   --cat-emerald: 4 120 87;
   --cat-rose: 159 18 57;
-  --cat-indigo: 67 56 202;
+  --cat-green: 70 117 0;
   --cat-teal: 13 148 136;
   --cat-orange: 154 52 18;
-  --cat-fuchsia: 192 38 211;
+  --cat-olive: 112 112 0;
   /* Chart-fill variants of the same 12 keys — badges need ~4.5:1 TEXT
      contrast (hence the darker --cat-* values above), but a pie/chart
      fill only needs ~3:1 mark contrast, so darkening these to text-safe
@@ -56,23 +52,20 @@
      hues (below), which pass lightness/chroma/contrast checks against
      white too — see dataviz skill's validate_palette.js. */
   --chart-cat-lime: 77 124 15;
-  --chart-cat-violet: 139 92 246;
+  --chart-cat-blue: 37 99 235;
   --chart-cat-cyan: 8 145 178;
   --chart-cat-pink: 236 72 153;
   --chart-cat-amber: 217 119 6;
   --chart-cat-sky: 2 132 199;
   --chart-cat-emerald: 5 150 105;
   --chart-cat-rose: 225 29 72;
-  --chart-cat-indigo: 99 102 241;
+  --chart-cat-green: 112 168 0;
   --chart-cat-teal: 13 148 136;
   --chart-cat-orange: 194 65 12;
-  --chart-cat-fuchsia: 217 70 239;
+  --chart-cat-olive: 138 138 59;
 }
 
 .dark {
-  --aurora-strength: 0.16;
-  --grain-opacity: 0.04;
-
   --bg: 10 10 15;
   --surface: 19 19 24;
   --surface-2: 27 27 35;
@@ -82,30 +75,29 @@
   --accent: 200 255 61; /* electric lime */
   --accent-ink: 10 10 15;
   --accent-strong: 200 255 61;
-  --violet: 139 92 246;
   --cyan: 34 211 238;
   --danger: 248 113 113;
   --success: 74 222 128;
   --warn: 217 119 6;
   /* Categorical chart series (validated for dark surface) */
   --chart-1: #65a30d;
-  --chart-2: #8b5cf6;
+  --chart-2: #2563eb;
   --chart-3: #0284c7;
   --chart-4: #db2777;
   --chart-5: #d97706;
   /* Category palette — dark-surface values of the same 12 keys. */
   --cat-lime: 77 124 15;
-  --cat-violet: 139 92 246;
+  --cat-blue: 37 99 235;
   --cat-cyan: 8 145 178;
   --cat-pink: 236 72 153;
   --cat-amber: 217 119 6;
   --cat-sky: 2 132 199;
   --cat-emerald: 5 150 105;
   --cat-rose: 225 29 72;
-  --cat-indigo: 99 102 241;
+  --cat-green: 112 168 0;
   --cat-teal: 13 148 136;
   --cat-orange: 194 65 12;
-  --cat-fuchsia: 217 70 239;
+  --cat-olive: 138 138 59;
 }
 
 html {
@@ -123,56 +115,38 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-/* Glassy panel used across cards, navbars, mockups */
+/* Solid panel (was a translucent blurred "glass" — design rule: solid colors only) */
 .glass {
-  background-color: rgb(var(--surface) / 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background-color: rgb(var(--surface));
   border: 1px solid rgb(var(--edge) / 0.08);
 }
 
-/* Faint background grid for hero / auth / 404 backdrops */
-.bg-grid {
-  background-image: linear-gradient(rgb(var(--edge) / 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--edge) / 0.05) 1px, transparent 1px);
-  background-size: 48px 48px;
-}
-
-/* Skeleton shimmer surface — a soft light band sweeps across. */
+/* Skeleton placeholder — a solid block whose opacity pulses. */
 .skeleton {
-  position: relative;
-  overflow: hidden;
   background-color: rgb(var(--surface-2));
   border-radius: 0.5rem;
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
 }
-.skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgb(var(--edge) / 0.07), transparent);
-  animation: skeleton-sweep 1.6s var(--ease-out) infinite;
-}
-@keyframes skeleton-sweep {
-  to { transform: translateX(100%); }
+@keyframes skeleton-pulse {
+  50% { opacity: 0.55; }
 }
 
 /* Category badge tones — one class per palette key in categoryColors.ts.
    Plain CSS (not Tailwind utilities) so runtime-composed class names like
-   `cat-violet` can't be purged. Text at full strength, tinted 15% fill —
+   `cat-blue` can't be purged. Text at full strength, tinted 15% fill —
    mirrors Badge's built-in tones. */
 .cat-lime { color: rgb(var(--cat-lime)); background-color: rgb(var(--cat-lime) / 0.15); }
-.cat-violet { color: rgb(var(--cat-violet)); background-color: rgb(var(--cat-violet) / 0.15); }
+.cat-blue { color: rgb(var(--cat-blue)); background-color: rgb(var(--cat-blue) / 0.15); }
 .cat-cyan { color: rgb(var(--cat-cyan)); background-color: rgb(var(--cat-cyan) / 0.15); }
 .cat-pink { color: rgb(var(--cat-pink)); background-color: rgb(var(--cat-pink) / 0.15); }
 .cat-amber { color: rgb(var(--cat-amber)); background-color: rgb(var(--cat-amber) / 0.15); }
 .cat-sky { color: rgb(var(--cat-sky)); background-color: rgb(var(--cat-sky) / 0.15); }
 .cat-emerald { color: rgb(var(--cat-emerald)); background-color: rgb(var(--cat-emerald) / 0.15); }
 .cat-rose { color: rgb(var(--cat-rose)); background-color: rgb(var(--cat-rose) / 0.15); }
-.cat-indigo { color: rgb(var(--cat-indigo)); background-color: rgb(var(--cat-indigo) / 0.15); }
+.cat-green { color: rgb(var(--cat-green)); background-color: rgb(var(--cat-green) / 0.15); }
 .cat-teal { color: rgb(var(--cat-teal)); background-color: rgb(var(--cat-teal) / 0.15); }
 .cat-orange { color: rgb(var(--cat-orange)); background-color: rgb(var(--cat-orange) / 0.15); }
-.cat-fuchsia { color: rgb(var(--cat-fuchsia)); background-color: rgb(var(--cat-fuchsia) / 0.15); }
+.cat-olive { color: rgb(var(--cat-olive)); background-color: rgb(var(--cat-olive) / 0.15); }
 
 /* Uppercase tracked section label */
 .section-label {
@@ -203,147 +177,11 @@ code {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   Design system v2 — ambient + interaction effects.
-   Everything here is token-driven (works in light + dark) and collapses
+   Design system v3 — interaction effects. RULE: NO gradients, ONLY solid
+   colors (no glows, blurs, aurora, grain, grids). Token-driven, collapses
    to static under prefers-reduced-motion (global rule above).
    Full reference: docs/DESIGN_SYSTEM.md
    ════════════════════════════════════════════════════════════════════ */
-
-/* Aurora: two slow-drifting radial glows behind the app. Pure gradients
-   (no filter: blur) so it's cheap to composite. Mount once per page. */
-.aurora {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-.aurora::before,
-.aurora::after {
-  content: '';
-  position: absolute;
-  width: 70vmax;
-  height: 70vmax;
-  border-radius: 9999px;
-  opacity: var(--aurora-strength);
-  will-change: transform;
-}
-.aurora::before {
-  top: -38vmax;
-  left: -18vmax;
-  background: radial-gradient(closest-side, rgb(var(--accent)), transparent);
-  animation: aurora-drift-a 26s ease-in-out infinite alternate;
-}
-.aurora::after {
-  bottom: -42vmax;
-  right: -20vmax;
-  background: radial-gradient(closest-side, rgb(var(--violet)), transparent);
-  animation: aurora-drift-b 32s ease-in-out infinite alternate;
-}
-@keyframes aurora-drift-a {
-  to { transform: translate3d(14vmax, 8vmax, 0) scale(1.1); }
-}
-@keyframes aurora-drift-b {
-  to { transform: translate3d(-12vmax, -10vmax, 0) scale(1.15); }
-}
-
-/* Film grain over the aurora — kills gradient banding, adds tactility. */
-.grain {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: var(--grain-opacity);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* Spotlight: a soft glow + lit border that follow the pointer.
-   Needs --mx/--my set by useSpotlight() (Card does this for `hover`). */
-.spotlight {
-  position: relative;
-  isolation: isolate;
-}
-.spotlight::before,
-.spotlight::after {
-  content: '';
-  position: absolute;
-  pointer-events: none;
-  border-radius: inherit;
-  opacity: 0;
-  transition: opacity var(--dur-base) var(--ease-out);
-}
-.spotlight::before {
-  inset: 0;
-  z-index: -1; /* above the card background, below its content */
-  background: radial-gradient(480px circle at var(--mx, 50%) var(--my, 50%), rgb(var(--accent) / 0.07), transparent 45%);
-}
-/* Rings sit just inside the padding edge (inset: 0), not over the border,
-   so they survive `overflow: hidden` on the card (which clips the border box). */
-.spotlight::after {
-  inset: 0;
-  padding: 1px;
-  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgb(var(--accent) / 0.55), transparent 60%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-}
-.spotlight:hover::before,
-.spotlight:hover::after {
-  opacity: 1;
-}
-
-/* Glow border: a lime→violet light slowly orbits the edge. Reserve for
-   ONE hero element per view (overview hero, CTA, auth card). */
-@property --orbit {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-.glow-border {
-  position: relative;
-  isolation: isolate;
-}
-.glow-border::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  padding: 1px;
-  border-radius: inherit;
-  pointer-events: none;
-  background: conic-gradient(
-    from var(--orbit),
-    transparent 0 55%,
-    rgb(var(--accent) / 0.9) 70%,
-    rgb(var(--violet) / 0.8) 82%,
-    transparent 94%
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-  animation: orbit 7s linear infinite;
-}
-@keyframes orbit {
-  to { --orbit: 360deg; }
-}
-
-/* Shimmering gradient text — one headline accent per page, max. */
-.text-shine {
-  background: linear-gradient(
-    110deg,
-    rgb(var(--accent-strong)) 30%,
-    rgb(var(--ink)) 50%,
-    rgb(var(--accent-strong)) 70%
-  );
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: text-shine 7s linear infinite;
-}
-@keyframes text-shine {
-  from { background-position: 100% 0; }
-  to { background-position: -150% 0; }
-}
 
 /* Staggered entrance: each direct child rises in 55ms after the previous.
    `.tab-panel` (TabPanel) applies it to every tab's top-level sections.
@@ -366,44 +204,13 @@ code {
   }
 }
 
-/* Progress fill: grows from 0 on mount, glides on change, and a light
-   sweep passes over it once. */
+/* Progress fill: grows from 0 on mount, glides on change. */
 .progress-fill {
-  position: relative;
-  overflow: hidden;
   animation: grow-x 900ms var(--ease-out) backwards;
   transition: width 700ms var(--ease-out);
 }
-.progress-fill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
-  animation: skeleton-sweep 1.4s var(--ease-out) 900ms 1 both;
-}
 @keyframes grow-x {
   from { width: 0; }
-}
-
-/* Primary-button sheen on hover. */
-.btn-sheen {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-.btn-sheen::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  transform: translateX(-120%) skewX(-20deg);
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
-  transition: transform 0s;
-}
-.btn-sheen:hover::after {
-  transform: translateX(120%) skewX(-20deg);
-  transition: transform 700ms var(--ease-out);
 }
 
 /* Floating (empty-state icons, decorative badges). */

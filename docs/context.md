@@ -4522,3 +4522,41 @@ shapes were taken from the component interfaces).
 locale (a Chinese-locale browser would show Chinese month names — conflicts
 with the English-only rule, small follow-up); stepper marks every step before
 the current one as "done" by position, not by real completion (pre-existing).
+
+### Session 70 (2026-09-27) — Flat design: NO gradients, ONLY solid colors
+
+**Why:** user disliked the v2 "Aurora Lime" redesign (commit `55b68e0`, PR #59
+— made on this branch but outside this conversation): gradients everywhere,
+purple they never asked for, the "F" logo square, the grid/aurora backdrop,
+and the orbiting light around cards.
+
+**Decided (with user):** remove purple **everywhere** incl. chart + category
+palette; of the animations remove only the **orbiting border** (rise-in,
+float/ping, marquee, spinners stay) — but anything that *is* a gradient goes
+under the rule (aurora glows, shimmer text, button sheen, hover spotlight,
+progress sweep, skeleton shimmer → solid opacity pulse); page = one flat
+color, cards = one flat surface color + hairline border.
+
+**Built:** `globals.css`/`tailwind.config.js` — deleted `.aurora`, `.grain`,
+`.spotlight`, `.glow-border`, `.text-shine`, `.btn-sheen`, `.bg-grid`,
+`shadow-glow`, `--violet`; `.glass` is now solid. ~25 components: removed
+backdrop/glow blobs, gradient tiles/avatars (→ solid `bg-accent`), SVG
+`<linearGradient>` chart fills (→ solid fill + `fillOpacity 0.15`), gradient
+masks, backdrop blurs, colored glow shadows; `Card` lost `glow`/`spotlight`;
+`utils/spotlight.ts` deleted; "F" square removed (dashboard + landing; the
+wordmark now also shows on mobile). **Category palette** violet/indigo/fuchsia
+→ **blue/green/olive**, chosen with the dataviz validator: dark chart set
+passes lightness/chroma/contrast/normal-vision (worst adjacent ΔE 16.1);
+honest caveat — without purple the lime/green family is crowded (light-mode
+green badge text sits close to lime), mitigated as before by always showing
+the category name; the remaining CVD FAIL (rose/emerald) predates this.
+Migration `20260927030000_remove_purple_category_colors.sql` **applied live**:
+0 purple rows left (blue/green/olive = 2 each), CHECK + signup trigger
+updated, anon still can't execute the trigger. Backend `ALLOWED_COLORS`
+synced. Docs: `DESIGN_SYSTEM.md` → v3 "Flat Lime" with THE RULE at the top;
+CLAUDE.md guardrail added.
+
+**Verified:** `tsc`, `next build`, backend 143 passing; headless Chromium
+computed-style scan of `/`, `/auth`, `/privacy`, 404 in dark + light: 0
+gradients / gradient masks / backdrop blurs / orbit animations, no "F"
+square, flat body background; screenshots eyeballed.

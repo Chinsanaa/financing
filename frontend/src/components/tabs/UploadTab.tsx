@@ -316,7 +316,7 @@ export default function UploadTab() {
         data-tour-id="upload-choose-files"
         className={`group relative overflow-hidden rounded-card p-12 text-center transition-all duration-300 ${
           running ? 'pointer-events-none opacity-60' : ''
-        } ${dragActive ? 'is-active bg-accent/[0.06] shadow-glow' : 'bg-surface'}`}
+        } ${dragActive ? 'is-active bg-accent/[0.06]' : 'bg-surface'}`}
       >
         {/* Animated dashed border (marching ants) — see .dash-march */}
         <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
@@ -331,17 +331,11 @@ export default function UploadTab() {
             style={{ width: 'calc(100% - 2px)', height: 'calc(100% - 2px)' }}
           />
         </svg>
-        <div
-          aria-hidden="true"
-          className={`pointer-events-none absolute left-1/2 top-0 h-48 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(var(--accent)/0.18),transparent)] transition-opacity duration-300 ${
-            dragActive ? 'opacity-100' : 'opacity-40'
-          }`}
-        />
         <div className="relative space-y-4">
           <m.div
             animate={dragActive ? { scale: 1.15, y: -6, rotate: -6 } : { scale: 1, y: 0, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-gradient-to-b from-accent/20 to-accent/5 text-accent-strong"
+            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-accent/10 text-accent-strong"
           >
             <UploadCloud className="h-7 w-7" />
           </m.div>

@@ -114,16 +114,16 @@ export default function TrainingTab() {
       {message && <Alert kind="success">{message}</Alert>}
 
       {/* Launch panel: while a run is live the brain "thinks" (pulsing rings) */}
-      <Card glow={training} className="relative flex flex-col items-center gap-5 overflow-hidden p-8 text-center sm:flex-row sm:text-left">
+      <Card className="relative flex flex-col items-center gap-5 overflow-hidden p-8 text-center sm:flex-row sm:text-left">
         <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
           {training && (
             <>
               <span className="absolute inset-0 rounded-2xl bg-accent/25 animate-ping-soft" />
-              <span className="absolute inset-0 rounded-2xl bg-violet/20 animate-ping-soft [animation-delay:1.2s]" />
+              <span className="absolute inset-0 rounded-2xl bg-accent/15 animate-ping-soft [animation-delay:1.2s]" />
             </>
           )}
           <span
-            className={`relative flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-gradient-to-b from-accent/25 to-accent/5 text-accent-strong ${
+            className={`relative flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-accent/10 text-accent-strong ${
               training ? 'animate-pulse' : ''
             }`}
           >

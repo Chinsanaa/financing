@@ -12,7 +12,7 @@ export default function LegalPageLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-grid min-h-screen">
+    <div className="min-h-screen">
       <header className="glass sticky top-0 z-40 border-b border-edge/8">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
           <Link href="/" className="font-display text-lg font-bold tracking-tight">

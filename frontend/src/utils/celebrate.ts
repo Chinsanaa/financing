@@ -14,7 +14,7 @@ export async function celebrate() {
       ? '#' + v.map((n) => n.toString(16).padStart(2, '0')).join('')
       : '#c8ff3d';
   };
-  const colors = [rgb('--accent'), rgb('--violet'), rgb('--cyan')];
+  const colors = [rgb('--accent'), rgb('--cyan')];
   const base = { particleCount: 70, spread: 70, startVelocity: 42, ticks: 220, colors, disableForReducedMotion: true };
   confetti({ ...base, angle: 60, origin: { x: 0, y: 0.7 } });
   confetti({ ...base, angle: 120, origin: { x: 1, y: 0.7 } });

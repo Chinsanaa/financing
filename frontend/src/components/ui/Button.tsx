@@ -7,9 +7,8 @@ type Variant = 'primary' | 'ghost' | 'outline' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
-  // btn-sheen: a light sweep crosses the button on hover (globals.css)
   primary:
-    'btn-sheen bg-accent text-accent-ink font-semibold shadow-[0_1px_0_0_rgb(255_255_255/0.25)_inset] hover:shadow-glow active:scale-[0.97]',
+    'bg-accent text-accent-ink font-semibold shadow-[0_1px_0_0_rgb(255_255_255/0.25)_inset] active:scale-[0.97]',
   ghost: 'text-ink hover:bg-edge/5 active:scale-[0.97]',
   outline:
     'border border-edge/15 text-ink hover:border-accent/40 hover:bg-edge/5 active:scale-[0.97]',

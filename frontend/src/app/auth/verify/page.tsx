@@ -225,8 +225,7 @@ function VerifyContent() {
 
 export default function VerifyPage() {
   return (
-    <div className="bg-grid relative flex min-h-screen items-center justify-center px-4">
-      <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-[560px] -translate-x-1/2 rounded-full bg-accent/10 blur-3xl" />
+    <div className="relative flex min-h-screen items-center justify-center px-4">
       <Suspense fallback={<div className="skeleton h-40 w-full max-w-md" aria-hidden="true" />}>
         <VerifyContent />
       </Suspense>

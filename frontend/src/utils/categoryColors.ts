@@ -2,7 +2,7 @@
  * The category color palette — single source of truth (pure module: no React,
  * safe to import anywhere including the landing page).
  *
- * Users store a palette KEY (e.g. 'violet') on each category, never a hex:
+ * Users store a palette KEY (e.g. 'blue') on each category, never a hex:
  * every key maps to a light-theme and a dark-theme value (defined as
  * `--cat-<key>` CSS variables in globals.css), so a chosen color stays inside
  * the design system and looks right in both themes.
@@ -12,22 +12,28 @@
  * close CVD pairs are mitigated by secondary encoding: every colored element
  * in the app carries the category NAME as text (badges, legend, swatches).
  *
+ * NO purple (design rule, 2026-09-27): violet/indigo/fuchsia were replaced by
+ * blue/green/olive — picked with the dataviz validator; the dark chart set
+ * passes lightness, chroma, contrast and the normal-vision floor (worst
+ * adjacent pair teal/green ΔE 16.1). The remaining CVD FAIL (rose/emerald)
+ * predates this change.
+ *
  * Must stay in sync with ALLOWED_COLORS in backend/routes/categories.py and
  * the CHECK constraint in migration 20260709120000_add_category_color.sql.
  */
 export const CATEGORY_COLORS = [
   { key: 'lime', label: 'Lime', light: '#3f6212', dark: '#4d7c0f' },
-  { key: 'violet', label: 'Violet', light: '#7c3aed', dark: '#8b5cf6' },
+  { key: 'blue', label: 'Blue', light: '#1d4ed8', dark: '#2563eb' },
   { key: 'cyan', label: 'Cyan', light: '#0891b2', dark: '#0891b2' },
   { key: 'pink', label: 'Pink', light: '#db2777', dark: '#ec4899' },
   { key: 'amber', label: 'Amber', light: '#a16207', dark: '#d97706' },
   { key: 'sky', label: 'Sky', light: '#075985', dark: '#0284c7' },
   { key: 'emerald', label: 'Emerald', light: '#047857', dark: '#059669' },
   { key: 'rose', label: 'Rose', light: '#9f1239', dark: '#e11d48' },
-  { key: 'indigo', label: 'Indigo', light: '#4338ca', dark: '#6366f1' },
+  { key: 'green', label: 'Green', light: '#467500', dark: '#70a800' },
   { key: 'teal', label: 'Teal', light: '#0d9488', dark: '#0d9488' },
   { key: 'orange', label: 'Orange', light: '#9a3412', dark: '#c2410c' },
-  { key: 'fuchsia', label: 'Fuchsia', light: '#c026d3', dark: '#d946ef' },
+  { key: 'olive', label: 'Olive', light: '#707000', dark: '#8a8a3b' },
 ] as const;
 
 export type CategoryColorKey = (typeof CATEGORY_COLORS)[number]['key'];

@@ -23,9 +23,8 @@ export default function NotFound() {
     <div
       ref={ref}
       onMouseMove={onMove}
-      className="bg-grid relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 text-center"
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 text-center"
     >
-      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-[640px] -translate-x-1/2 rounded-full bg-violet/12 blur-3xl" />
       <p
         className="font-display select-none text-[10rem] font-bold leading-none tracking-tight text-edge/10 transition-transform duration-200 ease-out sm:text-[16rem] lg:text-[20rem]"
         style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}

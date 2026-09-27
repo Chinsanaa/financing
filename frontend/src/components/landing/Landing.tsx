@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { m, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion';
+import { m, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   BrainCircuit,
@@ -19,7 +19,6 @@ import Card from '@/components/ui/Card';
 import { Reveal, Stagger, StaggerItem } from '@/components/ui/motion';
 import HeroChart from './HeroChart';
 import Badge, { categoryColor } from '@/components/ui/Badge';
-import { trackSpotlight } from '@/utils/spotlight';
 import DemoStrip from './DemoStrip';
 
 const FEATURES = [
@@ -141,8 +140,6 @@ function TiltCard({ children }: { children: React.ReactNode }) {
 
 export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
-  const { scrollYProgress } = useScroll();
-  const heroGlow = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -153,8 +150,6 @@ export default function Landing() {
 
   return (
     <div className="relative overflow-x-clip">
-      <div className="aurora" aria-hidden="true" />
-      <div className="grain" aria-hidden="true" />
       {/* Navbar */}
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
@@ -163,9 +158,6 @@ export default function Landing() {
       >
         <div className="mx-auto flex max-w-7xl 2xl:max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="group flex items-center gap-2 font-display text-lg font-bold tracking-tight">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-sm font-black text-accent-ink shadow-glow transition-transform duration-300 group-hover:rotate-[-8deg]">
-              F
-            </span>
             <span>
               Financing<span className="text-accent-strong">.</span>
             </span>
@@ -188,30 +180,12 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="group/hero relative z-[1] pt-36 pb-20 sm:pt-44" onPointerMove={trackSpotlight}>
-        {/* Base grid, plus a lime copy of it revealed only around the pointer */}
-        <div className="bg-grid pointer-events-none absolute inset-0 [mask-image:linear-gradient(to_bottom,black_60%,transparent)]" aria-hidden="true" />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover/hero:opacity-100"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgb(var(--accent) / 0.35) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--accent) / 0.35) 1px, transparent 1px)',
-            backgroundSize: '48px 48px',
-            WebkitMaskImage: 'radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), black, transparent)',
-            maskImage: 'radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), black, transparent)',
-          }}
-        />
-        <m.div
-          style={{ opacity: heroGlow }}
-          className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(var(--accent)/0.16),transparent)]"
-        />
-
+      <section className="relative z-[1] pt-36 pb-20 sm:pt-44">
         <div className="relative mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <div className="grid items-center gap-14 lg:grid-cols-[1.1fr,1fr]">
             <div>
               <Reveal>
-                <span className="mb-6 inline-flex items-center gap-2 rounded-pill border border-edge/10 bg-surface/60 px-3 py-1.5 text-xs font-medium text-muted backdrop-blur">
+                <span className="mb-6 inline-flex items-center gap-2 rounded-pill border border-edge/10 bg-surface/60 px-3 py-1.5 text-xs font-medium text-muted">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inset-0 rounded-full bg-accent animate-ping-soft" />
                     <span className="relative h-2 w-2 rounded-full bg-accent" />
@@ -229,9 +203,9 @@ export default function Landing() {
                   animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                   transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.36 }}
                 >
-                  <span className="text-shine">goes.</span>
+                  <span className="text-accent-strong">goes.</span>
                   <m.span
-                    className="absolute inset-x-0 -bottom-1 h-1 origin-left rounded-full bg-accent shadow-glow"
+                    className="absolute inset-x-0 -bottom-1 h-1 origin-left rounded-full bg-accent"
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: 1 }}
                     transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.9 }}
@@ -293,8 +267,8 @@ export default function Landing() {
       </section>
 
       {/* Merchant marquee — edges fade out via mask */}
-      <section className="relative z-[1] border-y border-edge/8 bg-surface/40 py-5 backdrop-blur-sm" aria-label="Example merchants">
-        <div className="group/marquee flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]">
+      <section className="relative z-[1] border-y border-edge/8 bg-surface py-5" aria-label="Example merchants">
+        <div className="group/marquee flex overflow-hidden">
           <div className="flex shrink-0 animate-marquee gap-3 pr-3 group-hover/marquee:[animation-play-state:paused]">
             {[...MARQUEE, ...MARQUEE].map((row, i) => (
               <span
@@ -365,12 +339,6 @@ export default function Landing() {
               return (
                 <StaggerItem key={title} className={wide ? 'lg:col-span-2' : ''}>
                   <Card glass hover className="group relative h-full overflow-hidden p-6">
-                    {wide && (
-                      <div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgb(var(--accent)/0.14),transparent)] transition-transform duration-500 group-hover:scale-125"
-                      />
-                    )}
                     <span className="relative mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/12 text-accent-strong transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110">
                       <Icon className="h-5 w-5" />
                     </span>
@@ -388,10 +356,9 @@ export default function Landing() {
       <section className="relative z-[1] py-24">
         <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <Card glass glow className="relative overflow-hidden px-8 py-16 text-center">
-              <div className="pointer-events-none absolute -top-24 left-1/2 h-64 w-96 -translate-x-1/2 rounded-full bg-accent/15 blur-3xl animate-glow-pulse" />
+            <Card glass className="relative overflow-hidden px-8 py-16 text-center">
               <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">
-                Your money, <span className="text-shine">decoded.</span>
+                Your money, <span className="text-accent-strong">decoded.</span>
               </h2>
               <p className="mx-auto mt-4 max-w-md text-muted">
                 Five minutes from CSV export to your first categorized month.

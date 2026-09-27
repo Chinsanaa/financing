@@ -15,7 +15,7 @@ financing/
 │   ├── src/middleware.ts      # server-side auth gating
 │   ├── src/app/               # auth, dashboard (5 sections, tabs code-split), settings pages
 │   ├── src/components/        # ui-feedback.tsx atoms + ui/*.tsx + tabs/*.tsx
-│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror), chunkReload.ts (stale-tab recovery)
+│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror), chunkReload.ts (stale-tab recovery); design rules in docs/DESIGN_SYSTEM.md (NO gradients, solid colors only)
 │
 ├── backend/                   # FastAPI app → Render (see backend/README.md)
 │   ├── main.py                # app, JWT auth middleware, CORS, rate limiting
@@ -68,7 +68,8 @@ financing/
 │       ├── … (2026-08-13/14 feature migrations)
 │       ├── 20260927000000_restore_perf_indexes.sql     # user_id+timestamp/needs_review/category indexes, FK indexes, RLS initplan fix
 │       ├── 20260927010000_add_english_label_columns.sql # transactions.merchant_en/description_en (stored translations)
-│       └── 20260927020000_dashboard_aggregate_rpcs.sql  # available_months/spend_trend RPCs, search_path fix
+│       ├── 20260927020000_dashboard_aggregate_rpcs.sql  # available_months/spend_trend RPCs, search_path fix
+│       └── 20260927030000_remove_purple_category_colors.sql # palette violet/indigo/fuchsia → blue/green/olive
 │
 ├── tests/                     # pytest suite for src/ (74 tests)
 │   ├── test_parse.py, test_validate.py, test_semantic.py, test_calibration.py

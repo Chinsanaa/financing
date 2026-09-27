@@ -107,10 +107,6 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
     <div className="space-y-6">
       {/* Header: current step + connected stepper */}
       <Card className="relative overflow-hidden p-5 sm:p-6">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -left-20 -top-24 h-64 w-64 rounded-full bg-[radial-gradient(closest-side,rgb(var(--accent)/0.14),transparent)]"
-        />
         <div className="relative mb-6 flex items-center gap-3">
           <AnimatePresence mode="wait" initial={false}>
             <m.span
@@ -119,7 +115,7 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
               animate={{ scale: 1, rotate: 0, opacity: 1 }}
               exit={{ scale: 0.6, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 420, damping: 24 }}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-ink shadow-glow"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-ink"
             >
               <CurrentIcon className="h-5 w-5" />
             </m.span>
@@ -138,7 +134,7 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
           <span aria-hidden="true" className="absolute left-4 right-4 top-4 h-0.5 rounded-full bg-edge/10" />
           <m.span
             aria-hidden="true"
-            className="absolute left-4 top-4 h-0.5 origin-left rounded-full bg-accent shadow-[0_0_10px_rgb(var(--accent)/0.6)]"
+            className="absolute left-4 top-4 h-0.5 origin-left rounded-full bg-accent"
             style={{ right: '1rem' }}
             initial={false}
             animate={{ scaleX: progress }}

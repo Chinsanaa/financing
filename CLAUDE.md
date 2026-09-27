@@ -77,6 +77,10 @@ file rather than leaving a stale record.
 - Favor simple, interpretable models first (Logistic Regression, Naive
   Bayes on TF-IDF vectors). Only escalate to something heavier if accuracy
   genuinely requires it, and explain why before doing so.
+- **UI design rule: NO gradients, ONLY solid colors.** No glows, blurs,
+  aurora/grain/grid backgrounds, and **no purple** anywhere (incl. charts and
+  category colors). One flat page background; cards are one flat surface
+  color + a thin border. See `docs/DESIGN_SYSTEM.md` before touching the UI.
 
 ## File Structure
 

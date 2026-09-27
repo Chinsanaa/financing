@@ -2,32 +2,24 @@
 
 import { HTMLAttributes, ReactNode } from 'react';
 import { LucideIcon } from 'lucide-react';
-import { trackSpotlight } from '@/utils/spotlight';
 
 /**
- * Base surface. Variants (combine freely):
- * - `glass`     translucent + blurred (overlays, landing mockups)
- * - `hover`     lifts on hover and turns on the pointer spotlight
- * - `spotlight` pointer spotlight without the lift (override `hover`'s default)
- * - `glow`      orbiting lime→violet border — ONE hero element per view
+ * Base surface — always a solid color (design rule: no gradients/glows).
+ * Variants (combine freely):
+ * - `glass`  solid surface + border (name kept for existing call sites)
+ * - `hover`  lifts slightly on hover
  */
 export default function Card({
   glass = false,
   hover = false,
-  spotlight,
-  glow = false,
   children,
   className = '',
-  onPointerMove,
   ...rest
 }: HTMLAttributes<HTMLDivElement> & {
   glass?: boolean;
   hover?: boolean;
-  spotlight?: boolean;
-  glow?: boolean;
   children: ReactNode;
 }) {
-  const lit = spotlight ?? hover;
   return (
     <div
       className={`rounded-card ${
@@ -38,15 +30,7 @@ export default function Card({
         hover
           ? 'transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-card'
           : ''
-      } ${lit ? 'spotlight' : ''} ${glow ? 'glow-border' : ''} ${className}`}
-      onPointerMove={
-        lit
-          ? (e) => {
-              trackSpotlight(e);
-              onPointerMove?.(e);
-            }
-          : onPointerMove
-      }
+      } ${className}`}
       {...rest}
     >
       {children}

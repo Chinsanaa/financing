@@ -108,7 +108,7 @@ export default function CommandPalette({
       {open && (
         <div className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-[12vh]">
           <m.div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -119,7 +119,7 @@ export default function CommandPalette({
             role="dialog"
             aria-modal="true"
             aria-label="Command menu"
-            className="glow-border relative w-full max-w-lg overflow-hidden rounded-2xl border border-edge/10 bg-surface/95 shadow-card backdrop-blur-xl"
+            className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-edge/10 bg-surface shadow-card"
             initial={{ opacity: 0, scale: 0.96, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: -4, transition: { duration: 0.12 } }}

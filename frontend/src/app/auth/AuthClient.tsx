@@ -186,8 +186,6 @@ export default function AuthClient() {
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
-      <div className="aurora" aria-hidden="true" />
-      <div className="grain" aria-hidden="true" />
       {/* Mobile-only logo, pinned to the top so it doesn't drift with the
           centered form's height (sign-up has more inputs than sign-in). The
           desktop logo lives in the brand panel below. */}
@@ -199,8 +197,7 @@ export default function AuthClient() {
       </Link>
 
       {/* Brand panel */}
-      <div className="bg-grid relative z-[1] hidden flex-col overflow-hidden border-r border-edge/8 p-10 lg:flex xl:p-14 2xl:p-20">
-        <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-accent/10 blur-3xl animate-glow-pulse" />
+      <div className="relative z-[1] hidden flex-col overflow-hidden border-r border-edge/8 p-10 lg:flex xl:p-14 2xl:p-20">
         <Link href="/" className="relative font-display text-lg font-bold tracking-tight">
           Financing<span className="text-accent-strong">.</span>
         </Link>
@@ -211,7 +208,7 @@ export default function AuthClient() {
           <h1 className="font-display text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl 2xl:text-7xl">
             Your money,
             <br />
-            <span className="text-shine">decoded</span>.
+            <span className="text-accent-strong">decoded</span>.
           </h1>
           <p className="mt-5 max-w-md text-muted xl:max-w-lg xl:text-lg">
             One personal model, trained on your own labels, sorting every Alipay and
@@ -227,15 +224,10 @@ export default function AuthClient() {
           </ul>
           {/* Spending line draws itself in, then the area fades up under it */}
           <svg viewBox="0 0 400 80" className="relative mt-10 w-full max-w-lg xl:max-w-xl" aria-hidden="true">
-            <defs>
-              <linearGradient id="auth-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
-              </linearGradient>
-            </defs>
             <m.polygon
               points="0,80 0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20 400,80"
-              fill="url(#auth-fill)"
+              fill="rgb(var(--accent))"
+              fillOpacity={0.15}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 1, delay: 1.2 }}
@@ -266,7 +258,7 @@ export default function AuthClient() {
           initial={{ opacity: 0, y: 16, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="glass glow-border w-full max-w-sm rounded-2xl p-6 shadow-card sm:p-8 lg:max-w-md"
+          className="glass w-full max-w-sm rounded-2xl p-6 shadow-card sm:p-8 lg:max-w-md"
         >
           {mode !== 'forgot' && (
             <div className="mb-8 inline-flex rounded-pill bg-surface-2 p-1" role="tablist" aria-label="Sign in or create account">
