@@ -80,7 +80,7 @@ function ChartTooltip({ active, payload, label }: any) {
   // Ticks show month-only ("Jun"); the tooltip carries the full year.
   const labelText = typeof label === 'string' && /^\d{4}-\d{2}$/.test(label) ? formatMonthLong(label) : label;
   return (
-    <div className="rounded-lg border border-edge/10 bg-surface/95 px-3 py-2 text-xs shadow-card backdrop-blur-xl">
+    <div className="rounded-lg border border-edge/10 bg-surface px-3 py-2 text-xs shadow-card">
       {labelText && <p className="mb-1 font-medium">{labelText}</p>}
       {payload.map((p: any) => (
         <p key={p.name} className="tabular-nums text-muted">
@@ -169,15 +169,7 @@ export default function StatsTab({
       {error && <Alert kind="error">{error}</Alert>}
 
       {/* ── Hero ─────────────────────────────────────────────────── */}
-      <Card glow className="relative overflow-hidden p-6 sm:p-8">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[radial-gradient(closest-side,rgb(var(--accent)/0.18),transparent)]"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-32 right-1/3 h-72 w-72 rounded-full bg-[radial-gradient(closest-side,rgb(var(--violet)/0.14),transparent)]"
-        />
+      <Card className="relative overflow-hidden p-6 sm:p-8">
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="section-label mb-3">
@@ -187,7 +179,7 @@ export default function StatsTab({
             {isNewUser ? (
               <>
                 <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
-                  Let&apos;s decode your <span className="text-shine">spending.</span>
+                  Let&apos;s decode your <span className="text-accent-strong">spending.</span>
                 </h2>
                 <p className="mt-2 max-w-md text-sm text-muted">
                   Upload an Alipay or WeChat statement to get started. Your first month appears here in
@@ -279,12 +271,6 @@ export default function StatsTab({
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={trends} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="overview-spend-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid stroke="rgb(var(--edge) / 0.06)" vertical={false} />
                 <XAxis
                   dataKey="date"
@@ -311,7 +297,8 @@ export default function StatsTab({
                   name="Spend"
                   stroke="rgb(var(--accent-strong))"
                   strokeWidth={2.5}
-                  fill="url(#overview-spend-fill)"
+                  fill="rgb(var(--accent))"
+                  fillOpacity={0.15}
                   dot={false}
                   activeDot={{ r: 5, strokeWidth: 3, stroke: 'rgb(var(--surface))', fill: 'rgb(var(--accent-strong))' }}
                   animationDuration={1200}

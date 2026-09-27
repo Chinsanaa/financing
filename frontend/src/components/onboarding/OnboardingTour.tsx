@@ -1,71 +1,52 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { Check, X } from 'lucide-react';
-import { useApi } from '@/utils/useApi';
+import { ArrowRight, Check, X } from 'lucide-react';
+import { skipTour, advanceTour, useTour, TOUR_STEPS, TourStep } from '@/utils/tour';
 import TourSpotlight from './TourSpotlight';
 
 /**
- * First-run guide: a small step-tracker box in the bottom-right corner
- * (was previously a full-width banner at the top of every page —
- * `OnboardingChecklist`, replaced by this component) plus a spotlight
- * overlay pointing at whatever button the current step needs next.
+ * First-run guide, shown ONCE per account right after sign-up.
  *
- * Completion is derived from real account state, unchanged from the
- * previous implementation:
- *  1. Upload     — any transactions exist
- *  2. Categories — the categories tab was visited (tracked locally)
- *  3. Label      — any transaction has a label
- *  4. Train      — any training run exists
- * Dismissal is stored locally; the box also hides itself once all done.
+ * State lives on the account (utils/tour.ts → GET /dashboard/tour), so it
+ * never reappears on another device and is never inferred from data. Each
+ * step moves forward only when the user actually does it — the tab that owns
+ * the action calls advanceTour() (upload succeeded, first hand label,
+ * training started); "Categories" has an explicit "Looks good, next" button
+ * because reviewing has no single action. "Skip tour" is the only early exit.
+ *
+ * Layout: a step box (bottom-right, above the dimmed overlay) that always
+ * carries the current instruction, plus a spotlight on the element to use.
+ * When a step starts, the tour takes the user to that step's tab once.
  */
 
-interface Summary {
-  total_transactions: number;
-  labeled_transactions: number;
-}
-
-const STEPS = [
-  {
-    id: 'upload',
+const STEP_INFO: Record<TourStep, { tab: string; target: string; title: string; text: string }> = {
+  upload: {
     tab: 'upload',
+    target: 'upload-choose-files',
     title: 'Upload a statement',
     text: 'Drop in a CSV export from Alipay or WeChat.',
   },
-  {
-    id: 'categories',
+  categories: {
     tab: 'categories',
+    target: 'categories-list',
     title: 'Review your categories',
-    text: 'Check the starter list and adjust it to fit your life.',
+    text: 'Check the starter list and adjust it to fit your life. Press “Looks good” when you’re done.',
   },
-  {
-    id: 'label',
+  label: {
     tab: 'label',
-    title: 'Label a few transactions',
-    text: 'Teach the model by hand-labeling a small batch.',
+    target: 'label-area',
+    title: 'Label a transaction',
+    text: 'Pick the right category for a transaction — each label teaches your model.',
   },
-  {
-    id: 'train',
+  train: {
     tab: 'train',
+    target: 'train-start',
     title: 'Train your model',
-    text: 'Kick off training and let it categorize the rest.',
+    text: 'Start training and let it categorize the rest.',
   },
-] as const;
-
-const VISITED_KEY = 'onboarding-visited-categories';
-const DISMISSED_KEY = 'onboarding-dismissed';
-
-/** Which DOM element the current step's spotlight should point at, aware
- * of where the user currently is — e.g. "upload" points at the top-level
- * nav tab until the user has actually navigated into the upload wizard
- * step, then points at the dropzone itself. */
-function resolveTargetId(stepId: string, activeTab: string): string {
-  if (stepId === 'upload') {
-    return activeTab === 'upload' ? 'upload-choose-files' : 'nav-transactions-model';
-  }
-  return `wizard-step-${stepId}`;
-}
+};
 
 export default function OnboardingTour({
   onNavigate,
@@ -74,109 +55,124 @@ export default function OnboardingTour({
   onNavigate: (tab: string) => void;
   activeTab: string;
 }) {
-  const summaryQ = useApi<Summary>('/dashboard/summary');
-  const trainingQ = useApi<{ training_runs: unknown[] }>('/training/');
+  const tour = useTour();
+  const step = tour && !tour.finished ? tour.step : null;
+  const info = step ? STEP_INFO[step] : null;
+  const stepIndex = step ? TOUR_STEPS.indexOf(step) : -1;
 
-  const [visitedCategories, setVisitedCategories] = useState(false);
-  const [dismissed, setDismissed] = useState(true); // hidden until localStorage read
-
+  // When the user COMPLETES a step, take them to the next step's tab once —
+  // so the spotlight always has something to point at. Never on page load
+  // (the first step seen this visit is only recorded): a user who opens or
+  // reloads another tab mid-tour isn't dragged away; the box offers
+  // "Take me there" instead.
+  const seenStep = useRef<TourStep | null>(null);
   useEffect(() => {
-    setVisitedCategories(localStorage.getItem(VISITED_KEY) === '1');
-    setDismissed(localStorage.getItem(DISMISSED_KEY) === '1');
-  }, []);
+    if (!step || !info || seenStep.current === step) return;
+    const isTransition = seenStep.current !== null;
+    seenStep.current = step;
+    if (isTransition && activeTab !== info.tab) onNavigate(info.tab);
+  }, [step, info, activeTab, onNavigate]);
 
+  // The step box is fixed bottom-right; give the page extra scroll room while
+  // it's showing so page-bottom controls (e.g. the wizard's "Next" button)
+  // can always be scrolled clear of it.
+  const active = !!step;
   useEffect(() => {
-    if (activeTab === 'categories' && !visitedCategories) {
-      localStorage.setItem(VISITED_KEY, '1');
-      setVisitedCategories(true);
-    }
-  }, [activeTab, visitedCategories]);
+    if (!active) return;
+    const prev = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = '18rem';
+    return () => {
+      document.body.style.paddingBottom = prev;
+    };
+  }, [active]);
 
-  const completed = useMemo(() => {
-    const done = new Set<string>();
-    if ((summaryQ.data?.total_transactions ?? 0) > 0) done.add('upload');
-    if (visitedCategories) done.add('categories');
-    if ((summaryQ.data?.labeled_transactions ?? 0) > 0) done.add('label');
-    if ((trainingQ.data?.training_runs?.length ?? 0) > 0) done.add('train');
-    return done;
-  }, [summaryQ.data, trainingQ.data, visitedCategories]);
+  if (!step || !info) return null;
 
-  const allDone = completed.size === STEPS.length;
-  const stillLoading = summaryQ.loading || trainingQ.loading;
-  const nextStep = STEPS.find((s) => !completed.has(s.id));
-
-  if (dismissed || allDone || stillLoading) return null;
-
-  const dismiss = () => {
-    localStorage.setItem(DISMISSED_KEY, '1');
-    setDismissed(true);
-  };
+  const onStepTab = activeTab === info.tab;
 
   return (
     <>
-      {nextStep && (
-        <TourSpotlight
-          targetId={resolveTargetId(nextStep.id, activeTab)}
-          title={nextStep.title}
-          text={nextStep.text}
-          onSkip={dismiss}
-        />
-      )}
+      {onStepTab && <TourSpotlight targetId={info.target} />}
 
       <AnimatePresence>
         <m.div
+          key="tour-box"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 12 }}
-          className="glass fixed bottom-6 right-6 z-40 w-72 rounded-xl p-4 shadow-card"
+          // z-[70]: above the spotlight's dim layer (z-[60]) so the guide
+          // itself is never darkened.
+          className="fixed bottom-6 right-6 z-[70] w-80 rounded-xl border border-edge/10 bg-surface p-4 shadow-card"
+          role="dialog"
+          aria-label="Getting started"
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="section-label mb-0.5">Getting started</p>
-              <p className="text-sm font-semibold">{completed.size} of {STEPS.length} done</p>
+              <p className="text-sm font-semibold">
+                Step {stepIndex + 1} of {TOUR_STEPS.length}
+              </p>
             </div>
             <button
-              onClick={dismiss}
-              aria-label="Dismiss onboarding"
-              className="rounded-pill p-1.5 text-muted transition-colors hover:text-ink hover:bg-edge/8"
+              onClick={skipTour}
+              aria-label="Skip tour"
+              className="rounded-pill p-1.5 text-muted transition-colors hover:bg-edge/8 hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="space-y-1.5">
-            {STEPS.map((step, i) => {
-              const done = completed.has(step.id);
-              const isCurrent = nextStep?.id === step.id;
+          <ol className="mb-3 space-y-1">
+            {TOUR_STEPS.map((s, i) => {
+              const done = i < stepIndex;
+              const current = i === stepIndex;
               return (
-                <button
-                  key={step.id}
-                  onClick={() => onNavigate(step.tab)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
-                    isCurrent ? 'bg-accent/10' : 'hover:bg-edge/5'
-                  }`}
-                >
+                <li key={s} className={`flex items-center gap-2.5 rounded-lg px-2 py-1 ${current ? 'bg-accent/10' : ''}`}>
                   <span
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
                       done
                         ? 'bg-accent text-accent-ink'
-                        : isCurrent
+                        : current
                         ? 'border border-accent-strong text-accent-strong'
                         : 'border border-edge/20 text-muted'
                     }`}
                   >
                     {done ? <Check className="h-3 w-3" /> : i + 1}
                   </span>
-                  <span
-                    className={`text-sm ${
-                      done ? 'text-muted line-through' : isCurrent ? 'font-medium text-ink' : 'text-muted'
-                    }`}
-                  >
-                    {step.title}
+                  <span className={`text-sm ${done ? 'text-muted line-through' : current ? 'font-medium text-ink' : 'text-muted'}`}>
+                    {STEP_INFO[s].title}
                   </span>
-                </button>
+                </li>
               );
             })}
+          </ol>
+
+          {/* The current instruction always lives here, so the guide never
+              "vanishes" even when the spotlight target is off-screen. */}
+          <p className="text-xs leading-relaxed text-muted">{info.text}</p>
+
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <button
+              onClick={skipTour}
+              className="text-xs text-muted underline decoration-edge/40 underline-offset-2 hover:text-ink"
+            >
+              Skip tour
+            </button>
+            {!onStepTab ? (
+              <button
+                onClick={() => onNavigate(info.tab)}
+                className="inline-flex items-center gap-1 rounded-pill bg-accent px-3 py-1.5 text-xs font-semibold text-accent-ink"
+              >
+                Take me there <ArrowRight className="h-3 w-3" />
+              </button>
+            ) : step === 'categories' ? (
+              <button
+                onClick={() => advanceTour('categories')}
+                className="inline-flex items-center gap-1 rounded-pill bg-accent px-3 py-1.5 text-xs font-semibold text-accent-ink"
+              >
+                Looks good, next <ArrowRight className="h-3 w-3" />
+              </button>
+            ) : null}
           </div>
         </m.div>
       </AnimatePresence>

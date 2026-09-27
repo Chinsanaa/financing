@@ -10,8 +10,8 @@ const SPRING = { type: 'spring', stiffness: 500, damping: 40 } as const;
 
 /**
  * Top-level tab bar. Two shared-layout layers: a soft pill that glides to
- * whichever tab is hovered (the "spotlight nav" pattern), and a glowing
- * lime underline that springs to the active tab.
+ * whichever tab is hovered, and a solid lime underline that springs to the
+ * active tab.
  */
 export function TabBar({
   tabs,
@@ -68,7 +68,7 @@ export function TabBar({
             {isActive && (
               <m.span
                 layoutId={layoutId}
-                className="absolute inset-x-3 -bottom-[5px] h-0.5 rounded-full bg-accent shadow-[0_0_12px_1px_rgb(var(--accent)/0.6)]"
+                className="absolute inset-x-3 -bottom-[5px] h-0.5 rounded-full bg-accent"
                 transition={SPRING}
               />
             )}
@@ -93,7 +93,7 @@ export function PillTabs({
 }) {
   return (
     <div
-      className="scrollbar-hide inline-flex max-w-full gap-1 overflow-x-auto rounded-pill border border-edge/8 bg-surface-2/70 p-1 backdrop-blur"
+      className="scrollbar-hide inline-flex max-w-full gap-1 overflow-x-auto rounded-pill border border-edge/8 bg-surface-2/70 p-1"
       role="tablist"
     >
       {tabs.map((tab) => {

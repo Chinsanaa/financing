@@ -5,6 +5,7 @@ import { AnimatePresence, m } from 'framer-motion';
 import { Check, Keyboard, PartyPopper } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
+import { advanceTour, useTour } from '@/utils/tour';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
@@ -95,6 +96,7 @@ export default function LabelTab() {
       setActionError('');
       await api.classifyTx.label(tx.id, categoryId);
       removeCurrent();
+      advanceTour('label'); // a hand label (rule-labeled rows never count)
     } catch (err: any) {
       setActionError(err.response?.data?.detail || 'Failed to label transaction');
     } finally {
@@ -152,6 +154,8 @@ export default function LabelTab() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const tour = useTour();
+
   if (queueQ.loading || categoriesQ.loading) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
@@ -165,11 +169,18 @@ export default function LabelTab() {
 
   if (transactions.length === 0) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-2xl" data-tour-id="label-area">
         <EmptyState
           icon={PartyPopper}
           title="All transactions labeled"
           description="Nothing left in the queue. Upload another statement or retrain your model with the new labels."
+          action={
+            // If rules already labeled everything there's nothing to hand-label,
+            // so let the user move the tour on themselves (never automatic).
+            tour?.step === 'label' ? (
+              <Button onClick={() => advanceTour('label')}>Continue the tour</Button>
+            ) : undefined
+          }
         />
       </div>
     );
@@ -180,7 +191,7 @@ export default function LabelTab() {
   const progress = displayTotal > 0 ? Math.round((labeledCount / displayTotal) * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6" data-tour-id="label-area">
       <SectionHeader label="Transactions" title="Label transactions" />
       <p className="-mt-4 text-sm text-muted">
         Every label you set here becomes training data for your model.

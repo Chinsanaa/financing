@@ -24,12 +24,6 @@ export default function HeroChart() {
       </div>
 
       <svg viewBox="0 0 360 110" className="w-full" aria-hidden="true">
-        <defs>
-          <linearGradient id="hero-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
-          </linearGradient>
-        </defs>
         {[0, 1, 2].map((i) => (
           <line
             key={i}
@@ -43,7 +37,8 @@ export default function HeroChart() {
         ))}
         <m.polygon
           points={AREA}
-          fill="url(#hero-fill)"
+          fill="rgb(var(--accent))"
+          fillOpacity={0.15}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1.2, delay: 0.6 }}

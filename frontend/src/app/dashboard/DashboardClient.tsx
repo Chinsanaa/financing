@@ -194,9 +194,6 @@ export default function DashboardClient() {
 
   return (
     <div className="relative min-h-screen">
-      {/* Ambient backdrop (design system v2): drifting aurora + film grain */}
-      <div className="aurora" aria-hidden="true" />
-      <div className="grain" aria-hidden="true" />
 
       <a
         href="#main"
@@ -206,13 +203,10 @@ export default function DashboardClient() {
       </a>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg/70 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg">
         <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           <Link href="/dashboard" className="group flex items-center gap-2 font-display text-lg font-bold tracking-tight">
-            <span className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-accent-ink shadow-glow transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-105">
-              <span className="text-sm font-black">F</span>
-            </span>
-            <span className="hidden sm:inline">
+            <span>
               Financing<span className="text-accent-strong">.</span>
             </span>
           </Link>
@@ -263,7 +257,7 @@ export default function DashboardClient() {
             {displayName && (
               <span
                 title={displayName}
-                className="ml-1 hidden h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-accent to-violet font-display text-sm font-bold text-accent-ink ring-2 ring-bg sm:flex"
+                className="ml-1 hidden h-9 w-9 items-center justify-center rounded-full bg-accent font-display text-sm font-bold text-accent-ink ring-2 ring-bg sm:flex"
                 aria-hidden="true"
               >
                 {displayName.charAt(0).toUpperCase()}

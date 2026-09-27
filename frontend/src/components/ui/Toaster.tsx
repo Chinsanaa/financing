@@ -26,7 +26,7 @@ export default function Toaster() {
       closeButton
       toastOptions={{
         classNames: {
-          toast: '!rounded-card !border-edge/10 !bg-surface/95 !text-ink !shadow-card backdrop-blur-xl !font-sans',
+          toast: '!rounded-card !border-edge/10 !bg-surface !text-ink !shadow-card !font-sans',
           description: '!text-muted',
           success: '[&_[data-icon]]:!text-success',
           error: '[&_[data-icon]]:!text-danger',

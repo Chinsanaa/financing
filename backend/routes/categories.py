@@ -15,8 +15,8 @@ router = APIRouter()
 # Must stay in sync with the CHECK constraint in migration
 # 20260709120000_add_category_color.sql and the frontend CATEGORY_COLORS.
 ALLOWED_COLORS = frozenset({
-    "lime", "violet", "cyan", "pink", "amber", "sky",
-    "emerald", "rose", "indigo", "teal", "orange", "fuchsia",
+    "lime", "blue", "cyan", "pink", "amber", "sky",
+    "emerald", "rose", "green", "teal", "orange", "olive",
 })
 
 

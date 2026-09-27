@@ -56,7 +56,7 @@ export default function UploadWithIncomeTab() {
     // Same width as the nested UploadTab so the income card and upload panel align.
     <div className="mx-auto w-full max-w-2xl space-y-6">
       {/* Income Input Card */}
-      <Card spotlight className="p-6">
+      <Card className="p-6">
         <div className="mb-3 flex items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
             <Banknote className="h-[18px] w-[18px]" />

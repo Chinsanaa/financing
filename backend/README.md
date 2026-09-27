@@ -67,7 +67,7 @@ and training runs (see `ml.py`).
 **Dashboard** (`/dashboard`)
 - `GET /summary` · `/by-category` · `/trends?days=N` · `/budget` · `/savings`
   · `/action` · `/reports?page=N&per_page=M` · `/review-queue`
-- `GET /onboarding-status` · `POST /onboarding-complete`
+- `GET /tour` · `POST /tour/advance` `{completed}` · `POST /tour/skip` (onboarding tour, per account)
 
 **Settings** (`/settings`)
 - `GET/PATCH /profile` (monthly income)

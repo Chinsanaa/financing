@@ -7,6 +7,7 @@ import { celebrate } from '@/utils/celebrate';
 import RollingNumber from '@/components/ui/RollingNumber';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
+import { advanceTour } from '@/utils/tour';
 import { formatDateTime } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
@@ -56,7 +57,8 @@ export default function TrainingTab() {
       const modelRunId: string = res.data.model_run_id;
       setMessage('Training started! Results appear below when it finishes.');
       await reload(true);
-      invalidate('/training'); // onboarding checklist's "Train" step
+      invalidate('/training');
+      advanceTour('train'); // last tour step — the tour ends here
 
       stopPolling();
       pollRef.current = setInterval(async () => {
@@ -114,16 +116,16 @@ export default function TrainingTab() {
       {message && <Alert kind="success">{message}</Alert>}
 
       {/* Launch panel: while a run is live the brain "thinks" (pulsing rings) */}
-      <Card glow={training} className="relative flex flex-col items-center gap-5 overflow-hidden p-8 text-center sm:flex-row sm:text-left">
+      <Card className="relative flex flex-col items-center gap-5 overflow-hidden p-8 text-center sm:flex-row sm:text-left">
         <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
           {training && (
             <>
               <span className="absolute inset-0 rounded-2xl bg-accent/25 animate-ping-soft" />
-              <span className="absolute inset-0 rounded-2xl bg-violet/20 animate-ping-soft [animation-delay:1.2s]" />
+              <span className="absolute inset-0 rounded-2xl bg-accent/15 animate-ping-soft [animation-delay:1.2s]" />
             </>
           )}
           <span
-            className={`relative flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-gradient-to-b from-accent/25 to-accent/5 text-accent-strong ${
+            className={`relative flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-accent/10 text-accent-strong ${
               training ? 'animate-pulse' : ''
             }`}
           >
@@ -140,7 +142,7 @@ export default function TrainingTab() {
               : 'The more transactions you label, the smarter it gets.'}
           </p>
         </div>
-        <Button onClick={handleRetrain} loading={training} size="lg">
+        <Button onClick={handleRetrain} loading={training} size="lg" data-tour-id="train-start">
           {!training && <Play className="h-4 w-4" />}
           {training ? 'Training' : 'Start training'}
         </Button>

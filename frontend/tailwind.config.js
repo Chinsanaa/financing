@@ -19,7 +19,6 @@ module.exports = {
         accent: 'rgb(var(--accent) / <alpha-value>)',
         'accent-ink': 'rgb(var(--accent-ink) / <alpha-value>)',
         'accent-strong': 'rgb(var(--accent-strong) / <alpha-value>)',
-        violet: 'rgb(var(--violet) / <alpha-value>)',
         cyan: 'rgb(var(--cyan) / <alpha-value>)',
         danger: 'rgb(var(--danger) / <alpha-value>)',
         success: 'rgb(var(--success) / <alpha-value>)',
@@ -44,7 +43,6 @@ module.exports = {
         pill: '9999px',
       },
       boxShadow: {
-        glow: '0 0 40px -8px rgb(var(--accent) / 0.35)',
         card: '0 1px 2px rgb(0 0 0 / 0.06), 0 8px 32px -12px rgb(0 0 0 / 0.25)',
       },
       keyframes: {
