@@ -1,7 +1,7 @@
 'use client';
 
-import { ReactNode, useEffect, useRef, useState } from 'react';
-import { m, useInView, useReducedMotion } from 'framer-motion';
+import { ReactNode } from 'react';
+import { m, useReducedMotion } from 'framer-motion';
 
 /** Fade-up on scroll into view. */
 export function Reveal({
@@ -63,40 +63,4 @@ export function StaggerItem({ children, className = '' }: { children: ReactNode;
       {children}
     </m.div>
   );
-}
-
-/** Count-up number for stat tiles. */
-export function AnimatedNumber({
-  value,
-  format = (n: number) => n.toLocaleString(),
-  duration = 0.9,
-}: {
-  value: number;
-  format?: (n: number) => string;
-  duration?: number;
-}) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true });
-  const reduce = useReducedMotion();
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    if (!inView) return;
-    if (reduce) {
-      setDisplay(value);
-      return;
-    }
-    let raf: number;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min((now - start) / (duration * 1000), 1);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setDisplay(value * eased);
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [inView, value, duration, reduce]);
-
-  return <span ref={ref}>{format(display)}</span>;
 }

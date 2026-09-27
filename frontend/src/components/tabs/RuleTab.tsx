@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { SectionHeader } from '@/components/ui/Card';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
 import { formatMonthLong } from '@/utils/format';
+import MonthSelect from '@/components/ui/MonthSelect';
 import RuleBreakdown, { useRuleData } from './RuleBreakdown';
 
 export default function RuleTab() {
@@ -30,24 +31,18 @@ export default function RuleTab() {
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <p className="section-label">{selectedMonth ? formatMonthLong(selectedMonth) : 'This month'}</p>
       {monthOptions.length > 1 && (
-        <select
-          value={selectedMonth}
-          onChange={(e) => setMonth(e.target.value)}
-          className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
-        >
-          {monthOptions.map((m) => (
-            <option key={m} value={m}>
-              {formatMonthLong(m)}
-            </option>
-          ))}
-        </select>
+        <MonthSelect value={selectedMonth} months={monthOptions} onChange={setMonth} />
       )}
     </div>
   );
 
   return (
     <div className="space-y-6">
-      <SectionHeader label="Planning" title="50/30/20 rule" />
+      <SectionHeader
+        label="Planning"
+        title="50/30/20 rule"
+        description="A simple guideline: about 50% of income on needs, 30% on wants, 20% saved or invested. Ticks on each bar mark the target."
+      />
       <RuleBreakdown data={data} loading={false} error={error} header={header} />
     </div>
   );

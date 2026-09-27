@@ -64,6 +64,11 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
+Current (Session 69, 2026-09-27): full visual redesign ("Aurora Lime" v2 —
+see `docs/DESIGN_SYSTEM.md`). Next: user clicks through the deployed preview
+(especially ⌘K, label keyboard shortcuts, light theme) and reports anything
+that feels off; then the older items below.
+
 Current (Session 56): first real live-usage feedback arrived, and it was
 useful in two different ways. (1) Real bug/design corrections: rebuilt
 notifications with actual read/unread + clear (see Current State table —
@@ -4466,3 +4471,54 @@ refreshed when the lock starts. Verified with headless Chromium (8 simulated
 invalid-credential responses): exact states above, lock shows 30s. Dropped a
 planned extra "Forgot your password?" link in the hint — the screenshot
 showed one already sits directly above it.
+
+### Session 69 (2026-09-27) — Visual redesign: design system v2 ("Aurora Lime")
+
+**Ask:** make every tab and the whole visual experience "wow", using animation
+libraries like Vengeance UI / Skiper UI, and document/update the design system.
+**Decided with user (AskUserQuestion):** keep the identity (dark + electric lime
++ Space Grotesk) and level it up; all screens in scope; "expressive but
+purposeful" motion; small new deps OK.
+
+**Libraries:** Skiper UI / Vengeance UI are copy-paste framer-motion + Tailwind
+collections (most Skiper components are paid) — re-implemented their patterns
+(spotlight nav, glow-border cards, animated numbers, staggered grids, marquee)
+against our tokens instead of copying source. Added `@number-flow/react`
+(rolling digits), `sonner` (toasts), `canvas-confetti` (dynamic import,
+training success only). First Load JS: `/` 130→136 kB, `/dashboard` 207→211 kB.
+
+**Built:** motion tokens + effect classes in `globals.css` (aurora, grain,
+spotlight, glow-border, text-shine, stagger-in, progress-fill, btn-sheen,
+dash-march); new components `StatTile`/`DeltaChip`, `RollingNumber`,
+`ProgressRing`, `MonthSelect`, `CommandPalette` (⌘K/Ctrl+K), `Toaster`;
+`utils/theme.ts`, `spotlight.ts`, `celebrate.ts`. Every tab upgraded (see
+DESIGN_SYSTEM.md §6). **New UX features:** ⌘K command menu; label keyboard
+shortcuts (1–9 / Enter / S); success toasts (budgets, goal, income,
+subscriptions, training).
+
+**Bugs found and fixed along the way (all pre-existing):**
+1. **Planning sub-tabs were unreachable** — `PillTabs` was dropped in c08568f
+   (July "merge transactions and model tabs"), so 50/30/20, Savings,
+   Subscriptions, Insights, Action plan had no UI entry point (deep links
+   only). Restored.
+2. **`/8` and `/12` opacity classes never generated CSS** (42 uses:
+   `border-edge/8`, `bg-accent/12`, …) — Tailwind's default opacity scale is
+   multiples of 5. Every card border fell back to the default light gray
+   (bright outlines in dark mode). Added opacity steps 3/6/8/12.
+3. **`bg-[color:var(--chart-5)]/10`-style classes generated nothing** (Tailwind
+   3 can't apply alpha to a `var()`), so amber "approaching"/guidance tints
+   were missing. New `warn` token (RGB channels) replaces all 20 uses.
+4. Wizard's active step used white text on lime (unreadable in dark mode).
+
+**Verified:** `tsc` + `next build` clean; **first real browser pass of the
+logged-in dashboard** — headless Chromium against the production build with a
+forged session cookie + mocked API (all 13 tab/step views × dark/light, 390px
+mobile, landing/auth/settings): zero JS errors; ⌘K → "sav" → Enter navigates;
+pressing `2` on Label POSTs a label and advances. Harness approach documented
+in DESIGN_SYSTEM.md §8. **Not verified:** against real backend data (mocked
+shapes were taken from the component interfaces).
+
+**Open:** no frontend test suite still; `formatMonthLong` uses the browser
+locale (a Chinese-locale browser would show Chinese month names — conflicts
+with the English-only rule, small follow-up); stepper marks every step before
+the current one as "done" by position, not by real completion (pre-existing).

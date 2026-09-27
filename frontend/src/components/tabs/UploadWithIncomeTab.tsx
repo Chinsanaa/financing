@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { DollarSign } from 'lucide-react';
+import { Banknote } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/utils/api';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
@@ -13,7 +14,6 @@ export default function UploadWithIncomeTab() {
   const [income, setIncome] = useState<string>('');
   const [savingIncome, setSavingIncome] = useState(false);
   const [incomeError, setIncomeError] = useState('');
-  const [incomeMessage, setIncomeMessage] = useState('');
 
   // Fetch current income on mount
   useEffect(() => {
@@ -39,14 +39,12 @@ export default function UploadWithIncomeTab() {
 
     setSavingIncome(true);
     setIncomeError('');
-    setIncomeMessage('');
 
     try {
       await api.patch('/settings/profile', {
         monthly_income: parseFloat(income),
       });
-      setIncomeMessage('Income saved successfully!');
-      setTimeout(() => setIncomeMessage(''), 3000);
+      toast.success('Income saved', { description: 'Budgets and savings now use it.' });
     } catch (err: any) {
       setIncomeError(err.response?.data?.detail || 'Failed to save income');
     } finally {
@@ -58,10 +56,14 @@ export default function UploadWithIncomeTab() {
     // Same width as the nested UploadTab so the income card and upload panel align.
     <div className="mx-auto w-full max-w-2xl space-y-6">
       {/* Income Input Card */}
-      <Card className="border border-accent-strong/20 bg-accent-strong/5 p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <DollarSign className="h-5 w-5 text-accent-strong" />
-          <h3 className="font-semibold text-ink">Monthly Income (Optional)</h3>
+      <Card spotlight className="p-6">
+        <div className="mb-3 flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
+            <Banknote className="h-[18px] w-[18px]" />
+          </span>
+          <h3 className="font-display font-semibold text-ink">
+            Monthly income <span className="font-sans text-sm font-normal text-muted">(optional)</span>
+          </h3>
         </div>
         <p className="text-sm text-muted mb-4">
           Enter your monthly income to enable budget tracking and savings calculations.
@@ -77,7 +79,7 @@ export default function UploadWithIncomeTab() {
               value={income}
               onChange={(e) => setIncome(e.target.value)}
               placeholder="e.g., 15000"
-              className="w-full px-4 py-2 rounded-pill border border-edge/20 bg-surface text-ink placeholder-muted focus:outline-none focus:border-accent-strong/50 focus:ring-2 focus:ring-accent-strong/10"
+              className="w-full rounded-pill border border-edge/15 bg-surface-2 px-4 py-2 text-ink placeholder-muted transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20"
             />
           </div>
           <Button
@@ -91,7 +93,6 @@ export default function UploadWithIncomeTab() {
         </div>
 
         {incomeError && <Alert kind="error">{incomeError}</Alert>}
-        {incomeMessage && <Alert kind="success">{incomeMessage}</Alert>}
       </Card>
 
       {/* Original Upload Tab */}

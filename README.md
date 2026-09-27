@@ -75,7 +75,7 @@ Two very different questions:
 ## Dashboard sections (5)
 
 The ten original tabs are grouped into five compact sections with sub-tabs:
-**Overview** (a monthly-spending line chart + category split), **Transactions**
+**Overview** (last month's spend vs the month before, KPI tiles, a monthly-spending area chart + category split), **Transactions**
 (Upload / Label / Review queue), **Model** (Categories / Training), **Planning**
 (Budget / 50/30/20 / Savings / Subscriptions / Insights / Action plan), and **Reports**. A dismissible
 bottom-right onboarding guide (Upload → Categories → Label → Train) walks new
@@ -85,6 +85,11 @@ separate **Settings** page (data export, password change, legal links,
 account deletion). The UI is a dark-first design with a light theme toggle,
 skeleton loading states, and a marketing landing page at `/` for signed-out
 visitors, with `/privacy` and `/terms` legal pages linked from its footer.
+Visual language, tokens, motion rules and components are documented in
+**`docs/DESIGN_SYSTEM.md`** ("Aurora Lime" v2: ambient aurora backdrop,
+pointer spotlight cards, rolling numbers, a **⌘K / Ctrl+K command menu** to
+jump anywhere, and **keyboard labeling** — 1–9 pick a category, Enter accepts,
+S skips).
 
 **Sign-up/sign-in**: signup requires a unique username (checked live against
 the database as you type) alongside email, a password meeting a live
@@ -251,6 +256,7 @@ Full tree with explanations: `REPO_STRUCTURE.md`.
 | Document | Purpose |
 |---|---|
 | `docs/context.md` | Project memory: every session, decision, and open item |
+| `docs/DESIGN_SYSTEM.md` | Frontend design system: tokens, motion, effects, components |
 | `docs/PROJECT_SUMMARY.md` | Architecture overview and phase history |
 | `docs/SECURITY_AUDIT.md` | Security checklist + test specifications |
 | `docs/FULL_AUDIT.md` | ML integrity audit (merchant leakage, honest evaluation) |

@@ -3,6 +3,7 @@ import { ReactNode } from 'react';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import { MotionProvider } from '@/components/ui/MotionProvider';
+import Toaster from '@/components/ui/Toaster';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-body' });
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
@@ -32,7 +33,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans`}>
         <div className="min-h-screen bg-bg text-ink">
-          <MotionProvider>{children}</MotionProvider>
+          <MotionProvider>
+            {children}
+            <Toaster />
+          </MotionProvider>
         </div>
       </body>
     </html>

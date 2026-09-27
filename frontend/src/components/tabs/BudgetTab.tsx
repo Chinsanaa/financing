@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil, Wallet } from 'lucide-react';
+import { Banknote, CircleDollarSign, Pencil, PiggyBank, Receipt, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
@@ -10,9 +11,10 @@ import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
-import { AnimatedNumber } from '@/components/ui/motion';
+import StatTile from '@/components/ui/StatTile';
+import MonthSelect from '@/components/ui/MonthSelect';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
-import { formatCurrencyWhole, formatNumber, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
+import { formatCurrencyWhole, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
 import RuleBreakdown, { useRuleData } from './RuleBreakdown';
 
 interface BudgetInfo {
@@ -106,12 +108,17 @@ export default function BudgetTab() {
       setEditing(false);
       invalidate('/dashboard');
       await reload();
+      toast.success('Budgets saved', { description: `${budgets.length} categor${budgets.length === 1 ? 'y' : 'ies'} updated.` });
     } catch (err: any) {
       setSaveError(err.response?.data?.detail || 'Failed to save budgets');
     } finally {
       setSaving(false);
     }
   };
+
+  const totalBudget = (budget?.category_budgets || []).reduce((s, b) => s + b.monthly_budget, 0);
+  const totalSpent = (budget?.category_budgets || []).reduce((s, b) => s + b.current_spend, 0);
+  const remaining = totalBudget - totalSpent;
 
   if (loading) {
     return (
@@ -124,21 +131,33 @@ export default function BudgetTab() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader label="Planning" title="Budget and forecast" />
+      <SectionHeader
+        label="Planning"
+        title="Budget and forecast"
+        description="Monthly limits per category, and how this month is tracking against them."
+        action={
+          !editing && monthOptions.length > 1 ? (
+            <MonthSelect value={selectedMonth} months={monthOptions} onChange={setMonth} />
+          ) : undefined
+        }
+      />
 
       {error && <Alert kind="error">{error}</Alert>}
 
-      {budget?.budget_config && budget.budget_config.monthly_income > 0 && (
-        <Card className="p-5">
-          <p className="section-label mb-2">Monthly income</p>
-          <p className="font-display text-3xl font-bold tabular-nums tracking-tight">
-            {CURRENCY_SYMBOL}
-            <AnimatedNumber
-              value={budget.budget_config.monthly_income}
-              format={(n) => formatNumber(n, 0)}
-            />
-          </p>
-        </Card>
+      {budget && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatTile label="Monthly income" value={budget.budget_config?.monthly_income ?? 0} currency icon={Banknote} footer="From your settings" />
+          <StatTile label="Budgeted" value={totalBudget} currency icon={Wallet} footer={`${budget.category_budgets.length} categories`} />
+          <StatTile label="Spent" value={totalSpent} currency icon={Receipt} footer={selectedMonth ? formatMonthLong(selectedMonth) : 'This month'} />
+          <StatTile
+            label={remaining >= 0 ? 'Left to spend' : 'Over budget'}
+            value={Math.abs(remaining)}
+            currency
+            icon={remaining >= 0 ? PiggyBank : CircleDollarSign}
+            tone={totalBudget > 0 ? (remaining >= 0 ? 'success' : 'danger') : undefined}
+            footer={totalBudget > 0 ? `${Math.round((totalSpent / totalBudget) * 100)}% of total budget used` : 'Set budgets to track this'}
+          />
+        </div>
       )}
 
       <Card className="p-6">
@@ -147,22 +166,9 @@ export default function BudgetTab() {
             Budget by category — {selectedMonth ? formatMonthLong(selectedMonth) : 'this month'}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            {!editing && monthOptions.length > 1 && (
-              <select
-                value={selectedMonth}
-                onChange={(e) => setMonth(e.target.value)}
-                className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
-              >
-                {monthOptions.map((m) => (
-                  <option key={m} value={m}>
-                    {formatMonthLong(m)}
-                  </option>
-                ))}
-              </select>
-            )}
             {!editing && categories.length > 0 && (
-              <Button variant="outline" onClick={startEditing} className="!px-3 !py-1.5 text-sm">
-                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+              <Button variant="outline" size="sm" onClick={startEditing}>
+                <Pencil className="h-3.5 w-3.5" />
                 {budget && budget.category_budgets.length > 0 ? 'Edit budgets' : 'Set budgets'}
               </Button>
             )}
@@ -244,18 +250,24 @@ export default function BudgetTab() {
               const statusTextColor = isOverBudget
                 ? 'text-danger'
                 : isApproaching
-                ? 'text-[color:var(--chart-5)]'
+                ? 'text-warn'
                 : '';
 
               return (
                 <div key={cat.category}>
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <Badge tone={toneFor(cat.category)}>{cat.category}</Badge>
+                    <span className="flex items-center gap-2">
+                      <Badge tone={toneFor(cat.category)}>{cat.category}</Badge>
+                      {isOverBudget && <Badge tone="danger">Over</Badge>}
+                      {isApproaching && (
+                        <Badge tone="bg-warn/15 text-warn">Close</Badge>
+                      )}
+                    </span>
                     <p className={`text-sm font-semibold tabular-nums ${statusTextColor}`}>
                       {formatCurrencyWhole(cat.current_spend)} / {formatCurrencyWhole(cat.monthly_budget)}
                     </p>
                   </div>
-                  <ProgressBar percent={percentage} fillColor={chartColorFor(cat.category)} />
+                  <ProgressBar percent={percentage} fillColor={chartColorFor(cat.category)} label={`${cat.category} budget used`} />
                   <p className={`mt-1 text-xs ${statusTextColor || 'text-muted'}`}>
                     {isOverBudget
                       ? `${formatCurrencyWhole(cat.current_spend - cat.monthly_budget)} over budget`

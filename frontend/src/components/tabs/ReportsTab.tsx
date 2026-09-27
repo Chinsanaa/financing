@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { m } from 'framer-motion';
+import RollingNumber from '@/components/ui/RollingNumber';
 import {
   ChevronLeft,
   ChevronRight,
@@ -310,6 +312,7 @@ export default function ReportsTab() {
       <SectionHeader
         label="Reports"
         title="All transactions"
+        description="Search, filter, re-categorize, split and export everything you've imported."
         action={
           reports && (
             <div className="flex flex-wrap gap-2">
@@ -342,7 +345,11 @@ export default function ReportsTab() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         {reports && (
           <p className="text-sm text-muted">
-            Showing {reports.transactions.length} of {reports.total_count} transactions
+            Showing {reports.transactions.length} of{' '}
+            <span className="font-semibold text-ink">
+              <RollingNumber value={reports.total_count} />
+            </span>{' '}
+            transactions
           </p>
         )}
         <Button
@@ -356,6 +363,7 @@ export default function ReportsTab() {
       </div>
 
       {filtersOpen && (
+        <m.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
         <Card className="space-y-4 p-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[200px] flex-1">
@@ -471,6 +479,7 @@ export default function ReportsTab() {
             </label>
           </div>
         </Card>
+        </m.div>
       )}
 
       {selectedIds.size > 0 && (
@@ -534,9 +543,12 @@ export default function ReportsTab() {
                   <th className="px-4 py-3 text-center font-medium text-muted">Source</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-edge/8">
+              <tbody className="stagger-in divide-y divide-edge/8">
                 {reports.transactions.map((txn) => (
-                  <tr key={txn.id} className="transition-colors hover:bg-edge/5">
+                  <tr
+                    key={txn.id}
+                    className={`transition-colors hover:bg-edge/5 ${selectedIds.has(txn.id) ? 'bg-accent/[0.06]' : ''}`}
+                  >
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"

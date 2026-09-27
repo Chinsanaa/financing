@@ -186,6 +186,8 @@ export default function AuthClient() {
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
+      <div className="aurora" aria-hidden="true" />
+      <div className="grain" aria-hidden="true" />
       {/* Mobile-only logo, pinned to the top so it doesn't drift with the
           centered form's height (sign-up has more inputs than sign-in). The
           desktop logo lives in the brand panel below. */}
@@ -197,7 +199,7 @@ export default function AuthClient() {
       </Link>
 
       {/* Brand panel */}
-      <div className="bg-grid relative hidden flex-col overflow-hidden p-10 lg:flex xl:p-14 2xl:p-20">
+      <div className="bg-grid relative z-[1] hidden flex-col overflow-hidden border-r border-edge/8 p-10 lg:flex xl:p-14 2xl:p-20">
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-accent/10 blur-3xl animate-glow-pulse" />
         <Link href="/" className="relative font-display text-lg font-bold tracking-tight">
           Financing<span className="text-accent-strong">.</span>
@@ -209,7 +211,7 @@ export default function AuthClient() {
           <h1 className="font-display text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl 2xl:text-7xl">
             Your money,
             <br />
-            <span className="text-accent-strong">decoded</span>.
+            <span className="text-shine">decoded</span>.
           </h1>
           <p className="mt-5 max-w-md text-muted xl:max-w-lg xl:text-lg">
             One personal model, trained on your own labels, sorting every Alipay and
@@ -223,25 +225,48 @@ export default function AuthClient() {
               </li>
             ))}
           </ul>
-          <svg viewBox="0 0 400 80" className="relative mt-10 w-full max-w-lg opacity-60 xl:max-w-xl" aria-hidden="true">
-            <polyline
+          {/* Spending line draws itself in, then the area fades up under it */}
+          <svg viewBox="0 0 400 80" className="relative mt-10 w-full max-w-lg xl:max-w-xl" aria-hidden="true">
+            <defs>
+              <linearGradient id="auth-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <m.polygon
+              points="0,80 0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20 400,80"
+              fill="url(#auth-fill)"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 1, delay: 1.2 }}
+            />
+            <m.polyline
               points="0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20"
               fill="none"
               stroke="rgb(var(--accent))"
-              strokeWidth="2"
+              strokeWidth="2.5"
               strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 1.6, ease: 'easeInOut', delay: 0.3 }}
+            />
+            <m.circle
+              cx="400" cy="20" r="4" fill="rgb(var(--accent))"
+              initial={{ scale: 0 }} animate={{ scale: 1 }}
+              transition={{ delay: 1.9, type: 'spring', stiffness: 400 }}
             />
           </svg>
         </div>
       </div>
 
       {/* Form panel */}
-      <div className="flex items-center justify-center px-4 py-16 sm:px-8 xl:px-12">
+      <div className="relative z-[1] flex items-center justify-center px-4 py-16 sm:px-8 xl:px-12">
         <m.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="w-full max-w-sm lg:max-w-md"
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="glass glow-border w-full max-w-sm rounded-2xl p-6 shadow-card sm:p-8 lg:max-w-md"
         >
           {mode !== 'forgot' && (
             <div className="mb-8 inline-flex rounded-pill bg-surface-2 p-1" role="tablist" aria-label="Sign in or create account">

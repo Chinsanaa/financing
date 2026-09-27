@@ -84,6 +84,7 @@ financing/
 │
 ├── docs/
 │   ├── context.md             # project memory: sessions, decisions, open items
+│   ├── DESIGN_SYSTEM.md       # frontend tokens, motion, effects, components
 │   ├── PROJECT_SUMMARY.md     # architecture overview + phase history
 │   ├── SECURITY_AUDIT.md      # security checklist + test specs
 │   ├── FULL_AUDIT.md          # ML integrity audit (historical, still relevant)

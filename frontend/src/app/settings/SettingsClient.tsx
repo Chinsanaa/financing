@@ -215,8 +215,10 @@ export default function SettingsClient() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="glass sticky top-0 z-40 border-b border-edge/8">
+    <div className="relative min-h-screen">
+      <div className="aurora" aria-hidden="true" />
+      <div className="grain" aria-hidden="true" />
+      <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
           <h1 className="font-display text-lg font-bold tracking-tight">Settings</h1>
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -225,17 +227,25 @@ export default function SettingsClient() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
+      {/* stagger-in: section cards cascade in on load */}
+      <div className="stagger-in relative z-[1] mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
         <Card className="p-6">
           <SectionHeader label="Profile" title="Account" />
-          <div className="space-y-4">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+          <span
+            aria-hidden="true"
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-violet font-display text-2xl font-bold text-accent-ink shadow-glow"
+          >
+            {(profile?.username || user?.email || '?').charAt(0).toUpperCase()}
+          </span>
+          <div className="grid flex-1 gap-4 sm:grid-cols-3">
             <div>
               <p className="section-label mb-0.5">Username</p>
               <p className="text-sm font-medium">{profile?.username || '—'}</p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="section-label mb-0.5">Email</p>
-              <p className="text-sm font-medium">{user?.email}</p>
+              <p className="truncate text-sm font-medium" title={user?.email}>{user?.email}</p>
             </div>
             <div>
               <p className="section-label mb-0.5">Account created</p>
@@ -243,6 +253,7 @@ export default function SettingsClient() {
                 {profile?.created_at ? formatDate(profile.created_at) : '—'}
               </p>
             </div>
+          </div>
           </div>
         </Card>
 

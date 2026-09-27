@@ -5,6 +5,16 @@
 /* Design tokens. Dark is the flagship theme; light is a tasteful inversion.
    Values are space-separated RGB channels so Tailwind can apply alpha. */
 :root {
+  /* ── Motion tokens (design system v2 — see docs/DESIGN_SYSTEM.md) ── */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* entrances, "expo-out" */
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45); /* exits */
+  --dur-fast: 150ms; /* hovers, presses */
+  --dur-base: 240ms; /* state changes */
+  --dur-slow: 480ms; /* entrances, charts */
+  /* Ambient backdrop strength (aurora + grain) per theme */
+  --aurora-strength: 0.1;
+  --grain-opacity: 0.025;
+
   --bg: 250 250 248;
   --surface: 255 255 255;
   --surface-2: 241 241 243;
@@ -18,6 +28,7 @@
   --cyan: 8 145 178;
   --danger: 220 38 38;
   --success: 22 163 74;
+  --warn: 180 83 9; /* amber — "approaching" states; same hue as --chart-5 */
   /* Categorical chart series (validated for light surface) */
   --chart-1: #4d7c0f;
   --chart-2: #7c3aed;
@@ -59,6 +70,9 @@
 }
 
 .dark {
+  --aurora-strength: 0.16;
+  --grain-opacity: 0.04;
+
   --bg: 10 10 15;
   --surface: 19 19 24;
   --surface-2: 27 27 35;
@@ -72,6 +86,7 @@
   --cyan: 34 211 238;
   --danger: 248 113 113;
   --success: 74 222 128;
+  --warn: 217 119 6;
   /* Categorical chart series (validated for dark surface) */
   --chart-1: #65a30d;
   --chart-2: #8b5cf6;
@@ -123,21 +138,23 @@ code {
   background-size: 48px 48px;
 }
 
-/* Skeleton shimmer surface */
+/* Skeleton shimmer surface — a soft light band sweeps across. */
 .skeleton {
-  background: linear-gradient(
-    100deg,
-    rgb(var(--surface-2)) 40%,
-    rgb(var(--edge) / 0.1) 50%,
-    rgb(var(--surface-2)) 60%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.8s linear infinite;
+  position: relative;
+  overflow: hidden;
+  background-color: rgb(var(--surface-2));
   border-radius: 0.5rem;
 }
-@keyframes shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--edge) / 0.07), transparent);
+  animation: skeleton-sweep 1.6s var(--ease-out) infinite;
+}
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
 }
 
 /* Category badge tones — one class per palette key in categoryColors.ts.
@@ -170,6 +187,7 @@ code {
   html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
@@ -182,4 +200,256 @@ code {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Design system v2 — ambient + interaction effects.
+   Everything here is token-driven (works in light + dark) and collapses
+   to static under prefers-reduced-motion (global rule above).
+   Full reference: docs/DESIGN_SYSTEM.md
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Aurora: two slow-drifting radial glows behind the app. Pure gradients
+   (no filter: blur) so it's cheap to composite. Mount once per page. */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.aurora::before,
+.aurora::after {
+  content: '';
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 9999px;
+  opacity: var(--aurora-strength);
+  will-change: transform;
+}
+.aurora::before {
+  top: -38vmax;
+  left: -18vmax;
+  background: radial-gradient(closest-side, rgb(var(--accent)), transparent);
+  animation: aurora-drift-a 26s ease-in-out infinite alternate;
+}
+.aurora::after {
+  bottom: -42vmax;
+  right: -20vmax;
+  background: radial-gradient(closest-side, rgb(var(--violet)), transparent);
+  animation: aurora-drift-b 32s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift-a {
+  to { transform: translate3d(14vmax, 8vmax, 0) scale(1.1); }
+}
+@keyframes aurora-drift-b {
+  to { transform: translate3d(-12vmax, -10vmax, 0) scale(1.15); }
+}
+
+/* Film grain over the aurora — kills gradient banding, adds tactility. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Spotlight: a soft glow + lit border that follow the pointer.
+   Needs --mx/--my set by useSpotlight() (Card does this for `hover`). */
+.spotlight {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight::before,
+.spotlight::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.spotlight::before {
+  inset: 0;
+  z-index: -1; /* above the card background, below its content */
+  background: radial-gradient(480px circle at var(--mx, 50%) var(--my, 50%), rgb(var(--accent) / 0.07), transparent 45%);
+}
+/* Rings sit just inside the padding edge (inset: 0), not over the border,
+   so they survive `overflow: hidden` on the card (which clips the border box). */
+.spotlight::after {
+  inset: 0;
+  padding: 1px;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgb(var(--accent) / 0.55), transparent 60%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.spotlight:hover::before,
+.spotlight:hover::after {
+  opacity: 1;
+}
+
+/* Glow border: a lime→violet light slowly orbits the edge. Reserve for
+   ONE hero element per view (overview hero, CTA, auth card). */
+@property --orbit {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.glow-border {
+  position: relative;
+  isolation: isolate;
+}
+.glow-border::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--orbit),
+    transparent 0 55%,
+    rgb(var(--accent) / 0.9) 70%,
+    rgb(var(--violet) / 0.8) 82%,
+    transparent 94%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: orbit 7s linear infinite;
+}
+@keyframes orbit {
+  to { --orbit: 360deg; }
+}
+
+/* Shimmering gradient text — one headline accent per page, max. */
+.text-shine {
+  background: linear-gradient(
+    110deg,
+    rgb(var(--accent-strong)) 30%,
+    rgb(var(--ink)) 50%,
+    rgb(var(--accent-strong)) 70%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-shine 7s linear infinite;
+}
+@keyframes text-shine {
+  from { background-position: 100% 0; }
+  to { background-position: -150% 0; }
+}
+
+/* Staggered entrance: each direct child rises in 55ms after the previous.
+   `.tab-panel` (TabPanel) applies it to every tab's top-level sections.
+   `backwards` fill (not `both`) so hover transforms keep working after. */
+.stagger-in > *,
+.tab-panel > * > * {
+  animation: rise-in var(--dur-slow) var(--ease-out) backwards;
+}
+.stagger-in > *:nth-child(2), .tab-panel > * > *:nth-child(2) { animation-delay: 55ms; }
+.stagger-in > *:nth-child(3), .tab-panel > * > *:nth-child(3) { animation-delay: 110ms; }
+.stagger-in > *:nth-child(4), .tab-panel > * > *:nth-child(4) { animation-delay: 165ms; }
+.stagger-in > *:nth-child(5), .tab-panel > * > *:nth-child(5) { animation-delay: 220ms; }
+.stagger-in > *:nth-child(6), .tab-panel > * > *:nth-child(6) { animation-delay: 275ms; }
+.stagger-in > *:nth-child(n + 7), .tab-panel > * > *:nth-child(n + 7) { animation-delay: 330ms; }
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+}
+
+/* Progress fill: grows from 0 on mount, glides on change, and a light
+   sweep passes over it once. */
+.progress-fill {
+  position: relative;
+  overflow: hidden;
+  animation: grow-x 900ms var(--ease-out) backwards;
+  transition: width 700ms var(--ease-out);
+}
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+  animation: skeleton-sweep 1.4s var(--ease-out) 900ms 1 both;
+}
+@keyframes grow-x {
+  from { width: 0; }
+}
+
+/* Primary-button sheen on hover. */
+.btn-sheen {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.btn-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transform: translateX(-120%) skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+  transition: transform 0s;
+}
+.btn-sheen:hover::after {
+  transform: translateX(120%) skewX(-20deg);
+  transition: transform 700ms var(--ease-out);
+}
+
+/* Floating (empty-state icons, decorative badges). */
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float { animation: float-y 4s ease-in-out infinite; }
+
+/* Radiating ring behind "live" dots / empty-state icons. */
+@keyframes ping-soft {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.animate-ping-soft { animation: ping-soft 2.4s var(--ease-out) infinite; }
+
+/* Keyboard hint chips (⌘K etc.). */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(var(--edge) / 0.12);
+  background: rgb(var(--surface-2));
+  padding: 0.0625rem 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgb(var(--muted));
+  font-family: var(--font-body), sans-serif;
+}
+
+/* Recharts: kill the default focus rectangle on clicked chart surfaces. */
+.recharts-wrapper *:focus {
+  outline: none;
+}
+
+/* Marching-ants border for drop zones (SVG <rect class="dash-march">).
+   Idles slowly; `.is-active` (drag over) speeds it up. */
+.dash-march {
+  fill: none;
+  stroke-dasharray: 10 8;
+  animation: dash-march 2.4s linear infinite;
+}
+.is-active .dash-march {
+  animation-duration: 0.6s;
+}
+@keyframes dash-march {
+  to { stroke-dashoffset: -36; }
 }

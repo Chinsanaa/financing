@@ -43,6 +43,8 @@ export function ProgressBar({
   color = 'bg-accent',
   fillColor,
   height = 'h-2',
+  marker,
+  label,
 }: {
   percent: number;
   /** Tailwind class for the fill. Ignored when `fillColor` is set. */
@@ -52,16 +54,41 @@ export function ProgressBar({
    *  Tailwind palette (e.g. a category's own identity color). */
   fillColor?: string;
   height?: string;
+  /** Optional target position (0–100) drawn as a thin tick, e.g. the 50%
+   *  "Needs" target on the 50/30/20 bars. */
+  marker?: number;
+  /** Accessible name for the bar (announced with its value). */
+  label?: string;
 }) {
+  const pct = Math.min(Math.max(Number.isFinite(percent) ? percent : 0, 0), 100);
   return (
-    <div className={`w-full overflow-hidden rounded-full bg-edge/10 ${height}`}>
-      <div
-        className={`${fillColor ? '' : color} ${height} rounded-full transition-all duration-500`}
-        style={{
-          width: `${Math.min(Math.max(percent, 0), 100)}%`,
-          ...(fillColor ? { backgroundColor: fillColor } : {}),
-        }}
-      />
+    <div
+      className={`relative w-full rounded-full bg-edge/10 ${height}`}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+      aria-label={label}
+    >
+      <div className={`h-full overflow-hidden rounded-full`}>
+        {/* .progress-fill: grows in from 0, glides on change, one light sweep */}
+        <div
+          className={`progress-fill ${fillColor ? '' : color} h-full rounded-full`}
+          style={{
+            width: `${pct}%`,
+            ...(fillColor
+              ? { backgroundColor: fillColor, boxShadow: `0 0 12px -2px ${fillColor}` }
+              : {}),
+          }}
+        />
+      </div>
+      {marker !== undefined && (
+        <span
+          aria-hidden="true"
+          className="absolute -top-1 -bottom-1 w-0.5 -translate-x-1/2 rounded-full bg-ink/60"
+          style={{ left: `${Math.min(Math.max(marker, 0), 100)}%` }}
+        />
+      )}
     </div>
   );
 }

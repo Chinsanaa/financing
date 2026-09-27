@@ -23,6 +23,17 @@ module.exports = {
         cyan: 'rgb(var(--cyan) / <alpha-value>)',
         danger: 'rgb(var(--danger) / <alpha-value>)',
         success: 'rgb(var(--success) / <alpha-value>)',
+        warn: 'rgb(var(--warn) / <alpha-value>)',
+      },
+      // Extra opacity steps used as color modifiers (border-edge/8,
+      // bg-accent/12). Tailwind's default scale only has multiples of 5, so
+      // before these existed those classes silently generated NO CSS and
+      // borders fell back to the light-gray default (bright lines in dark).
+      opacity: {
+        3: '0.03',
+        6: '0.06',
+        8: '0.08',
+        12: '0.12',
       },
       fontFamily: {
         display: ['var(--font-display)', 'sans-serif'],
