@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Tags, Trash2 } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
@@ -146,7 +146,7 @@ export default function CategoriesTab() {
                 if (other.id !== cat.id && other.color) takenBy.set(other.color, other.name);
               }
               return (
-                <motion.div
+                <m.div
                   key={cat.id}
                   layout
                   initial={{ opacity: 0, y: 8 }}
@@ -180,7 +180,7 @@ export default function CategoriesTab() {
                       )}
                     </div>
                   </Card>
-                </motion.div>
+                </m.div>
               );
             })}
           </AnimatePresence>

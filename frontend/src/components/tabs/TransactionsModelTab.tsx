@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import {
   ChevronLeft,
   ChevronRight,
@@ -150,7 +150,7 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
 
       {/* Step Content */}
       <AnimatePresence mode="wait">
-        <motion.div
+        <m.div
           key={currentStep}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -164,7 +164,7 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
             {currentStep === 3 && <ReviewTab />}
             {currentStep === 4 && <TrainingTab />}
           </div>
-        </motion.div>
+        </m.div>
       </AnimatePresence>
 
       {/* Navigation Buttons */}

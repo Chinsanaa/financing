@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { m, useScroll, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   BrainCircuit,
@@ -117,7 +117,7 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="bg-grid relative pt-36 pb-24 sm:pt-44">
-        <motion.div
+        <m.div
           style={{ opacity: heroGlow }}
           className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-accent/10 blur-3xl"
         />
@@ -161,13 +161,13 @@ export default function Landing() {
             </div>
 
             <Reveal delay={0.2}>
-              <motion.div
+              <m.div
                 initial={{ rotate: 2 }}
                 whileHover={{ rotate: 0, scale: 1.01 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 20 }}
               >
                 <HeroChart />
-              </motion.div>
+              </m.div>
             </Reveal>
           </div>
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import Card from '@/components/ui/Card';
 import Badge, { categoryColor } from '@/components/ui/Badge';
 
@@ -41,14 +41,14 @@ export default function HeroChart() {
             strokeWidth="1"
           />
         ))}
-        <motion.polygon
+        <m.polygon
           points={AREA}
           fill="url(#hero-fill)"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1.2, delay: 0.6 }}
         />
-        <motion.polyline
+        <m.polyline
           points={POINTS}
           fill="none"
           stroke="rgb(var(--accent))"
@@ -59,7 +59,7 @@ export default function HeroChart() {
           animate={{ pathLength: 1 }}
           transition={{ duration: 1.4, ease: 'easeInOut', delay: 0.3 }}
         />
-        <motion.circle
+        <m.circle
           cx="360"
           cy="18"
           r="4"
@@ -72,14 +72,14 @@ export default function HeroChart() {
 
       <div className="mt-5 flex flex-wrap gap-2">
         {CHIPS.map((c, i) => (
-          <motion.span
+          <m.span
             key={c}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8 + i * 0.1 }}
           >
             <Badge tone={categoryColor(c)}>{c}</Badge>
-          </motion.span>
+          </m.span>
         ))}
       </div>
     </Card>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
 import TourSpotlight from './TourSpotlight';
@@ -124,7 +124,7 @@ export default function OnboardingTour({
       )}
 
       <AnimatePresence>
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 12 }}
@@ -178,7 +178,7 @@ export default function OnboardingTour({
               );
             })}
           </div>
-        </motion.div>
+        </m.div>
       </AnimatePresence>
     </>
   );

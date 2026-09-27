@@ -4380,3 +4380,34 @@ JWT) — verify after merge in the browser.
 **Next:** Phase 5 — frontend (in-flight dedupe of the double
 `/dashboard/summary`, sessionStorage cache, token reuse, LazyMotion,
 TourSpotlight polling).
+
+**Phase 5 (same session) — frontend.** `utils/useApi.ts`: concurrent GETs
+for the same path share one request (the Overview fired
+`/dashboard/summary` twice — OnboardingTour + StatsTab); `invalidate()` also
+drops matching in-flight requests so a refetch after a mutation can't reuse
+a pre-mutation response. New `utils/apiCache.ts`: cache mirrored to
+**sessionStorage** (user's choice — per-tab, gone on tab close), key prefix
+`apiCache:v1:`, every access try/catch'd; cleared on Supabase `SIGNED_OUT`
+(covers header + Settings sign-out) and on any 401 (`utils/api.ts`).
+framer-motion: all 13 importers use `m.*` + a root `MotionProvider`
+(`LazyMotion`, `domMax` loaded as an async chunk — needed for `layoutId`).
+Fixed a latent collision this would have caused: `AuthClient`'s tab map used
+a local `m` (renamed `tabMode`). `TourSpotlight`: keeps its 400ms poll
+(targets mount late) but only re-renders when the rect actually changes.
+**Measured (`next build` First Load JS):** `/` 152→130 kB, `/auth` 228→205
+kB, `/dashboard` 230→207 kB. Headless-Chromium check of `/` and `/auth`
+(built app): renders, auth tab switch + `layoutId` pill work, no JS errors.
+**Dropped from the plan, with reasons:** (1) caching the access token instead
+of `getSession()` per request — `getSession()` is a local cookie read unless
+the token expired (then refreshing is correct); a hand-rolled cache risks
+sending expired tokens → 401 → forced logout. (2) "two Supabase clients" —
+`@supabase/ssr` 0.0.10's `createBrowserClient` is already a browser
+singleton (`isSingleton = true`), so no race existed.
+**Not verified:** the logged-in dashboard in a browser (needs a real
+account) — dedupe/sessionStorage behavior must be confirmed by the user
+after merge (reload Overview: numbers should appear instantly).
+
+**Next suggested step:** merge PR #57 → open Reports once (starts the
+one-time translation backfill) → click through Overview/Reports/Budget/
+Subscriptions → set up the cron-job.org pinger if not done. Then re-measure:
+first request after 30+ idle min should be <2s (was 33.5s).

@@ -200,6 +200,9 @@ translated once per distinct string in the background (`backend/translations.py`
 and stored in `transactions.merchant_en`/`description_en`; pages never call
 Google Translate.
 
+**Frontend data cache:** `useApi` dedupes concurrent GETs and mirrors responses
+to sessionStorage (per-tab; cleared on sign-out/401) so reloads render instantly.
+
 ## Tests
 
 ```bash

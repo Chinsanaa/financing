@@ -37,7 +37,17 @@ export default function TourSpotlight({
 
     const update = () => {
       const el = document.querySelector(`[data-tour-id="${targetId}"]`);
-      setRect(el ? el.getBoundingClientRect() : null);
+      const next = el ? el.getBoundingClientRect() : null;
+      // getBoundingClientRect returns a new object every call — only
+      // re-render when the target actually moved/resized/appeared, not on
+      // every poll tick.
+      setRect((prev) =>
+        prev && next &&
+        prev.top === next.top && prev.left === next.left &&
+        prev.width === next.width && prev.height === next.height
+          ? prev
+          : next
+      );
     };
 
     update();

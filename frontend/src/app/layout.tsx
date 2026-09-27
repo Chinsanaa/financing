@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ReactNode } from 'react';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
+import { MotionProvider } from '@/components/ui/MotionProvider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-body' });
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans`}>
-        <div className="min-h-screen bg-bg text-ink">{children}</div>
+        <div className="min-h-screen bg-bg text-ink">
+          <MotionProvider>{children}</MotionProvider>
+        </div>
       </body>
     </html>
   );

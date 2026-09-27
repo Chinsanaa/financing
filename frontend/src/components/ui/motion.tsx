@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { motion, useInView, useReducedMotion } from 'framer-motion';
+import { m, useInView, useReducedMotion } from 'framer-motion';
 
 /** Fade-up on scroll into view. */
 export function Reveal({
@@ -15,7 +15,7 @@ export function Reveal({
 }) {
   const reduce = useReducedMotion();
   return (
-    <motion.div
+    <m.div
       className={className}
       initial={reduce ? false : { opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
@@ -23,7 +23,7 @@ export function Reveal({
       transition={{ duration: 0.55, ease: [0.21, 0.47, 0.32, 0.98], delay }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -39,7 +39,7 @@ export function Stagger({
 }) {
   const reduce = useReducedMotion();
   return (
-    <motion.div
+    <m.div
       className={className}
       initial={reduce ? false : 'hidden'}
       whileInView="show"
@@ -47,13 +47,13 @@ export function Stagger({
       variants={{ hidden: {}, show: { transition: { staggerChildren: gap } } }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
 export function StaggerItem({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <motion.div
+    <m.div
       className={className}
       variants={{
         hidden: { opacity: 0, y: 20 },
@@ -61,7 +61,7 @@ export function StaggerItem({ children, className = '' }: { children: ReactNode;
       }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 

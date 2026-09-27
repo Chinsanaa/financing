@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createClient } from './supabase';
+import { clearApiCache } from './apiCache';
 
 /**
  * Single axios client for the FastAPI backend.
@@ -25,6 +26,14 @@ function getBaseUrl(): string {
 // Create a single supabase client instance so session is properly persisted
 const supabaseClient = createClient();
 
+// Cached API responses (apiCache.ts) belong to the signed-in user — drop them
+// on every sign-out path (header button, Settings, session expiry).
+if (typeof window !== 'undefined') {
+  supabaseClient.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') clearApiCache();
+  });
+}
+
 export const apiClient = axios.create();
 
 apiClient.interceptors.request.use(async (config) => {
@@ -48,6 +57,7 @@ apiClient.interceptors.request.use(async (config) => {
 // bounce to the login page instead of leaving every tab in an error state.
 apiClient.interceptors.response.use(undefined, (error) => {
   if (typeof window !== 'undefined' && error?.response?.status === 401) {
+    clearApiCache();
     window.location.href = '/auth';
   }
   return Promise.reject(error);
