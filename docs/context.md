@@ -4289,3 +4289,37 @@ the primary pinger: **cron-job.org every 10 min — user must set this up
 **Next:** Phase 2 indexes (+ advisor FK indexes, RLS `(select auth.uid())`
 rewrite) → Phase 3 stored translations → Phase 4 SQL RPCs / gather / gzip →
 Phase 5 frontend dedupe + sessionStorage + LazyMotion.
+
+**Phase 1 merged** (PR #56, 2026-09-27). First probe right after merge still
+hit the old build and took 33.5s again (cold start re-confirmed).
+
+**Phase 2 (same session) — indexes, applied live** via migration
+`20260927000000_restore_perf_indexes.sql` (`restore_perf_indexes`):
+`transactions(user_id,timestamp)`, partial `transactions(user_id) WHERE
+needs_review`, `transactions(user_id,category_id)`; FK indexes on
+`transaction_splits(user_id)`, `transaction_splits(category_id)`,
+`budget_alerts(category_id)`, `recurring_merchants(category_id)`; the 16 RLS
+policies on budget_alerts/transaction_splits/notifications/
+recurring_merchants rewritten `auth.uid()` → `(select auth.uid())` (same
+semantics, evaluated once per statement). Verified: performance advisor went
+from 20 WARN/INFO findings on these to 0; 12-month query plan now uses
+`transactions_user_id_timestamp_idx` — **6.5ms → 1.1ms**.
+
+**Honest scale note:** live DB is only 1,436 transactions / 2 users, so this
+is future-proofing, not a user-visible speedup today. The felt slowness is
+cold starts (Phase 1), live translation (Phase 3), sequential round trips
+(Phase 4).
+
+**Do NOT drop these indexes because the advisor says "unused index"** — it
+reports that for every freshly created index (stats start at zero, and were
+also reset by the 2026-09-27 project restore). That exact misreading is what
+removed the original indexes in `20260707000000_...`.
+
+Unrelated pre-existing security-advisor WARNs seen while checking (not
+touched this session): 3 RPCs with mutable `search_path`
+(`sum_user_transactions`, `monthly_spend_by_user`,
+`spend_by_category_for_user`), `get_email_for_username` /
+`is_username_available` / `rls_auto_enable` executable by anon, leaked-password
+protection off (dashboard-only setting).
+
+**Next:** Phase 3 — store English translations at upload time.

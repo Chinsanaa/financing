@@ -63,7 +63,9 @@ financing/
 │       ├── 20260708000000_release_readiness_schema_repair.sql
 │       ├── 20260709000000_align_default_categories_to_ml_taxonomy.sql
 │       ├── 20260709120000_add_category_color.sql
-│       └── 20260811090000_transaction_sum_rpcs.sql     # Postgres-side sum/monthly-spend RPCs
+│       ├── 20260811090000_transaction_sum_rpcs.sql     # Postgres-side sum/monthly-spend RPCs
+│       ├── … (2026-08-13/14 feature migrations)
+│       └── 20260927000000_restore_perf_indexes.sql     # user_id+timestamp/needs_review/category indexes, FK indexes, RLS initplan fix
 │
 ├── tests/                     # pytest suite for src/ (74 tests)
 │   ├── test_parse.py, test_validate.py, test_semantic.py, test_calibration.py
