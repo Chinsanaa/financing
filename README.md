@@ -204,7 +204,9 @@ See DEPLOYMENT.md Step 2.5.
 **Translations are stored, not live:** English merchant/description text is
 translated once per distinct string in the background (`backend/translations.py`)
 and stored in `transactions.merchant_en`/`description_en`; pages never call
-Google Translate.
+Google Translate. The worker uses its own DB client, gives each Google call
+10 s, stops a pass after 5 failures in a row, and is replaced if it makes no
+progress for 10 min. Render logs show `Translation pass start/done`.
 
 **Onboarding tour:** shown once per account right after sign-up; progress is stored on the account (`profiles.tour_step`) and each step advances only when the user does it (or taps Skip).
 

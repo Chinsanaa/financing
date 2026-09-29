@@ -4611,27 +4611,40 @@ gone after reload, Skip ends it for good, an existing (finished) account
 never sees it, wizard Next button not covered by the box. **Not verified:**
 a real signup end-to-end on production (needs merge + a new account).
 
-### Session 72 (2026-09-29) — Transactions & Model steps stretch full width
+### Session 72 (2026-09-29) — Translation backfill was stuck: hang-proof worker
 
-**Why:** only the Review step filled the content width; Upload / Label /
-Train were `max-w-2xl` blocks and Categories `max-w-4xl`, which looked like
-narrow islands on wide screens.
+**Found (status check):** keep-alive works (first request 1.5 s, was 33.5 s),
+but 1,434 of 1,436 transactions still had NULL `merchant_en`/`description_en`
+→ Reports showed "Unknown merchant" for uncurated Chinese merchants. Render
+logs: the worker fetched 931 rows at 02:01:47 UTC, then never wrote a single
+row, logged nothing, and never crashed. So it **hung**, and because it still
+counted as "running", every later Reports visit was a no-op. Likely causes
+(not proven, both fixed): the worker shared the process-wide HTTP/2
+Supabase client with request threads (which now run several queries at once
+via `asyncio.gather`), and `deep_translator` calls Google with no timeout.
 
-**Built (Tailwind only, no logic changes):**
-- **Upload:** full width; dropzone left, right column = income card (passed
-  into `UploadTab` via a new `aside` prop from `UploadWithIncomeTab`) +
-  "Add expense manually" + file queue. Manual form fields in 2 columns.
-- **Categories:** full width with more columns (up to 5 at 2xl) so each card
-  stays about its old size; add-category form capped at `max-w-xl`.
-- **Label:** progress bar full width; below it transaction card + Accept
-  (left) and category picker + Skip (right). Stacks under `lg`.
-- **Train:** full width; training-history runs in a 1/2/3-column grid.
-- **Review:** unchanged (already full width).
+**Built (`backend/translations.py`, `src/translate.py`):**
+- Each worker creates its **own Supabase client** (`_new_client`).
+- Each Google call runs on a throwaway daemon thread with a **10 s limit**
+  (`GOOGLE_TIMEOUT_SECONDS`); a timeout = failure → 30-min per-string backoff.
+- **Circuit breaker:** 5 failures in a row stops the pass (Google down →
+  don't spend 10 s × hundreds of strings); strings already in backoff don't
+  count.
+- **Watchdog:** the worker records a heartbeat after every string; a worker
+  with no progress for 10 min is replaced. A generation number makes the old
+  one exit without touching the new one's state.
+- **Logs:** "Translation pass start … N distinct strings", every 50 writes,
+  "done" / "stopped early".
 
-**Verified:** `tsc` + `next build` pass; production build screenshotted with
-Playwright and a mocked API at 1920px and 390px (no horizontal scroll,
-mobile stacks). `npm run lint` is not configured in this repo (interactive
-ESLint setup prompt), so no lint run. **Not verified:** real data on prod.
+**Decided:** used a daemon thread + `join(timeout)` instead of the planned
+`concurrent.futures` pool. A hung call would permanently occupy a pool slot
+and later calls would queue behind it; a throwaway thread doesn't block anything.
 
-**Next:** eyeball on production with real data (long merchant names, many
-categories) after merge.
+**Verified:** 8 new tests (hung Google times out, non-Chinese written
+without Google, breaker trips at 5, backoff doesn't trip it, coalescing,
+watchdog replaces a stale worker, stale worker exits cleanly, worker uses
+its own client); backend 158 passed.
+
+**Next:** after merge + deploy, open Reports once; watch Render logs for
+"Translation pass start/done" and check `select count(*) from transactions
+where merchant_en is null` drops from 1,434 toward 0.

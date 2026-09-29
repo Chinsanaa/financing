@@ -4,6 +4,7 @@ Hard rule: the web UI should never display Chinese text. If translation fails,
 return a safe English placeholder instead of leaking original CJK text.
 """
 import re
+import threading
 from typing import Optional
 
 
@@ -24,6 +25,34 @@ def _mostly_ascii(text: str) -> bool:
         return False
 
 
+GOOGLE_TIMEOUT_SECONDS = 10
+
+
+def _google_translate(text: str) -> str:
+    """One Google Translate call with a hard time limit.
+
+    deep_translator calls requests.get without a timeout, so a stalled
+    connection can block forever (this froze the background translation
+    worker on 2026-09-29). The call runs on a throwaway daemon thread and we
+    wait at most GOOGLE_TIMEOUT_SECONDS; on timeout we give up and return ''
+    (a failure — the caller retries later). A stalled daemon thread is
+    abandoned, which is harmless: it holds no locks and dies with the process.
+    """
+    result: dict = {}
+
+    def _call():
+        try:
+            from deep_translator import GoogleTranslator
+            result['text'] = GoogleTranslator(source='auto', target='en').translate(text[:500]) or ''
+        except Exception:
+            result['text'] = ''
+
+    t = threading.Thread(target=_call, name='google-translate', daemon=True)
+    t.start()
+    t.join(GOOGLE_TIMEOUT_SECONDS)
+    return str(result.get('text') or '').strip()
+
+
 _TRANSLATION_CACHE_MAX = 4096
 _translation_cache: dict = {}
 
@@ -32,7 +61,8 @@ def translate_to_english(text: str) -> str:
     """Translate text to English via Google (a live network call); return
     unchanged if already non-CJK.
 
-    Only successful translations are cached — a failure (timeout, 429)
+    Only successful translations are cached — a failure (timeout after
+    GOOGLE_TIMEOUT_SECONDS, 429)
     returns '' uncached so the next attempt can succeed. (The previous
     lru_cache also memoized failures, pinning a blank label until restart.)
 
@@ -47,11 +77,7 @@ def translate_to_english(text: str) -> str:
     cached = _translation_cache.get(text)
     if cached is not None:
         return cached
-    try:
-        from deep_translator import GoogleTranslator
-        translated = (GoogleTranslator(source='auto', target='en').translate(text[:500]) or '').strip()
-    except Exception:
-        return ''
+    translated = _google_translate(text)
     if translated:
         if len(_translation_cache) >= _TRANSLATION_CACHE_MAX:
             _translation_cache.clear()

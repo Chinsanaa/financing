@@ -6,6 +6,10 @@ import pytest
 import translations
 from src import translate as translate_mod
 
+# The autouse `translation_requests` fixture replaces request_translation with
+# a recorder; keep the real one for the watchdog tests.
+_real_request_translation = translations.request_translation
+
 USER_A = "user-a-id"
 USER_B = "user-b-id"
 
@@ -183,3 +187,138 @@ def test_insights_flagged_merchant_is_english(
     flagged = response.json()["flagged_transactions"]
     assert flagged and all(t["merchant"] == "Downstairs noodle shop" for t in flagged)
     assert fake_google == []
+
+
+# --- Hang protection (2026-09-29: a worker froze after its first fetch) ---
+
+
+def test_hung_google_call_times_out(monkeypatch):
+    import sys
+    import threading
+    import types
+
+    release = threading.Event()
+
+    class _HangingTranslator:
+        def __init__(self, **kwargs):
+            pass
+
+        def translate(self, text):
+            release.wait(5)  # "never" answers (within the test)
+            return "too late"
+
+    monkeypatch.setitem(sys.modules, "deep_translator", types.SimpleNamespace(GoogleTranslator=_HangingTranslator))
+    monkeypatch.setattr(translate_mod, "GOOGLE_TIMEOUT_SECONDS", 0.2)
+    translate_mod._translation_cache.pop("你好", None)
+    try:
+        assert translate_mod.translate_to_english("你好") == ""  # gave up, not stuck
+        assert "你好" not in translate_mod._translation_cache  # failure not cached
+    finally:
+        release.set()
+
+
+def test_non_chinese_strings_are_written_without_google(fake_db, fake_google):
+    _seed(fake_db, "t1", "Starbucks", "Coffee")
+    _seed(fake_db, "t2", "", None)
+
+    written = translations.translate_user_transactions(USER_A)
+
+    rows = _rows(fake_db)
+    assert (rows["t1"]["merchant_en"], rows["t1"]["description_en"]) == ("Starbucks", "Coffee")
+    assert (rows["t2"]["merchant_en"], rows["t2"]["description_en"]) == ("", "")
+    assert written == 4  # merchants {"Starbucks", ""} + descriptions {"Coffee", ""}
+    assert fake_google == []
+
+
+def test_pass_stops_early_when_google_is_unreachable(fake_db, fake_google):
+    # 6 unknown strings -> 6 failures; the breaker trips at 5 and stops the pass.
+    for i in range(6):
+        _seed(fake_db, f"t{i}", f"无名店{i}", "午饭")
+
+    translations.translate_user_transactions(USER_A)
+
+    merchant_calls = [c for c in fake_google if c.startswith("无名店")]
+    assert len(merchant_calls) == translations.MAX_CONSECUTIVE_FAILURES
+    assert "午饭" not in fake_google  # descriptions not attempted this pass
+    assert all(r.get("merchant_en") is None for r in _rows(fake_db).values())
+
+
+def test_backed_off_strings_do_not_trip_the_breaker(fake_db, fake_google):
+    import time
+
+    for i in range(6):
+        _seed(fake_db, f"t{i}", f"无名店{i}", None)
+        translations._recent_failures[f"无名店{i}"] = time.monotonic()
+    _seed(fake_db, "t9", "楼下面馆", None)
+
+    translations.translate_user_transactions(USER_A)
+
+    assert _rows(fake_db)["t9"]["merchant_en"] == "Downstairs noodle shop"
+
+
+@pytest.fixture
+def worker_threads(monkeypatch):
+    """Run request_translation for real, but with a controllable worker."""
+    started: list = []
+    monkeypatch.setattr(translations, "_worker", lambda user_id, gen: started.append(gen))
+    for d in (translations._running_users, translations._rerun_users):
+        d.clear()
+    translations._heartbeat.clear()
+    translations._generation.clear()
+    yield started
+    for d in (translations._running_users, translations._rerun_users):
+        d.clear()
+
+
+def test_running_worker_coalesces_requests(worker_threads):
+    assert _real_request_translation(USER_A) is True
+    import time; time.sleep(0.05)
+    # Our fake worker returned without clearing state = still "running".
+    assert _real_request_translation(USER_A) is False
+    assert USER_A in translations._rerun_users
+    assert worker_threads == [1]
+
+
+def test_watchdog_replaces_a_stale_worker(worker_threads, monkeypatch):
+    import time
+
+    assert _real_request_translation(USER_A) is True
+    time.sleep(0.05)
+    # Pretend the worker last made progress 11 minutes ago (hung).
+    translations._heartbeat[USER_A] -= translations.STALE_WORKER_SECONDS + 60
+
+    assert _real_request_translation(USER_A) is True  # new worker started
+    time.sleep(0.05)
+    assert worker_threads == [1, 2]
+    assert translations._generation[USER_A] == 2
+
+
+def test_replaced_worker_exits_without_clearing_new_state(fake_db, fake_google, monkeypatch):
+    """The old (stale) worker must stop at its next string and leave the
+    new worker's 'running' flag alone."""
+    monkeypatch.setattr(translations, "_new_client", lambda: fake_db)
+    _seed(fake_db, "t1", "楼下面馆", "午饭")
+    translations._running_users.add(USER_A)
+    translations._generation[USER_A] = 2  # a newer worker (gen 2) now owns it
+
+    translations._worker(USER_A, 1)  # the stale gen-1 worker resumes
+
+    assert _rows(fake_db)["t1"].get("merchant_en") is None  # wrote nothing
+    assert USER_A in translations._running_users            # gen 2 still running
+    translations._running_users.discard(USER_A)
+    translations._generation.clear()
+
+
+def test_worker_runs_pass_on_its_own_client(fake_db, fake_google, monkeypatch):
+    clients: list = []
+    monkeypatch.setattr(translations, "_new_client", lambda: clients.append(1) or fake_db)
+    _seed(fake_db, "t1", "楼下面馆", "午饭")
+    translations._running_users.add(USER_A)
+    translations._generation[USER_A] = 1
+
+    translations._worker(USER_A, 1)
+
+    assert clients == [1]
+    assert _rows(fake_db)["t1"]["merchant_en"] == "Downstairs noodle shop"
+    assert USER_A not in translations._running_users  # finished cleanly
+    translations._generation.clear()
