@@ -4610,3 +4610,41 @@ drag the user, "Take me there" works, tour ends after training and stays
 gone after reload, Skip ends it for good, an existing (finished) account
 never sees it, wizard Next button not covered by the box. **Not verified:**
 a real signup end-to-end on production (needs merge + a new account).
+
+### Session 72 (2026-09-29) — Translation backfill was stuck: hang-proof worker
+
+**Found (status check):** keep-alive works (first request 1.5 s, was 33.5 s),
+but 1,434 of 1,436 transactions still had NULL `merchant_en`/`description_en`
+→ Reports showed "Unknown merchant" for uncurated Chinese merchants. Render
+logs: the worker fetched 931 rows at 02:01:47 UTC, then never wrote a single
+row, logged nothing, and never crashed. So it **hung**, and because it still
+counted as "running", every later Reports visit was a no-op. Likely causes
+(not proven, both fixed): the worker shared the process-wide HTTP/2
+Supabase client with request threads (which now run several queries at once
+via `asyncio.gather`), and `deep_translator` calls Google with no timeout.
+
+**Built (`backend/translations.py`, `src/translate.py`):**
+- Each worker creates its **own Supabase client** (`_new_client`).
+- Each Google call runs on a throwaway daemon thread with a **10 s limit**
+  (`GOOGLE_TIMEOUT_SECONDS`); a timeout = failure → 30-min per-string backoff.
+- **Circuit breaker:** 5 failures in a row stops the pass (Google down →
+  don't spend 10 s × hundreds of strings); strings already in backoff don't
+  count.
+- **Watchdog:** the worker records a heartbeat after every string; a worker
+  with no progress for 10 min is replaced. A generation number makes the old
+  one exit without touching the new one's state.
+- **Logs:** "Translation pass start … N distinct strings", every 50 writes,
+  "done" / "stopped early".
+
+**Decided:** used a daemon thread + `join(timeout)` instead of the planned
+`concurrent.futures` pool. A hung call would permanently occupy a pool slot
+and later calls would queue behind it; a throwaway thread doesn't block anything.
+
+**Verified:** 8 new tests (hung Google times out, non-Chinese written
+without Google, breaker trips at 5, backoff doesn't trip it, coalescing,
+watchdog replaces a stale worker, stale worker exits cleanly, worker uses
+its own client); backend 158 passed.
+
+**Next:** after merge + deploy, open Reports once; watch Render logs for
+"Translation pass start/done" and check `select count(*) from transactions
+where merchant_en is null` drops from 1,434 toward 0.
