@@ -105,7 +105,7 @@ export default function CategoriesTab() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6" data-tour-id="categories-list">
+    <div className="w-full space-y-6" data-tour-id="categories-list">
       <SectionHeader label="Model" title="Categories" />
       <p className="-mt-4 text-sm text-muted">
         The labels your model learns to predict. Keep them broad enough to be learnable.
@@ -116,7 +116,7 @@ export default function CategoriesTab() {
       {message && <Alert kind="success">{message}</Alert>}
 
       <Card className="p-4">
-        <form onSubmit={handleAddCategory} className="flex gap-2">
+        <form onSubmit={handleAddCategory} className="flex max-w-xl gap-2">
           <input
             type="text"
             value={newCategoryName}
@@ -137,7 +137,7 @@ export default function CategoriesTab() {
           description="Add a few categories to start labeling — Food, Transport and Shopping are good openers."
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           <AnimatePresence initial={false}>
             {categories.map((cat) => {
               // Colors chosen by OTHER categories are disabled in the picker.

@@ -106,7 +106,7 @@ export default function TrainingTab() {
     status === 'succeeded' ? 'success' : status === 'failed' ? 'danger' : 'accent';
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="w-full space-y-6">
       <SectionHeader label="Model" title="Training" />
       <p className="-mt-4 text-sm text-muted">
         Trains a fresh classifier on your labeled transactions, then re-classifies everything else.
@@ -160,7 +160,8 @@ export default function TrainingTab() {
             description="Label some transactions first, then start your first training run."
           />
         ) : (
-          runs.map((run, i) => (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {runs.map((run, i) => (
             <Card key={run.id} hover={i === 0} className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -204,7 +205,8 @@ export default function TrainingTab() {
                 <p className="text-xs text-danger">{run.error_message}</p>
               )}
             </Card>
-          ))
+          ))}
+          </div>
         )}
       </div>
     </div>
