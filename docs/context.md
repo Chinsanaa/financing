@@ -4610,3 +4610,28 @@ drag the user, "Take me there" works, tour ends after training and stays
 gone after reload, Skip ends it for good, an existing (finished) account
 never sees it, wizard Next button not covered by the box. **Not verified:**
 a real signup end-to-end on production (needs merge + a new account).
+
+### Session 72 (2026-09-29) — Transactions & Model steps stretch full width
+
+**Why:** only the Review step filled the content width; Upload / Label /
+Train were `max-w-2xl` blocks and Categories `max-w-4xl`, which looked like
+narrow islands on wide screens.
+
+**Built (Tailwind only, no logic changes):**
+- **Upload:** full width; dropzone left, right column = income card (passed
+  into `UploadTab` via a new `aside` prop from `UploadWithIncomeTab`) +
+  "Add expense manually" + file queue. Manual form fields in 2 columns.
+- **Categories:** full width with more columns (up to 5 at 2xl) so each card
+  stays about its old size; add-category form capped at `max-w-xl`.
+- **Label:** progress bar full width; below it transaction card + Accept
+  (left) and category picker + Skip (right). Stacks under `lg`.
+- **Train:** full width; training-history runs in a 1/2/3-column grid.
+- **Review:** unchanged (already full width).
+
+**Verified:** `tsc` + `next build` pass; production build screenshotted with
+Playwright and a mocked API at 1920px and 390px (no horizontal scroll,
+mobile stacks). `npm run lint` is not configured in this repo (interactive
+ESLint setup prompt), so no lint run. **Not verified:** real data on prod.
+
+**Next:** eyeball on production with real data (long merchant names, many
+categories) after merge.

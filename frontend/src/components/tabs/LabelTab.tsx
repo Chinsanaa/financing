@@ -158,7 +158,7 @@ export default function LabelTab() {
 
   if (queueQ.loading || categoriesQ.loading) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="w-full space-y-6">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-16 w-full" />
         <SkeletonCard />
@@ -169,7 +169,7 @@ export default function LabelTab() {
 
   if (transactions.length === 0) {
     return (
-      <div className="mx-auto max-w-2xl" data-tour-id="label-area">
+      <div className="w-full" data-tour-id="label-area">
         <EmptyState
           icon={PartyPopper}
           title="All transactions labeled"
@@ -191,7 +191,7 @@ export default function LabelTab() {
   const progress = displayTotal > 0 ? Math.round((labeledCount / displayTotal) * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6" data-tour-id="label-area">
+    <div className="w-full space-y-6" data-tour-id="label-area">
       <SectionHeader label="Transactions" title="Label transactions" />
       <p className="-mt-4 text-sm text-muted">
         Every label you set here becomes training data for your model.
@@ -211,6 +211,9 @@ export default function LabelTab() {
         <Alert kind="error">{actionError || queueQ.error}</Alert>
       )}
 
+      {/* Left: transaction deck + accept. Right: category picker. Stacks below lg. */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      <div className="space-y-5">
       {/* Stacked deck: two faux cards peek out behind the current one */}
       <div className="relative">
         {transactions.length > 1 && (
@@ -268,6 +271,14 @@ export default function LabelTab() {
       </AnimatePresence>
       </div>
 
+      {!allSeen && tx.suggested_category && (
+        <Button onClick={handleAccept} loading={acting} className="w-full" size="lg">
+          <Check className="h-4 w-4" /> Accept suggestion
+          <span className="ml-1 rounded border border-accent-ink/20 px-1.5 text-[11px] font-medium opacity-70">Enter</span>
+        </Button>
+      )}
+      </div>
+
       <div className="space-y-3">
         {allSeen ? (
           <div className="flex flex-col gap-3">
@@ -283,13 +294,6 @@ export default function LabelTab() {
           </div>
         ) : (
           <>
-            {tx.suggested_category && (
-              <Button onClick={handleAccept} loading={acting} className="w-full" size="lg">
-                <Check className="h-4 w-4" /> Accept suggestion
-                <span className="ml-1 rounded border border-accent-ink/20 px-1.5 text-[11px] font-medium opacity-70">Enter</span>
-              </Button>
-            )}
-
             <div>
               <p className="section-label mb-2">Or pick a category</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -321,6 +325,7 @@ export default function LabelTab() {
             </p>
           </>
         )}
+      </div>
       </div>
     </div>
   );

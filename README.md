@@ -89,7 +89,8 @@ Visual language, tokens, motion rules and components are documented in
 **`docs/DESIGN_SYSTEM.md`** ("Flat Lime" v3: **no gradients, solid colors
 only, no purple**, rolling numbers, a **⌘K / Ctrl+K command menu** to
 jump anywhere, and **keyboard labeling** — 1–9 pick a category, Enter accepts,
-S skips).
+S skips). Every Transactions & Model step (Upload, Categories, Label, Review,
+Train) uses the full content width with multi-column layouts on wide screens.
 
 **Sign-up/sign-in**: signup requires a unique username (checked live against
 the database as you type) alongside email, a password meeting a live

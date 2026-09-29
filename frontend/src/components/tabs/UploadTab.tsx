@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { m } from 'framer-motion';
 import { FileSpreadsheet, UploadCloud, Trash2, PenLine } from 'lucide-react';
 import { api } from '@/utils/api';
@@ -66,7 +66,9 @@ function buildSummary(queue: QueuedFile[]): { kind: 'success' | 'info' | 'error'
   return { kind, text: parts.join('. ') + '.' };
 }
 
-export default function UploadTab() {
+// `aside` renders at the top of the right column (e.g. the income card), so the
+// wide two-column layout doesn't leave that column empty.
+export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
   const [dragActive, setDragActive] = useState(false);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [running, setRunning] = useState(false);
@@ -305,13 +307,14 @@ export default function UploadTab() {
   const hasFinished = queue.some((i) => i.status === 'done' || i.status === 'duplicate' || i.status === 'error');
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6">
+    <div className="w-full space-y-6">
       <SectionHeader label="Transactions" title="Upload statements" />
       <p className="-mt-4 text-sm text-muted">
         CSV or Excel exports from Alipay or WeChat — up to {MAX_QUEUE} files at a time. Both formats are
         detected automatically, and each file uploads one after another.
       </p>
 
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <div
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -363,7 +366,10 @@ export default function UploadTab() {
         </div>
       </div>
 
-      <div className="text-center">
+      {/* Right column: manual entry, upload queue and status */}
+      <div className="space-y-6">
+      {aside}
+      <div className="text-center lg:text-left">
         <Button
           type="button"
           variant="ghost"
@@ -382,7 +388,7 @@ export default function UploadTab() {
         <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="space-y-4 p-6">
             <SectionHeader label="Manual entry" title="Add an expense" />
-            <form onSubmit={handleManualSubmit} className="space-y-4">
+            <form onSubmit={handleManualSubmit} className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Date"
                 type="date"
@@ -432,10 +438,10 @@ export default function UploadTab() {
                 ))}
               </Select>
 
-              {manualError && <Alert kind="error">{manualError}</Alert>}
-              {manualSuccess && <Alert kind="success">{manualSuccess}</Alert>}
+              {manualError && <div className="sm:col-span-2"><Alert kind="error">{manualError}</Alert></div>}
+              {manualSuccess && <div className="sm:col-span-2"><Alert kind="success">{manualSuccess}</Alert></div>}
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 sm:col-span-2">
                 <Button type="submit" loading={manualSubmitting} className="flex-1">
                   Add expense
                 </Button>
@@ -489,6 +495,8 @@ export default function UploadTab() {
       {queueError && <Alert kind="error">{queueError}</Alert>}
       {summary && <Alert kind={summary.kind}>{summary.text}</Alert>}
       {error && <Alert kind="error">{error}</Alert>}
+      </div>
+      </div>
 
       {/* Upload History */}
       <div className="mt-10 border-t pt-8">
