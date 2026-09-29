@@ -208,6 +208,11 @@ Google Translate. The worker uses its own DB client, gives each Google call
 10 s, stops a pass after 5 failures in a row, and is replaced if it makes no
 progress for 10 min. Render logs show `Translation pass start/done`.
 
+**Training memory:** the server trains with the lightweight LSA encoder, not
+Model2Vec (`MODEL2VEC_ENABLED=0`, set in `backend/config.py`). Model2Vec needs
+~1-1.8 GB to load and the 512 MB Render instance was OOM-killed on every run.
+Set `MODEL2VEC_ENABLED=1` only on an instance with ≥2 GB.
+
 **Onboarding tour:** shown once per account right after sign-up; progress is stored on the account (`profiles.tour_step`) and each step advances only when the user does it (or taps Skip).
 
 **Design rule:** NO gradients, ONLY solid colors, no purple — see `docs/DESIGN_SYSTEM.md`.

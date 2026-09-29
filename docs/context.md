@@ -4648,3 +4648,35 @@ its own client); backend 158 passed.
 **Next:** after merge + deploy, open Reports once; watch Render logs for
 "Translation pass start/done" and check `select count(*) from transactions
 where merchant_en is null` drops from 1,434 toward 0.
+
+### Session 73 (2026-09-29) — Training never finished: server ran out of memory
+
+**Found:** "Failed to load data" right after pressing Start training. Render
+events: `server_failed` with **oomKilled (512Mi)** 38 s after the retrain
+started (and on 2026-09-27). Every `model_runs` row since 2026-08-14 is still
+"running", so **no production training run has ever completed**. The
+culprit is the semantic layer's Model2Vec `potion-multilingual-128M`
+(500k-token vocabulary). Measured locally: loading it peaks at ~1.8 GB; even
+a pre-quantized int8 copy peaks at ~0.9 GB. It can't fit in 512 MB.
+
+**Decided (user):** use the built-in lightweight LSA encoder on the server
+(free), rather than upgrading Render (Standard 2 GB ≈ $25/mo; Starter is also
+512 MB) or researching a smaller model. Trade-off: LSA learns spelling
+similarity from your own labels (面馆 ≈ 面店) but has no outside-world
+knowledge (can't know KFC ≈ McDonald's for a merchant it never saw).
+
+**Built:** `src/semantic.py` `MODEL2VEC_ENABLED` switch (`get_encoder()`
+returns None without importing model2vec when off); `backend/config.py`
+defaults it to "0" (`setdefault`, so a bigger instance can turn it back on);
+old runs saved with the Model2Vec encoder degrade cleanly (no encoder →
+semantic layer skipped). TrainingTab no longer polls `/training/undefined`
+if the start response lacks an id (seen in logs as repeated 500s).
+
+**Verified:** full `retrain_model` with 89 labeled rows + LSA peaks at
+214 MB (was ~1.8 GB); new test `test_get_encoder_disabled_by_env_never_loads`;
+backend 158 passed, root 96 passed (3 collection errors = jieba missing
+locally), `tsc` clean.
+
+**Open:** 4 old `model_runs` rows stay "running" in the DB (the UI already
+flags them stale). After deploy, press Start training once and confirm the
+run reaches "succeeded" with no `server_failed` event.

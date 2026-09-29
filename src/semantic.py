@@ -25,6 +25,7 @@ sharpens both the classifier and the nearest-example index.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -43,6 +44,18 @@ from segment import clean_text, LR_HYPERPARAMS
 from paths import MODEL2VEC_DIR, SEMANTIC_MODEL, SEMANTIC_INDEX
 
 MODEL2VEC_NAME = 'minishlab/potion-multilingual-128M'
+
+# Off switch for the Model2Vec encoder. potion-multilingual-128M has a
+# 500k-token vocabulary: loading it peaks at ~1.8 GB (still ~0.9 GB even
+# pre-quantized to int8), so on the 512 MB Render instance every retrain was
+# OOM-killed mid-run (2026-09-27, 2026-09-29) and no run ever finished. The
+# backend sets this to "0" (backend/config.py) → get_encoder() returns None
+# and callers use the LsaEncoder fallback. Local/CLI runs keep the default.
+MODEL2VEC_ENV = 'MODEL2VEC_ENABLED'
+
+
+def model2vec_enabled() -> bool:
+    return os.environ.get(MODEL2VEC_ENV, '1').strip().lower() not in ('0', 'false', 'no', 'off')
 
 
 # --------------------------------------------------------------------------
@@ -82,7 +95,10 @@ def get_encoder(local_dir: Path = MODEL2VEC_DIR, allow_download: bool = True):
     Order: (1) cached weights in local_dir, (2) download + cache if allowed.
     Classification-time callers use allow_download=False so scoring never
     performs network I/O; retrain is the one moment downloads may happen.
+    Returns None without touching the model when MODEL2VEC_ENABLED=0.
     """
+    if not model2vec_enabled():
+        return None
     try:
         from model2vec import StaticModel  # lazy: package optional
     except ImportError:
