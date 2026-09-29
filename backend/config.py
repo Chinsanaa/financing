@@ -1,4 +1,6 @@
 """Configuration and Supabase client initialization."""
+import os
+
 from pydantic_settings import BaseSettings
 from supabase import create_client, Client
 
@@ -23,6 +25,13 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+
+
+# The Model2Vec encoder needs ~1-1.8 GB to load and the Render instance has
+# 512 MB: training was OOM-killed every time. The server uses the lightweight
+# LsaEncoder instead (src/semantic.py). setdefault, so setting
+# MODEL2VEC_ENABLED=1 on a bigger instance turns it back on.
+os.environ.setdefault("MODEL2VEC_ENABLED", "0")
 
 
 # Global settings instance

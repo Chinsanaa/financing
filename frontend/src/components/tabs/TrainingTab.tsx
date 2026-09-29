@@ -61,6 +61,12 @@ export default function TrainingTab() {
       advanceTour('train'); // last tour step — the tour ends here
 
       stopPolling();
+      // Without an id the poll would hit /training/undefined every 5s (seen
+      // in production); the run list above still refreshes on reload.
+      if (!modelRunId) {
+        setTraining(false);
+        return;
+      }
       pollRef.current = setInterval(async () => {
         try {
           const statusRes = await api.training.getStatus(modelRunId);

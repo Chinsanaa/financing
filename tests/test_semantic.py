@@ -125,6 +125,22 @@ def test_get_encoder_missing_package_returns_none(monkeypatch):
     assert get_encoder(allow_download=False) is None
 
 
+def test_get_encoder_disabled_by_env_never_loads(monkeypatch):
+    """MODEL2VEC_ENABLED=0 (the backend default — the model OOMs a 512 MB
+    server) must return None before even importing model2vec."""
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == 'model2vec':
+            raise AssertionError("model2vec must not be imported when disabled")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setenv('MODEL2VEC_ENABLED', '0')
+    monkeypatch.setattr(builtins, '__import__', fake_import)
+    assert get_encoder() is None
+
+
 def test_load_semantic_artifacts_missing_returns_none(tmp_path, monkeypatch):
     import paths
     monkeypatch.setattr(paths, 'SEMANTIC_MODEL', tmp_path / 'nope.pkl')
