@@ -321,7 +321,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
         onDragOver={handleDrag}
         onDrop={handleDrop}
         data-tour-id="upload-choose-files"
-        className={`group relative overflow-hidden rounded-card p-12 text-center transition-all duration-300 ${
+        className={`group relative overflow-hidden rounded-card p-12 text-center transition-[opacity,background-color] duration-200 ${
           running ? 'pointer-events-none opacity-60' : ''
         } ${dragActive ? 'is-active bg-accent/[0.05]' : ''}`}
       >

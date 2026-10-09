@@ -37,7 +37,7 @@ export default function PasswordInput({
           autoComplete={autoComplete}
           aria-invalid={!!error}
           aria-describedby={error ? errorId : undefined}
-          className={`${FIELD_CLASSES} pr-10 ${error ? 'border-danger focus:border-danger focus:ring-danger' : ''}`}
+          className={`${FIELD_CLASSES} w-full py-2.5 pr-10 ${error ? 'border-danger focus:border-danger focus:ring-danger' : ''}`}
         />
         <button
           type="button"

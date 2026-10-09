@@ -1,15 +1,13 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { LucideIcon } from 'lucide-react';
 import RollingNumber from './RollingNumber';
 
 /**
  * A ledger "fact": caption, a serif rolling figure and an optional footer
  * line. Deliberately not a card — put facts in a row separated by hairlines
  * (`FactRow`). `tone` colors only the figure, and callers pair it with a
- * word/icon so color isn't the only cue. `icon` is accepted for old call
- * sites and not rendered (no icon chips).
+ * word/icon so color isn't the only cue. No icon chips.
  */
 export default function StatTile({
   label,
@@ -26,7 +24,6 @@ export default function StatTile({
   currency?: boolean;
   decimals?: number;
   suffix?: string;
-  icon?: LucideIcon;
   tone?: 'success' | 'danger' | 'warn';
   footer?: ReactNode;
   className?: string;

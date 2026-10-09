@@ -64,8 +64,9 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
-Current (Session 74, 2026-10-09): "Ledger" redesign in stages — see the
-Session 74 entry. Next: finish stages 2–5, then the user reviews the preview.
+Current (Session 74, 2026-10-09): "Ledger" redesign done (PR #64) — see the
+Session 74 entry. Next: user reviews the preview; decide whether to keep the
+warm-paper background (impeccable flags cream as an AI-reflex surface).
 
 Current (Session 69, 2026-09-27): full visual redesign ("Aurora Lime" v2 —
 see `docs/DESIGN_SYSTEM.md`). Next: user clicks through the deployed preview
@@ -4785,5 +4786,34 @@ Harness fixes: Reports crashed in screenshots because the mock lacked
 `/dashboard/reports` (not an app bug); `/settings/profile` mock now wraps
 `{profile}`. THE RULE grep: only comments. 76 shots, 0 page errors.
 
-**Next:** Stage 5 skill audits (impeccable detector/critique,
-review-animations, web-design-guidelines) + DESIGN_SYSTEM.md v4.
+**Stage 5 (audits):** impeccable's *rendered* detector (static `.tsx` scans
+find nothing, even on the old code — scan URLs via a `--no-sandbox` Chromium
+wrapper) flagged: italic serif hero (AI-startup cliché → now roman), privacy
+line length (→ 68ch), placeholder contrast 3.7:1 (→ full `muted`), and the
+**cream page background** — left as is because the user chose warm paper;
+raised with the user as an open question. review-animations: ⌘K no longer
+animates, keyboard labeling skips the stamp (advances in ~40ms), no ease-in
+exits, `.progress-fill` uses `scaleX` not `width`, shorter tab-switch motion,
+drop-zone ants only while dragging, hover gated (`hoverOnlyWhenSupported`).
+web-design-guidelines: no `transition-all`, `…` + no "!" in messages,
+`theme-color`, `touch-action`, no text selection while dragging. Found and
+fixed a **hydration error (#418) under reduced motion** (components branched
+on `useReducedMotion()` during SSR; pre-existing pattern in the old
+WordReveal) → `MotionConfig reducedMotion="user"` globally. `FIELD_CLASSES`
+no longer carries width/py (Tailwind order made callers' `w-32`/`py-1.5`
+lose). Interaction checks (Playwright): ⌘K → "sav" → Enter navigates; Tab
+shows a 2px focus outline; key `2` labels + advances; a right fling sends
+`accept`; new-user Overview renders; reduced motion: no movement, no
+errors. `docs/DESIGN_SYSTEM.md` rewritten as v4; CLAUDE.md gains the
+"rule beats skills" line.
+
+**Not verified:** against real backend data or on real devices (mocked API
++ headless Chromium only); Safari/Firefox untested; the drag gesture was
+tested with a mouse, not touch.
+
+**Open (user decision):** keep the warm-paper background (`244 241 234`) or
+move to a less "default tasteful" paper (e.g. a cooler ledger grey-green)?
+impeccable flags warm cream as an AI-reflex surface.
+
+**Next:** user reviews the Vercel preview of PR #64 (light + dark, phone);
+decide the paper question; then merge.

@@ -30,7 +30,7 @@ export default function LegalPageLayout({
         <h1 className="font-display text-3xl font-medium tracking-[-0.015em] sm:text-4xl">{title}</h1>
         <p className="mt-2 text-sm text-muted">Last updated: {lastUpdated}</p>
 
-        <div className="mt-10 space-y-8 text-sm leading-relaxed text-muted">
+        <div className="mt-10 max-w-[68ch] space-y-8 text-[15px] leading-relaxed text-muted">
           {children}
         </div>
       </div>

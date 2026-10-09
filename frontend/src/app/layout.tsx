@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { ReactNode } from 'react';
 import { Newsreader, Schibsted_Grotesk } from 'next/font/google';
 import './globals.css';
@@ -9,6 +9,14 @@ import Toaster from '@/components/ui/Toaster';
 // fine display cut and table cells the sturdy text cut, from one file.
 const body = Schibsted_Grotesk({ subsets: ['latin'], variable: '--font-body' });
 const display = Newsreader({ subsets: ['latin'], variable: '--font-display', axes: ['opsz'] });
+
+// Browser chrome matches the page: paper in light, night ledger in dark.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f1ea' },
+    { media: '(prefers-color-scheme: dark)', color: '#151411' },
+  ],
+};
 
 export const metadata: Metadata = {
   title: 'Financing — Know where every yuan goes',

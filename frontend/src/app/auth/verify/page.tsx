@@ -53,7 +53,7 @@ function VerifyContent() {
     const isRecovery = searchParams.get('type') === 'recovery';
 
     const redirectSoon = () => {
-      setMessage('Email verified! Redirecting...');
+      setMessage('Email verified. Redirecting…');
       setTimeout(() => router.push('/dashboard'), 1500);
     };
 
@@ -127,7 +127,7 @@ function VerifyContent() {
       if (updateError) {
         setError(updateError.message);
       } else {
-        setMessage('Password updated! Redirecting...');
+        setMessage('Password updated. Redirecting…');
         setRecoveryReady(false);
         setTimeout(() => router.push('/dashboard'), 1500);
       }

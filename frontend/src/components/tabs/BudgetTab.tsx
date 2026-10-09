@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Banknote, CircleDollarSign, Pencil, PiggyBank, Receipt, Wallet } from 'lucide-react';
+import { Pencil, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
+import { FIELD_CLASSES } from '@/components/ui/Input';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
-import StatTile from '@/components/ui/StatTile';
+import StatTile, { FactRow } from '@/components/ui/StatTile';
 import MonthSelect from '@/components/ui/MonthSelect';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
@@ -144,19 +145,18 @@ export default function BudgetTab() {
       {error && <Alert kind="error">{error}</Alert>}
 
       {budget && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Monthly income" value={budget.budget_config?.monthly_income ?? 0} currency icon={Banknote} footer="From your settings" />
-          <StatTile label="Budgeted" value={totalBudget} currency icon={Wallet} footer={`${budget.category_budgets.length} categories`} />
-          <StatTile label="Spent" value={totalSpent} currency icon={Receipt} footer={selectedMonth ? formatMonthLong(selectedMonth) : 'This month'} />
+        <FactRow>
+          <StatTile label="Monthly income" value={budget.budget_config?.monthly_income ?? 0} currency footer="From your settings" />
+          <StatTile label="Budgeted" value={totalBudget} currency footer={`${budget.category_budgets.length} categories`} />
+          <StatTile label="Spent" value={totalSpent} currency footer={selectedMonth ? formatMonthLong(selectedMonth) : 'This month'} />
           <StatTile
             label={remaining >= 0 ? 'Left to spend' : 'Over budget'}
             value={Math.abs(remaining)}
             currency
-            icon={remaining >= 0 ? PiggyBank : CircleDollarSign}
             tone={totalBudget > 0 ? (remaining >= 0 ? 'success' : 'danger') : undefined}
             footer={totalBudget > 0 ? `${Math.round((totalSpent / totalBudget) * 100)}% of total budget used` : 'Set budgets to track this'}
           />
-        </div>
+        </FactRow>
       )}
 
       <Card variant="plain" className="border-ink/80 pt-4">
@@ -203,7 +203,7 @@ export default function BudgetTab() {
                     }))
                   }
                   placeholder={`${CURRENCY_SYMBOL} per month`}
-                  className="w-36 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
+                  className={`${FIELD_CLASSES} num w-36 py-1.5 text-[15px]`}
                 />
                 <select
                   value={drafts[cat.id]?.type ?? 'Need'}
@@ -213,7 +213,7 @@ export default function BudgetTab() {
                       [cat.id]: { ...prev[cat.id], type: e.target.value as 'Need' | 'Want' },
                     }))
                   }
-                  className="rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
+                  className={`${FIELD_CLASSES} w-auto py-1.5`}
                 >
                   <option value="Need">Need</option>
                   <option value="Want">Want</option>

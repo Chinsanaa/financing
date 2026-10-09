@@ -1,6 +1,6 @@
 'use client';
 
-import { m, useReducedMotion } from 'framer-motion';
+import { m } from 'framer-motion';
 
 /**
  * The Ledger signature: a seal stamped onto a statement row.
@@ -13,7 +13,7 @@ import { m, useReducedMotion } from 'framer-motion';
  * a lightly under-damped spring (bounce 0.25) — the one place in the app
  * that bounces, because a stamp is a physical impact. `tilt` is the angle it
  * comes to rest at (real stamps never land square). Plays on mount; remount
- * (change `key`) to stamp again. Reduced motion: appears in place.
+ * (change `key`) to stamp again. Reduced motion (MotionConfig): fades in place.
  */
 export default function Stamp({
   label,
@@ -28,7 +28,6 @@ export default function Stamp({
   delay?: number;
   className?: string;
 }) {
-  const reduce = useReducedMotion();
   return (
     <m.span
       className={`inline-flex select-none items-center whitespace-nowrap rounded-[3px] px-2 py-[3px] font-display text-[11px] font-semibold uppercase leading-none tracking-[0.08em] ${
@@ -36,7 +35,7 @@ export default function Stamp({
           ? 'bg-accent text-accent-ink'
           : 'border-[1.5px] border-dashed border-accent text-accent-strong'
       } ${className}`}
-      initial={reduce ? false : { opacity: 0, scale: 1.12, rotate: tilt - 5 }}
+      initial={{ opacity: 0, scale: 1.12, rotate: tilt - 5 }}
       animate={{ opacity: 1, scale: 1, rotate: tilt }}
       transition={{
         delay,

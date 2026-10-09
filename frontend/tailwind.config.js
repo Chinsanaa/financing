@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  // hover: utilities only on devices that really hover (no sticky hover on touch).
+  future: { hoverOnlyWhenSupported: true },
   darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',

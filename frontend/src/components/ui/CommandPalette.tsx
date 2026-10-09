@@ -112,7 +112,7 @@ export default function CommandPalette({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.1 }}
             onClick={() => onOpenChange(false)}
           />
           <m.div
@@ -120,10 +120,11 @@ export default function CommandPalette({
             aria-modal="true"
             aria-label="Command menu"
             className="relative w-full max-w-lg overflow-hidden rounded-card border border-edge/15 bg-surface shadow-card"
-            initial={{ opacity: 0, scale: 0.98, y: -6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -4, transition: { duration: 0.12 } }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.25 }}
+            // Keyboard-summoned, used many times a day: appear immediately.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.08 } }}
+            transition={{ duration: 0.1 }}
             onKeyDown={onKeyDown}
           >
             <div className="flex items-center gap-3 border-b border-edge/12 px-4">
@@ -165,13 +166,8 @@ export default function CommandPalette({
                         active ? 'text-ink' : 'text-muted'
                       }`}
                     >
-                      {active && (
-                        <m.span
-                          layoutId="command-active"
-                          className="absolute inset-0 rounded-md bg-edge/[0.07]"
-                          transition={{ type: 'spring', bounce: 0, duration: 0.18 }}
-                        />
-                      )}
+                      {/* Arrow keys move this — no glide, it must keep up with the key. */}
+                      {active && <span className="absolute inset-0 rounded-md bg-edge/[0.07]" />}
                       <Icon className={`relative h-4 w-4 ${active ? 'text-ink' : ''}`} />
                       <span className="relative flex-1">{cmd.label}</span>
                       {active && <CornerDownLeft className="relative h-3.5 w-3.5 text-muted" />}

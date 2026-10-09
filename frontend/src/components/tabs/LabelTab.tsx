@@ -54,7 +54,7 @@ function Slip({
   const skipHint = useTransform(x, [-120, -24], [1, 0]);
   return (
     <m.div
-      className="relative cursor-grab touch-pan-y active:cursor-grabbing"
+      className="relative cursor-grab touch-pan-y select-none active:cursor-grabbing"
       drag={disabled ? false : 'x'}
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.7}
@@ -64,7 +64,7 @@ function Slip({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0, rotate: 0 }}
       variants={{
-        gone: (d: number) => ({ x: d * 380, rotate: d * 6, opacity: 0, transition: { duration: 0.28, ease: [0.55, 0, 1, 0.45] } }),
+        gone: (d: number) => ({ x: d * 380, rotate: d * 6, opacity: 0, transition: { duration: 0.22, ease: [0.23, 1, 0.32, 1] } }),
       }}
       exit="gone"
       transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
@@ -130,16 +130,19 @@ export default function LabelTab() {
     invalidate('/dashboard', { except: ['/dashboard/review-queue'] });
   };
 
-  /** Let the stamp land, then let the slip go. */
-  const stampThenRemove = async (tx: Transaction, label: string) => {
+  /** Let the stamp land, then let the slip go. Keyboard labeling (1–9 /
+   *  Enter) is a 100+-a-day action: it never waits on the stamp. */
+  const stampThenRemove = async (tx: Transaction, label: string, viaKey = false) => {
     setExitDir(1);
-    setStamp({ id: tx.id, label });
-    if (!reduce) await new Promise((res) => setTimeout(res, 420));
+    if (!viaKey && !reduce) {
+      setStamp({ id: tx.id, label });
+      await new Promise((res) => setTimeout(res, 420));
+    }
     removeCurrent();
     setStamp(null);
   };
 
-  const handleAccept = async () => {
+  const handleAccept = async (viaKey = false) => {
     const tx = transactions[currentIndex];
     if (!tx) return;
 
@@ -147,7 +150,7 @@ export default function LabelTab() {
       setActing(true);
       setActionError('');
       await api.classifyTx.accept(tx.id);
-      await stampThenRemove(tx, tx.suggested_category || 'Labeled');
+      await stampThenRemove(tx, tx.suggested_category || 'Labeled', viaKey);
     } catch (err: any) {
       setActionError(err.response?.data?.detail || 'Failed to accept classification');
     } finally {
@@ -155,7 +158,7 @@ export default function LabelTab() {
     }
   };
 
-  const handleOverride = async (categoryId: string) => {
+  const handleOverride = async (categoryId: string, viaKey = false) => {
     const tx = transactions[currentIndex];
     if (!tx) return;
 
@@ -163,7 +166,7 @@ export default function LabelTab() {
       setActing(true);
       setActionError('');
       await api.classifyTx.label(tx.id, categoryId);
-      await stampThenRemove(tx, categories.find((c) => c.id === categoryId)?.name || 'Labeled');
+      await stampThenRemove(tx, categories.find((c) => c.id === categoryId)?.name || 'Labeled', viaKey);
       advanceTour('label'); // a hand label (rule-labeled rows never count)
     } catch (err: any) {
       setActionError(err.response?.data?.detail || 'Failed to label transaction');
@@ -219,11 +222,11 @@ export default function LabelTab() {
         const cat = k.categories[Number(e.key) - 1];
         if (cat) {
           e.preventDefault();
-          k.handleOverride(cat.id);
+          k.handleOverride(cat.id, true);
         }
       } else if (e.key === 'Enter' && k.tx.suggested_category && target?.tagName !== 'BUTTON') {
         e.preventDefault();
-        k.handleAccept();
+        k.handleAccept(true);
       } else if (e.key.toLowerCase() === 's') {
         e.preventDefault();
         k.handleSkip();
@@ -342,7 +345,7 @@ export default function LabelTab() {
           </div>
 
           {!allSeen && tx.suggested_category && (
-            <Button onClick={handleAccept} loading={acting} className="w-full" size="lg">
+            <Button onClick={() => handleAccept()} loading={acting} className="w-full" size="lg">
               <Check className="h-4 w-4" /> Accept {tx.suggested_category}
               <span className="kbd ml-1 border-accent-ink/25 bg-transparent text-accent-ink">Enter</span>
             </Button>

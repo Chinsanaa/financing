@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
 import { RotateCcw } from 'lucide-react';
 import Stamp from '@/components/ui/Stamp';
 
@@ -25,7 +24,6 @@ const ROWS = [
 const TILTS = [-3, 2, -1.5, 2.5, -2.5, 1.5, -2];
 
 export default function StatementSheet() {
-  const reduce = useReducedMotion();
   const [run, setRun] = useState(0);
   const mine = ROWS.filter((r) => r.by === 'you').length;
 
@@ -36,14 +34,12 @@ export default function StatementSheet() {
           <span className="font-medium">Sample statement</span>
           <span className="text-muted"> · September 2026 · Alipay + WeChat Pay</span>
         </span>
-        {!reduce && (
-          <button
-            onClick={() => setRun((n) => n + 1)}
-            className="inline-flex items-center gap-1.5 text-muted transition-colors hover:text-ink"
-          >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Stamp again
-          </button>
-        )}
+        <button
+          onClick={() => setRun((n) => n + 1)}
+          className="inline-flex items-center gap-1.5 text-muted transition-colors hover:text-ink motion-reduce:hidden"
+        >
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Stamp again
+        </button>
       </figcaption>
 
       <table className="w-full text-sm">

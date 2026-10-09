@@ -200,7 +200,7 @@ export default function AuthClient() {
         </Link>
         <div className="flex flex-1 flex-col justify-center">
           <h1 className="max-w-[12ch] font-display text-5xl font-normal leading-[1.02] tracking-[-0.025em] xl:text-6xl 2xl:text-7xl">
-            Every yuan, <span className="italic">accounted for.</span>
+            Every yuan, accounted for.
           </h1>
           <div className="mt-10 max-w-md border-y border-ink/80">
             {[

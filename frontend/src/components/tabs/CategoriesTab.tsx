@@ -122,7 +122,7 @@ export default function CategoriesTab() {
           onChange={(e) => setNewCategoryName(e.target.value)}
           placeholder="New category name"
           aria-label="New category name"
-          className={`${FIELD_CLASSES} flex-1`}
+          className={`${FIELD_CLASSES} min-w-0 flex-1 py-2.5`}
         />
         <Button type="submit" variant="outline">Add category</Button>
       </form>

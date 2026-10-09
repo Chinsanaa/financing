@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { AnimatePresence, m, useInView, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, m, useInView } from 'framer-motion';
 import { categoryColor } from '@/components/ui/Badge';
 
 /**
@@ -145,7 +145,6 @@ function Step({ i, active, onActive }: { i: number; active: boolean; onActive: (
 
 export default function HowItWorks() {
   const [active, setActive] = useState(0);
-  const reduce = useReducedMotion();
   return (
     <div className="grid gap-x-16 lg:grid-cols-2">
       <div>
@@ -158,9 +157,9 @@ export default function HowItWorks() {
           <AnimatePresence mode="wait" initial={false}>
             <m.div
               key={active}
-              initial={reduce ? false : { opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={reduce ? undefined : { opacity: 0, y: -6, transition: { duration: 0.14, ease: [0.55, 0, 1, 0.45] } }}
+              exit={{ opacity: 0, y: -6, transition: { duration: 0.14, ease: [0.23, 1, 0.32, 1] } }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             >
               {STEPS[active].sheet}

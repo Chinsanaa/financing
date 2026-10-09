@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { m, useReducedMotion, type MotionProps } from 'framer-motion';
+import { m, type MotionProps } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import StatementSheet from './StatementSheet';
@@ -25,7 +25,6 @@ const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
 export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
-  const reduce = useReducedMotion();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -35,14 +34,12 @@ export default function Landing() {
   }, []);
 
   // One authored entrance: the headline settles, then the stamps take over.
-  const rise = (delay: number): MotionProps =>
-    reduce
-      ? {}
-      : {
-          initial: { opacity: 0, y: 14 },
-          animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.6, ease: EASE_OUT, delay },
-        };
+  // (Reduced motion is handled globally by MotionConfig — never branch here.)
+  const rise = (delay: number): MotionProps => ({
+    initial: { opacity: 0, y: 14 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.6, ease: EASE_OUT, delay },
+  });
 
   return (
     <div className="overflow-x-clip">
@@ -79,7 +76,7 @@ export default function Landing() {
               {...rise(0)}
               className="font-display text-[3.25rem] font-normal leading-[0.98] tracking-[-0.025em] sm:text-7xl lg:text-[6rem]"
             >
-              Every yuan, <span className="italic">accounted for.</span>
+              Every yuan, accounted for.
             </m.h1>
             <m.div {...rise(0.12)} className="lg:pb-3">
               <p className="max-w-[42ch] text-[17px] leading-relaxed text-muted">

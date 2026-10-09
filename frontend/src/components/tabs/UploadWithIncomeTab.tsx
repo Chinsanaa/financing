@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '@/utils/api';
 import Button from '@/components/ui/Button';
 import { FIELD_CLASSES } from '@/components/ui/Input';
-import Card, { SectionHeader } from '@/components/ui/Card';
+import Card from '@/components/ui/Card';
 import { Alert } from '@/components/ui-feedback';
 import UploadTab from './UploadTab';
 import { CURRENCY_SYMBOL } from '@/utils/format';
@@ -74,7 +74,7 @@ export default function UploadWithIncomeTab() {
                 value={income}
                 onChange={(e) => setIncome(e.target.value)}
                 placeholder="e.g., 15000"
-                className={FIELD_CLASSES}
+                className={`${FIELD_CLASSES} w-full py-2.5`}
               />
             </div>
             <Button

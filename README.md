@@ -87,7 +87,7 @@ vermilion accent, Newsreader serif figures) with a quiet dark theme,
 skeleton loading states, and a marketing landing page at `/` for signed-out
 visitors, with `/privacy` and `/terms` legal pages linked from its footer.
 Visual language, tokens, motion rules and components are documented in
-**`docs/DESIGN_SYSTEM.md`** ("Ledger" v4, redesign in progress: **no gradients,
+**`docs/DESIGN_SYSTEM.md`** ("Ledger" v4: **no gradients,
 solid colors only, no purple**, rolling numbers, a **⌘K / Ctrl+K command menu** to
 jump anywhere, and **keyboard labeling** — 1–9 pick a category, Enter accepts,
 S skips). Every Transactions & Model step (Upload, Categories, Label, Review,

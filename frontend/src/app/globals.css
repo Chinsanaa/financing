@@ -9,10 +9,9 @@
 :root {
   /* ── Motion tokens ── */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* entrances, "expo-out" */
-  --ease-in: cubic-bezier(0.55, 0, 1, 0.45); /* exits */
   --dur-fast: 150ms; /* hovers, presses */
   --dur-base: 240ms; /* state changes */
-  --dur-slow: 420ms; /* entrances, charts */
+  --dur-slow: 280ms; /* entrances — tab switches happen tens of times a day */
 
   --bg: 244 241 234; /* paper */
   --surface: 251 250 246; /* lifted paper: popovers, inputs, the label card */
@@ -80,6 +79,8 @@ html {
 
 html {
   color-scheme: light;
+  touch-action: manipulation; /* no double-tap-zoom delay on taps */
+  -webkit-tap-highlight-color: rgb(var(--ink) / 0.06);
 }
 html.dark {
   color-scheme: dark;
@@ -206,12 +207,11 @@ code {
   animation: rise-in var(--dur-slow) var(--ease-out) backwards;
 }
 /* Sections enter once, close together — one quiet cascade, not a show. */
-.stagger-in > *:nth-child(2), .tab-panel > * > *:nth-child(2) { animation-delay: 55ms; }
-.stagger-in > *:nth-child(3), .tab-panel > * > *:nth-child(3) { animation-delay: 110ms; }
-.stagger-in > *:nth-child(4), .tab-panel > * > *:nth-child(4) { animation-delay: 165ms; }
-.stagger-in > *:nth-child(5), .tab-panel > * > *:nth-child(5) { animation-delay: 220ms; }
-.stagger-in > *:nth-child(6), .tab-panel > * > *:nth-child(6) { animation-delay: 275ms; }
-.stagger-in > *:nth-child(n + 7), .tab-panel > * > *:nth-child(n + 7) { animation-delay: 330ms; }
+.stagger-in > *:nth-child(2), .tab-panel > * > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-in > *:nth-child(3), .tab-panel > * > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-in > *:nth-child(4), .tab-panel > * > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-in > *:nth-child(5), .tab-panel > * > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-in > *:nth-child(n + 6), .tab-panel > * > *:nth-child(n + 6) { animation-delay: 200ms; }
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -219,13 +219,15 @@ code {
   }
 }
 
-/* Progress fill: grows from 0 on mount, glides on change. */
+/* Progress fill: grows from 0 on mount (transform — GPU, no layout),
+   glides on change. */
 .progress-fill {
-  animation: grow-x 900ms var(--ease-out) backwards;
-  transition: width 700ms var(--ease-out);
+  transform-origin: left center;
+  animation: grow-x 500ms var(--ease-out) backwards;
+  transition: width 400ms var(--ease-out);
 }
 @keyframes grow-x {
-  from { width: 0; }
+  from { transform: scaleX(0); }
 }
 
 /* Keyboard hint chips (⌘K etc.). */
@@ -248,15 +250,15 @@ code {
   outline: none;
 }
 
-/* Marching-ants border for drop zones (SVG <rect class="dash-march">).
-   Idles slowly; `.is-active` (drag over) speeds it up. */
+/* Dashed border for drop zones (SVG <rect class="dash-march">). Still at
+   rest; the ants march only while a file is dragged over (`.is-active`) —
+   motion that means "let go here", not an idle loop. */
 .dash-march {
   fill: none;
   stroke-dasharray: 10 8;
-  animation: dash-march 2.4s linear infinite;
 }
 .is-active .dash-march {
-  animation-duration: 0.6s;
+  animation: dash-march 0.6s linear infinite;
 }
 @keyframes dash-march {
   to { stroke-dashoffset: -36; }

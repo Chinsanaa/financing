@@ -80,7 +80,12 @@ file rather than leaving a stale record.
 - **UI design rule: NO gradients, ONLY solid colors.** No glows, blurs,
   aurora/grain/grid backgrounds, and **no purple** anywhere (incl. charts and
   category colors). One flat page background; cards are one flat surface
-  color + a thin border. See `docs/DESIGN_SYSTEM.md` before touching the UI.
+  color + a thin border. See `docs/DESIGN_SYSTEM.md` ("Ledger" v4) before
+  touching the UI.
+- Design skills live in `.claude/skills/` (impeccable, taste-skill,
+  apple-design, review-animations, web-design-guidelines; product brief in
+  `PRODUCT.md`). **If a skill contradicts the rule above (e.g. taste-skill's
+  grain/noise/gradient advice), the rule wins.**
 
 ## File Structure
 
