@@ -1,9 +1,9 @@
 'use client';
 
-import { CalendarDays, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { formatMonthLong } from '@/utils/format';
 
-/** Pill-shaped month picker ("YYYY-MM" values), shared by Budget + 50/30/20. */
+/** Month picker ("YYYY-MM" values), shared by Budget + 50/30/20. */
 export default function MonthSelect({
   value,
   months,
@@ -16,11 +16,10 @@ export default function MonthSelect({
   return (
     <label className="relative inline-flex items-center">
       <span className="sr-only">Month</span>
-      <CalendarDays className="pointer-events-none absolute left-3 h-4 w-4 text-muted" />
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 cursor-pointer appearance-none rounded-pill border border-edge/15 bg-surface pl-9 pr-9 text-sm font-medium text-ink transition-colors hover:border-edge/30 focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="h-9 cursor-pointer appearance-none rounded-md border border-edge/20 bg-surface pl-3 pr-9 text-sm font-medium text-ink transition-colors hover:border-edge/40 focus:border-accent focus:outline-none"
       >
         {months.map((m) => (
           <option key={m} value={m}>

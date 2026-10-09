@@ -16,7 +16,7 @@ export function toggleTheme() {
 /** Live `isDark`, updated no matter who toggles the theme (button, ⌘K). */
 export function useIsDark() {
   // Initial value must match the server render; real theme read after mount.
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
   useEffect(() => {
     const root = document.documentElement;
     const sync = () => setDark(root.classList.contains('dark'));

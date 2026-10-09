@@ -64,6 +64,9 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
+Current (Session 74, 2026-10-09): "Ledger" redesign in stages — see the
+Session 74 entry. Next: finish stages 2–5, then the user reviews the preview.
+
 Current (Session 69, 2026-09-27): full visual redesign ("Aurora Lime" v2 —
 see `docs/DESIGN_SYSTEM.md`). Next: user clicks through the deployed preview
 (especially ⌘K, label keyboard shortcuts, light theme) and reports anything
@@ -4680,3 +4683,52 @@ locally), `tsc` clean.
 **Open:** 4 old `model_runs` rows stay "running" in the DB (the UI already
 flags them stale). After deploy, press Start training once and confirm the
 run reaches "succeeded" with no `server_failed` event.
+
+### Session 74 (2026-10-09) — "Ledger" redesign (design system v4), staged
+
+**Ask:** pick the best components/animations from motion.dev, Bklit, Kokonut,
+GSAP, Lenis, React Bits, 21st.dev, Aceternity, anime.js, Magic UI, godly,
+transitions.dev, animos, deck.gallery; find design skills with Vercel's
+`find-skills` (impeccable, taste, apple design); critique the UI; make it not
+look AI-generated.
+
+**Decided with user (AskUserQuestion):** new identity **"Ledger"** (warm
+paper light theme first, ink text, ONE seal-vermilion accent, Newsreader
+serif figures + Schibsted Grotesk UI, hairline rules instead of cards);
+commit the skills to `.claude/skills/`; keep Recharts and borrow Bklit's ideas
+(Bklit needs shadcn + Tailwind v4 and uses gradients); staged rollout with
+screenshots after each stage. Landing claims mechanism only — no invented
+numbers/testimonials. Audience confirmed: English speakers in China.
+
+**Critique (why):** template landing (eyebrow pill, word-blur headline, tilt
+mockup, 01/02/03 cards, icon bento, CTA card); Space Grotesk + Inter on
+neon-on-black; 42 `<Card>`s; 38 uppercase eyebrows + fake "live" dots;
+decorative loops; blur entrances (break THE RULE); 5 bordered icon buttons in
+the header. Also found hidden rule breaks: ProgressBar + CategoriesTab
+colored **glows**, NumberFlow's **linear-gradient digit masks** (shadow DOM).
+
+**Stage 0:** skills installed (impeccable, design-taste-frontend,
+redesign-existing-projects, apple-design, review-animations,
+web-design-guidelines); `PRODUCT.md` (impeccable product brief);
+`frontend/scripts/ui-snapshots.cjs` harness (76 shots, mocked API).
+Impeccable's direction roll was skipped (user pinned Ledger) but its
+challengers donated three raises: chart-as-headline (Du Bois), state by
+line form — **outlined = model guess, solid = confirmed** (emission rail),
+"you stopped here" flag (cutting bench).
+
+**Stage 1 (foundations):** new tokens (light paper `244 241 234`, dark night
+ledger `21 20 17`, vermilion `194 55 27`), contrast-checked (all text ≥4.5:1);
+category palette re-tuned (same 12 keys → no migration) with a constrained
+OKLCH search + dataviz validator — **all checks PASS in both themes** (old
+palette had a CVD fail); one value per theme for swatch + chart (`--chart-cat-*`
+removed). Fonts → Newsreader (opsz) + Schibsted Grotesk; default theme light.
+Primitives: Badge = swatch + ink name (`guess` = outlined), Button (squared,
+press feedback, `link` variant), Card (`sheet`/`plain`/`raised`, no hover
+lift), SectionHeader (no eyebrow/dot/icon chip), StatTile → "fact" +
+`FactRow`, Tabs (text nav, vermilion rule, critically damped spring, no blur),
+EmptyState (no float/ping), new `Stamp` (the one bouncing spring), inputs,
+switch, stepper, ⌘K, toaster, ring restyled; browser surfaces themed
+(selection, caret, scrollbars, focus ring).
+
+**Next:** Stage 2 landing + auth → 3 dashboard shell + Overview → 4 other
+tabs → 5 skill audits + DESIGN_SYSTEM.md v4.

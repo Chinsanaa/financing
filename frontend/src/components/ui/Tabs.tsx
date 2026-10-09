@@ -1,17 +1,18 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
-import { AnimatePresence, m } from 'framer-motion';
+import { ReactNode } from 'react';
+import { m } from 'framer-motion';
 import { LucideIcon } from 'lucide-react';
 
 export type TabItem = { id: string; label: string; icon?: LucideIcon; tourId?: string };
 
-const SPRING = { type: 'spring', stiffness: 500, damping: 40 } as const;
+// Critically damped (bounce 0): the indicator arrives and stops — no
+// overshoot on something the user didn't fling (apple-design §4).
+const SPRING = { type: 'spring', bounce: 0, duration: 0.35 } as const;
 
 /**
- * Top-level tab bar. Two shared-layout layers: a soft pill that glides to
- * whichever tab is hovered, and a solid lime underline that springs to the
- * active tab.
+ * Top-level section nav: plain words, the active one in ink with a
+ * vermilion rule that slides between tabs. No icons, no hover pills.
  */
 export function TabBar({
   tabs,
@@ -24,15 +25,9 @@ export function TabBar({
   onChange: (id: string) => void;
   layoutId?: string;
 }) {
-  const [hovered, setHovered] = useState<string | null>(null);
   return (
-    <nav
-      className="scrollbar-hide flex gap-1 overflow-x-auto py-1"
-      role="tablist"
-      onMouseLeave={() => setHovered(null)}
-    >
+    <nav className="scrollbar-hide -mb-px flex gap-6 overflow-x-auto" role="tablist">
       {tabs.map((tab) => {
-        const Icon = tab.icon;
         const isActive = tab.id === active;
         return (
           <button
@@ -40,35 +35,16 @@ export function TabBar({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
-            onMouseEnter={() => setHovered(tab.id)}
-            onFocus={() => setHovered(tab.id)}
             data-tour-id={tab.tourId}
-            className={`relative flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+            className={`relative whitespace-nowrap py-3 text-sm transition-colors duration-150 ${
               isActive ? 'text-ink font-medium' : 'text-muted hover:text-ink'
             }`}
           >
-            <AnimatePresence>
-              {hovered === tab.id && (
-                <m.span
-                  layoutId={`${layoutId}-hover`}
-                  className="absolute inset-0 rounded-lg bg-edge/[0.06]"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={SPRING}
-                />
-              )}
-            </AnimatePresence>
-            {Icon && (
-              <Icon
-                className={`relative h-4 w-4 transition-colors ${isActive ? 'text-accent-strong' : ''}`}
-              />
-            )}
-            <span className="relative">{tab.label}</span>
+            {tab.label}
             {isActive && (
               <m.span
                 layoutId={layoutId}
-                className="absolute inset-x-3 -bottom-[5px] h-0.5 rounded-full bg-accent"
+                className="absolute inset-x-0 bottom-0 h-[2px] bg-accent"
                 transition={SPRING}
               />
             )}
@@ -79,7 +55,7 @@ export function TabBar({
   );
 }
 
-/** Small pill sub-tabs shown under a section. */
+/** Secondary sub-tabs under a section: smaller words, a thin ink rule. */
 export function PillTabs({
   tabs,
   active,
@@ -93,12 +69,11 @@ export function PillTabs({
 }) {
   return (
     <div
-      className="scrollbar-hide inline-flex max-w-full gap-1 overflow-x-auto rounded-pill border border-edge/8 bg-surface-2/70 p-1"
+      className="scrollbar-hide flex max-w-full gap-5 overflow-x-auto border-b border-edge/12"
       role="tablist"
     >
       {tabs.map((tab) => {
         const isActive = tab.id === active;
-        const Icon = tab.icon;
         return (
           <button
             key={tab.id}
@@ -106,21 +81,18 @@ export function PillTabs({
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
             data-tour-id={tab.tourId}
-            className={`relative flex items-center gap-1.5 rounded-pill px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+            className={`relative -mb-px whitespace-nowrap pb-2.5 pt-1 text-[13px] transition-colors ${
               isActive ? 'text-ink font-medium' : 'text-muted hover:text-ink'
             }`}
           >
+            {tab.label}
             {isActive && (
               <m.span
                 layoutId={layoutId}
-                className="absolute inset-0 rounded-pill border border-edge/10 bg-surface shadow-card"
+                className="absolute inset-x-0 bottom-0 h-px bg-ink"
                 transition={SPRING}
               />
             )}
-            {Icon && (
-              <Icon className={`relative h-3.5 w-3.5 ${isActive ? 'text-accent-strong' : ''}`} />
-            )}
-            <span className="relative">{tab.label}</span>
           </button>
         );
       })}
@@ -129,18 +101,17 @@ export function PillTabs({
 }
 
 /**
- * Wraps each tab's content: the panel blurs/rises in, then `.stagger-in`
- * cascades the tab's top-level sections (tab root's children) 55ms apart.
+ * Wraps each tab's content: a short fade-rise, then `.stagger-in` cascades
+ * the tab's top-level sections. No blur (THE RULE) — and no lingering
+ * transform/filter, which would trap position:fixed modals inside tabs.
  */
 export function TabPanel({ children }: { children: ReactNode }) {
   return (
     <m.div
       className="tab-panel"
-      initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
-      // filter must end as `none`: any other value turns this wrapper into
-      // the containing block for position:fixed modals inside tabs.
-      animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
-      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
     </m.div>

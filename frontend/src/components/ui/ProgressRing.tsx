@@ -11,7 +11,7 @@ import { m, useReducedMotion } from 'framer-motion';
 export default function ProgressRing({
   percent,
   size = 168,
-  stroke = 12,
+  stroke = 6,
   color = 'rgb(var(--accent))',
   label,
   children,
@@ -38,7 +38,7 @@ export default function ProgressRing({
       aria-valuenow={Math.round(pct)}
     >
       <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--edge) / 0.08)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--edge) / 0.12)" strokeWidth={stroke} />
         <m.circle
           cx={size / 2}
           cy={size / 2}
@@ -46,10 +46,10 @@ export default function ProgressRing({
           fill="none"
           stroke={color}
           strokeWidth={stroke}
-          strokeLinecap="round"
+          strokeLinecap="butt"
           initial={{ pathLength: reduce ? pct / 100 : 0 }}
           animate={{ pathLength: pct / 100 }}
-          transition={{ type: 'spring', stiffness: 60, damping: 18, delay: 0.15 }}
+          transition={{ type: 'spring', bounce: 0, duration: 1, delay: 0.15 }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>

@@ -2,123 +2,140 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens. Dark is the flagship theme; light is a tasteful inversion.
-   Values are space-separated RGB channels so Tailwind can apply alpha. */
+/* Design tokens — "Ledger" (design system v4, docs/DESIGN_SYSTEM.md).
+   Light (warm paper + ink) is the flagship; dark is a quiet night ledger.
+   Values are space-separated RGB channels so Tailwind can apply alpha.
+   THE RULE: solid colors only — no gradients, glows, blur, purple. */
 :root {
-  /* ── Motion tokens (design system v2 — see docs/DESIGN_SYSTEM.md) ── */
+  /* ── Motion tokens ── */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* entrances, "expo-out" */
   --ease-in: cubic-bezier(0.55, 0, 1, 0.45); /* exits */
   --dur-fast: 150ms; /* hovers, presses */
   --dur-base: 240ms; /* state changes */
-  --dur-slow: 480ms; /* entrances, charts */
+  --dur-slow: 420ms; /* entrances, charts */
 
-  --bg: 250 250 248;
-  --surface: 255 255 255;
-  --surface-2: 241 241 243;
-  --ink: 16 16 20;
-  --muted: 95 95 107;
-  --edge: 16 16 20; /* used at low alpha via border-edge/10 */
-  --accent: 132 204 22; /* lime-500: readable fill on light */
-  --accent-ink: 10 10 15;
-  --accent-strong: 77 124 15; /* text-safe accent on light */
-  --cyan: 8 145 178;
-  --danger: 220 38 38;
-  --success: 22 163 74;
-  --warn: 180 83 9; /* amber — "approaching" states; same hue as --chart-5 */
-  /* Categorical chart series (validated for light surface) */
-  --chart-1: #4d7c0f;
-  --chart-2: #2563eb;
-  --chart-3: #0891b2;
-  --chart-4: #db2777;
-  --chart-5: #b45309;
+  --bg: 244 241 234; /* paper */
+  --surface: 251 250 246; /* lifted paper: popovers, inputs, the label card */
+  --surface-2: 235 231 222; /* inset well */
+  --ink: 27 26 23;
+  --muted: 104 99 90; /* 5.3:1 on paper */
+  --edge: 27 26 23; /* hairlines — always at low alpha (border-edge/12) */
+  --accent: 194 55 27; /* seal vermilion — primary action, active nav, the stamp */
+  --accent-ink: 255 248 242; /* text on an accent fill (5.2:1) */
+  --accent-strong: 176 48 26; /* vermilion TEXT, safe on wells too */
+  --cyan: 31 95 122; /* info (kept name) */
+  --danger: 155 28 49; /* crimson — always paired with a word ("Over") */
+  --success: 47 107 58; /* ink green */
+  --warn: 138 90 0; /* ochre — "approaching" */
   /* Category palette — user-selectable, keyed by name in categoryColors.ts.
-     Validated (lightness band, chroma, contrast) for light surfaces. */
-  --cat-lime: 63 98 18;
-  --cat-blue: 29 78 216;
-  --cat-cyan: 8 145 178;
-  --cat-pink: 219 39 119;
-  --cat-amber: 161 98 7;
-  --cat-sky: 7 89 133;
-  --cat-emerald: 4 120 87;
-  --cat-rose: 159 18 57;
-  --cat-green: 70 117 0;
-  --cat-teal: 13 148 136;
-  --cat-orange: 154 52 18;
-  --cat-olive: 112 112 0;
-  /* Chart-fill variants of the same 12 keys — badges need ~4.5:1 TEXT
-     contrast (hence the darker --cat-* values above), but a pie/chart
-     fill only needs ~3:1 mark contrast, so darkening these to text-safe
-     levels just reads as muddy. These reuse the already-vivid dark-surface
-     hues (below), which pass lightness/chroma/contrast checks against
-     white too — see dataviz skill's validate_palette.js. */
-  --chart-cat-lime: 77 124 15;
-  --chart-cat-blue: 37 99 235;
-  --chart-cat-cyan: 8 145 178;
-  --chart-cat-pink: 236 72 153;
-  --chart-cat-amber: 217 119 6;
-  --chart-cat-sky: 2 132 199;
-  --chart-cat-emerald: 5 150 105;
-  --chart-cat-rose: 225 29 72;
-  --chart-cat-green: 112 168 0;
-  --chart-cat-teal: 13 148 136;
-  --chart-cat-orange: 194 65 12;
-  --chart-cat-olive: 138 138 59;
+     One value per theme serves swatches, bars and chart fills (the category
+     NAME is always printed in ink beside the color, so these need 3:1 mark
+     contrast, not text contrast). Validated with the dataviz validator:
+     lightness, chroma, CVD + normal-vision ΔE and contrast all PASS. */
+  --cat-lime: 89 113 35;
+  --cat-blue: 38 88 169;
+  --cat-cyan: 10 148 175;
+  --cat-pink: 168 58 97;
+  --cat-amber: 174 115 36;
+  --cat-sky: 39 128 173;
+  --cat-emerald: 11 103 48;
+  --cat-rose: 193 105 99;
+  --cat-green: 56 101 6;
+  --cat-teal: 27 154 137;
+  --cat-orange: 154 64 25;
+  --cat-olive: 145 133 27;
 }
 
 .dark {
-  --bg: 10 10 15;
-  --surface: 19 19 24;
-  --surface-2: 27 27 35;
-  --ink: 245 245 247;
-  --muted: 154 154 165;
-  --edge: 255 255 255;
-  --accent: 200 255 61; /* electric lime */
-  --accent-ink: 10 10 15;
-  --accent-strong: 200 255 61;
-  --cyan: 34 211 238;
-  --danger: 248 113 113;
-  --success: 74 222 128;
-  --warn: 217 119 6;
-  /* Categorical chart series (validated for dark surface) */
-  --chart-1: #65a30d;
-  --chart-2: #2563eb;
-  --chart-3: #0284c7;
-  --chart-4: #db2777;
-  --chart-5: #d97706;
-  /* Category palette — dark-surface values of the same 12 keys. */
-  --cat-lime: 77 124 15;
-  --cat-blue: 37 99 235;
-  --cat-cyan: 8 145 178;
-  --cat-pink: 236 72 153;
-  --cat-amber: 217 119 6;
-  --cat-sky: 2 132 199;
-  --cat-emerald: 5 150 105;
-  --cat-rose: 225 29 72;
-  --cat-green: 112 168 0;
-  --cat-teal: 13 148 136;
-  --cat-orange: 194 65 12;
-  --cat-olive: 138 138 59;
+  --bg: 21 20 17;
+  --surface: 29 27 24;
+  --surface-2: 38 36 31;
+  --ink: 237 233 224;
+  --muted: 163 157 145;
+  --edge: 237 233 224;
+  --accent: 226 86 56;
+  --accent-ink: 26 15 11;
+  --accent-strong: 234 106 78;
+  --cyan: 111 179 207;
+  --danger: 240 122 134;
+  --success: 125 186 132;
+  --warn: 214 158 46;
+  --cat-lime: 103 139 46;
+  --cat-blue: 37 104 191;
+  --cat-cyan: 11 157 170;
+  --cat-pink: 178 66 111;
+  --cat-amber: 176 135 57;
+  --cat-sky: 31 144 210;
+  --cat-emerald: 56 169 98;
+  --cat-rose: 173 78 83;
+  --cat-green: 101 146 0;
+  --cat-teal: 11 166 166;
+  --cat-orange: 169 85 46;
+  --cat-olive: 158 149 39;
 }
 
 html {
   scroll-behavior: smooth;
 }
 
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   background-color: rgb(var(--bg));
   color: rgb(var(--ink));
+  caret-color: rgb(var(--accent));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Browser surfaces wear the palette too (impeccable craft floor). */
+::selection {
+  background-color: rgb(var(--accent) / 0.22);
+  color: rgb(var(--ink));
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--edge) / 0.22) transparent;
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}
+h1, h2, h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+
+/* NumberFlow fades rolling digits with a linear-gradient mask (inside its
+   shadow DOM). THE RULE: no gradients — zero mask size gives a hard-edged
+   odometer window instead. Inherited custom properties cross the shadow root. */
+:root {
+  --number-flow-mask-height: 0px;
+  --number-flow-mask-width: 0px;
+}
+
+/* Ledger numerals: serif, lining, tabular — columns of money line up. */
+.num {
+  font-family: var(--font-display), Georgia, serif;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-/* Solid panel (was a translucent blurred "glass" — design rule: solid colors only) */
+/* Solid lifted panel (name kept for call sites — never translucent). */
 .glass {
   background-color: rgb(var(--surface));
-  border: 1px solid rgb(var(--edge) / 0.08);
+  border: 1px solid rgb(var(--edge) / 0.12);
 }
 
 /* Skeleton placeholder — a solid block whose opacity pulses. */
@@ -131,29 +148,27 @@ code {
   50% { opacity: 0.55; }
 }
 
-/* Category badge tones — one class per palette key in categoryColors.ts.
-   Plain CSS (not Tailwind utilities) so runtime-composed class names like
-   `cat-blue` can't be purged. Text at full strength, tinted 15% fill —
-   mirrors Badge's built-in tones. */
-.cat-lime { color: rgb(var(--cat-lime)); background-color: rgb(var(--cat-lime) / 0.15); }
-.cat-blue { color: rgb(var(--cat-blue)); background-color: rgb(var(--cat-blue) / 0.15); }
-.cat-cyan { color: rgb(var(--cat-cyan)); background-color: rgb(var(--cat-cyan) / 0.15); }
-.cat-pink { color: rgb(var(--cat-pink)); background-color: rgb(var(--cat-pink) / 0.15); }
-.cat-amber { color: rgb(var(--cat-amber)); background-color: rgb(var(--cat-amber) / 0.15); }
-.cat-sky { color: rgb(var(--cat-sky)); background-color: rgb(var(--cat-sky) / 0.15); }
-.cat-emerald { color: rgb(var(--cat-emerald)); background-color: rgb(var(--cat-emerald) / 0.15); }
-.cat-rose { color: rgb(var(--cat-rose)); background-color: rgb(var(--cat-rose) / 0.15); }
-.cat-green { color: rgb(var(--cat-green)); background-color: rgb(var(--cat-green) / 0.15); }
-.cat-teal { color: rgb(var(--cat-teal)); background-color: rgb(var(--cat-teal) / 0.15); }
-.cat-orange { color: rgb(var(--cat-orange)); background-color: rgb(var(--cat-orange) / 0.15); }
-.cat-olive { color: rgb(var(--cat-olive)); background-color: rgb(var(--cat-olive) / 0.15); }
+/* Category identity — one class per palette key in categoryColors.ts.
+   Sets --cat so a swatch / bar / stamp can paint with it. Plain CSS so
+   runtime-composed class names like `cat-blue` can't be purged. */
+.cat-lime { --cat: var(--cat-lime); }
+.cat-blue { --cat: var(--cat-blue); }
+.cat-cyan { --cat: var(--cat-cyan); }
+.cat-pink { --cat: var(--cat-pink); }
+.cat-amber { --cat: var(--cat-amber); }
+.cat-sky { --cat: var(--cat-sky); }
+.cat-emerald { --cat: var(--cat-emerald); }
+.cat-rose { --cat: var(--cat-rose); }
+.cat-green { --cat: var(--cat-green); }
+.cat-teal { --cat: var(--cat-teal); }
+.cat-orange { --cat: var(--cat-orange); }
+.cat-olive { --cat: var(--cat-olive); }
 
-/* Uppercase tracked section label */
+/* Quiet caption heading for a chart or column ("Monthly spending").
+   Sentence case — never an uppercase eyebrow above a real heading. */
 .section-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: rgb(var(--muted));
 }
 
@@ -177,7 +192,7 @@ code {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   Design system v3 — interaction effects. RULE: NO gradients, ONLY solid
+   Design system v4 — interaction effects. RULE: NO gradients, ONLY solid
    colors (no glows, blurs, aurora, grain, grids). Token-driven, collapses
    to static under prefers-reduced-motion (global rule above).
    Full reference: docs/DESIGN_SYSTEM.md
@@ -190,6 +205,7 @@ code {
 .tab-panel > * > * {
   animation: rise-in var(--dur-slow) var(--ease-out) backwards;
 }
+/* Sections enter once, close together — one quiet cascade, not a show. */
 .stagger-in > *:nth-child(2), .tab-panel > * > *:nth-child(2) { animation-delay: 55ms; }
 .stagger-in > *:nth-child(3), .tab-panel > * > *:nth-child(3) { animation-delay: 110ms; }
 .stagger-in > *:nth-child(4), .tab-panel > * > *:nth-child(4) { animation-delay: 165ms; }
@@ -199,8 +215,7 @@ code {
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
-    filter: blur(4px);
+    transform: translateY(8px);
   }
 }
 
