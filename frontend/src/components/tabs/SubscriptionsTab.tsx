@@ -89,7 +89,7 @@ export default function SubscriptionsTab() {
         action={
           data && subscriptions.length > 0 ? (
             <Card className="px-5 py-3 text-right">
-              <p className="font-display text-2xl font-bold">
+              <p className="font-display text-2xl font-medium">
                 <RollingNumber value={data.monthly_total} currency />
               </p>
               <p className="text-xs text-muted">
@@ -124,7 +124,7 @@ export default function SubscriptionsTab() {
               <div className="flex items-start gap-3">
                 {/* Monogram tinted with the category color */}
                 <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-base font-bold"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-base font-medium"
                   style={{ color: tint, backgroundColor: `color-mix(in srgb, ${tint} 15%, transparent)` }}
                   aria-hidden="true"
                 >
@@ -147,7 +147,7 @@ export default function SubscriptionsTab() {
                     )}
                   </p>
                 </div>
-                <p className="font-display text-lg font-bold tabular-nums">
+                <p className="font-display text-lg font-medium tabular-nums">
                   {formatCurrencyWhole(sub.typical_amount)}
                 </p>
               </div>

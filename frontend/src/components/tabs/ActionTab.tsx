@@ -57,7 +57,7 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
             </span>
           </span>
           <div className="relative">
-            <p className="font-display text-lg font-semibold text-success">All clear</p>
+            <p className="font-display text-lg font-medium text-success">All clear</p>
             <p className="mt-0.5 text-sm text-muted">
               No over-budget categories or pending items. Nice work.
             </p>
@@ -81,7 +81,7 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-display text-lg font-bold text-danger tabular-nums">
+                      <p className="font-display text-lg font-medium text-danger tabular-nums">
                         {formatCurrencyWhole(action.overage || 0)}
                       </p>
                       <p className="text-xs text-danger">over</p>
@@ -104,7 +104,7 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-display text-lg font-bold text-warn tabular-nums">
+                      <p className="font-display text-lg font-medium text-warn tabular-nums">
                         {action.pct}%
                       </p>
                       <p className="text-xs text-warn">used</p>
@@ -145,7 +145,7 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
           {TIPS.map((tip, i) => (
             <li key={i}>
               <Card hover className="flex h-full gap-3 p-4 text-sm">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/12 font-display text-sm font-bold text-accent-strong">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/12 font-display text-sm font-medium text-accent-strong">
                   {i + 1}
                 </span>
                 <span className="text-muted">{tip}</span>

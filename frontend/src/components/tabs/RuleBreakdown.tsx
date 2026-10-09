@@ -194,7 +194,7 @@ export default function RuleBreakdown({
                 <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
                   {hasIncome ? 'Of income' : 'Spent'}
                 </p>
-                <p className="font-display text-xl font-bold tabular-nums">
+                <p className="font-display text-xl font-medium tabular-nums">
                   {hasIncome
                     ? `${pctOfIncome(buckets!.needs.spent + buckets!.wants.spent + buckets!.savings.spent)}%`
                     : formatCurrencyWhole(buckets!.needs.spent + buckets!.wants.spent + buckets!.savings.spent)}

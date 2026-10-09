@@ -347,7 +347,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
             <UploadCloud className="h-7 w-7" />
           </m.div>
           <div>
-            <p className="font-display text-lg font-semibold">
+            <p className="font-display text-lg font-medium">
               {dragActive ? 'Drop to upload' : 'Drag and drop your files here'}
             </p>
             <p className="mt-1 text-sm text-muted">or choose them from your computer</p>

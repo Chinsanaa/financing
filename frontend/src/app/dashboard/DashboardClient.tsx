@@ -205,7 +205,7 @@ export default function DashboardClient() {
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg">
         <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-          <Link href="/dashboard" className="group flex items-center gap-2 font-display text-lg font-bold tracking-tight">
+          <Link href="/dashboard" className="group flex items-center gap-2 font-display text-lg font-medium tracking-[-0.015em]">
             <span>
               Financing<span className="text-accent-strong">.</span>
             </span>
@@ -257,7 +257,7 @@ export default function DashboardClient() {
             {displayName && (
               <span
                 title={displayName}
-                className="ml-1 hidden h-9 w-9 items-center justify-center rounded-full bg-accent font-display text-sm font-bold text-accent-ink ring-2 ring-bg sm:flex"
+                className="ml-1 hidden h-9 w-9 items-center justify-center rounded-full bg-accent font-display text-sm font-medium text-accent-ink ring-2 ring-bg sm:flex"
                 aria-hidden="true"
               >
                 {displayName.charAt(0).toUpperCase()}

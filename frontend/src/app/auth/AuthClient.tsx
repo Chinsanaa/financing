@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, m } from 'framer-motion';
-import { BrainCircuit, Languages, ShieldCheck } from 'lucide-react';
+import Stamp from '@/components/ui/Stamp';
 import { createClient } from '@/utils/supabase';
 import { apiClient } from '@/utils/api';
 import Button from '@/components/ui/Button';
@@ -27,9 +27,9 @@ const BASE_LOCKOUT_SECONDS = 30;
 const MAX_LOCKOUT_SECONDS = 300;
 
 const TRUST_POINTS = [
-  { icon: BrainCircuit, text: 'A model that is yours — trained on your own labels.' },
-  { icon: Languages, text: 'Bilingual by design — mixed Chinese and English, understood.' },
-  { icon: ShieldCheck, text: 'Private per user — nothing shared across accounts.' },
+  { text: 'A model that is yours — trained on your own labels.' },
+  { text: 'Chinese merchant text, segmented and shown in English.' },
+  { text: 'Private per account — nothing shared.' },
 ];
 
 type Mode = 'signin' | 'signup' | 'forgot';
@@ -189,79 +189,52 @@ export default function AuthClient() {
       {/* Mobile-only logo, pinned to the top so it doesn't drift with the
           centered form's height (sign-up has more inputs than sign-in). The
           desktop logo lives in the brand panel below. */}
-      <Link
-        href="/"
-        className="absolute left-4 top-4 z-10 font-display text-lg font-bold tracking-tight sm:left-8 lg:hidden"
-      >
-        Financing<span className="text-accent-strong">.</span>
+      <Link href="/" className="absolute left-4 top-5 z-10 font-display text-xl font-medium sm:left-8 lg:hidden">
+        Financing<span className="text-accent">.</span>
       </Link>
 
-      {/* Brand panel */}
-      <div className="relative z-[1] hidden flex-col overflow-hidden border-r border-edge/8 p-10 lg:flex xl:p-14 2xl:p-20">
-        <Link href="/" className="relative font-display text-lg font-bold tracking-tight">
-          Financing<span className="text-accent-strong">.</span>
+      {/* Brand panel — a darker paper well with a short stamped statement */}
+      <div className="hidden flex-col bg-surface-2 p-10 lg:flex xl:p-14 2xl:p-20">
+        <Link href="/" className="font-display text-xl font-medium">
+          Financing<span className="text-accent">.</span>
         </Link>
-        {/* Centered in the remaining height, not spread edge-to-edge — a
-            fixed-height block here (vs. justify-between) is what stopped
-            this panel reading as empty on tall/wide desktop viewports. */}
-        <div className="relative flex flex-1 flex-col justify-center">
-          <h1 className="font-display text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl 2xl:text-7xl">
-            Your money,
-            <br />
-            <span className="text-accent-strong">decoded</span>.
+        <div className="flex flex-1 flex-col justify-center">
+          <h1 className="max-w-[12ch] font-display text-5xl font-normal leading-[1.02] tracking-[-0.025em] xl:text-6xl 2xl:text-7xl">
+            Every yuan, <span className="italic">accounted for.</span>
           </h1>
-          <p className="mt-5 max-w-md text-muted xl:max-w-lg xl:text-lg">
-            One personal model, trained on your own labels, sorting every Alipay and
-            WeChat transaction for you.
-          </p>
-          <ul className="mt-8 space-y-3">
-            {TRUST_POINTS.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-start gap-3 text-sm text-muted xl:text-base">
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" aria-hidden="true" />
-                <span className="max-w-md">{text}</span>
-              </li>
+          <div className="mt-10 max-w-md border-y border-ink/80">
+            {[
+              ['Luckin Coffee', '18.50', 'Food', -3],
+              ['Didi Chuxing', '32.40', 'Transport', 2],
+              ['Hema Fresh', '212.60', 'Groceries', -1.5],
+            ].map(([merchant, amount, cat, tilt], i) => (
+              <div key={merchant as string} className="flex items-center gap-4 border-t border-edge/12 py-3 text-sm first:border-t-0">
+                <span className="flex-1 font-medium">{merchant}</span>
+                <span className="num">¥{amount}</span>
+                <span className="w-28">
+                  <Stamp label={cat as string} tilt={tilt as number} delay={0.5 + i * 0.25} />
+                </span>
+              </div>
+            ))}
+          </div>
+          <ul className="mt-8 max-w-md space-y-2 text-sm text-muted xl:text-[15px]">
+            {TRUST_POINTS.map(({ text }) => (
+              <li key={text}>{text}</li>
             ))}
           </ul>
-          {/* Spending line draws itself in, then the area fades up under it */}
-          <svg viewBox="0 0 400 80" className="relative mt-10 w-full max-w-lg xl:max-w-xl" aria-hidden="true">
-            <m.polygon
-              points="0,80 0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20 400,80"
-              fill="rgb(var(--accent))"
-              fillOpacity={0.15}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, delay: 1.2 }}
-            />
-            <m.polyline
-              points="0,60 50,48 100,54 150,34 200,42 250,22 300,30 350,12 400,20"
-              fill="none"
-              stroke="rgb(var(--accent))"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ duration: 1.6, ease: 'easeInOut', delay: 0.3 }}
-            />
-            <m.circle
-              cx="400" cy="20" r="4" fill="rgb(var(--accent))"
-              initial={{ scale: 0 }} animate={{ scale: 1 }}
-              transition={{ delay: 1.9, type: 'spring', stiffness: 400 }}
-            />
-          </svg>
         </div>
       </div>
 
       {/* Form panel */}
-      <div className="relative z-[1] flex items-center justify-center px-4 py-16 sm:px-8 xl:px-12">
+      <div className="flex items-center justify-center px-4 py-20 sm:px-8 xl:px-12">
         <m.div
-          initial={{ opacity: 0, y: 16, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="glass w-full max-w-sm rounded-2xl p-6 shadow-card sm:p-8 lg:max-w-md"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          className="w-full max-w-sm"
         >
           {mode !== 'forgot' && (
-            <div className="mb-8 inline-flex rounded-pill bg-surface-2 p-1" role="tablist" aria-label="Sign in or create account">
+            <div className="mb-8 flex gap-6 border-b border-edge/12" role="tablist" aria-label="Sign in or create account">
               {[
                 { tabMode: 'signin' as Mode, label: 'Sign in' },
                 { tabMode: 'signup' as Mode, label: 'Create account' },
@@ -271,15 +244,15 @@ export default function AuthClient() {
                   role="tab"
                   aria-selected={mode === tabMode}
                   onClick={() => switchMode(tabMode)}
-                  className={`relative rounded-pill px-4 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+                  className={`relative -mb-px pb-2.5 text-sm transition-colors ${
                     mode === tabMode ? 'text-ink font-medium' : 'text-muted hover:text-ink'
                   }`}
                 >
                   {mode === tabMode && (
                     <m.span
                       layoutId="auth-mode"
-                      className="absolute inset-0 rounded-pill bg-surface border border-edge/10 shadow-card"
-                      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                      className="absolute inset-x-0 bottom-0 h-[2px] bg-accent"
+                      transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
                     />
                   )}
                   <span className="relative">{label}</span>
@@ -288,8 +261,8 @@ export default function AuthClient() {
             </div>
           )}
 
-          <h2 className="font-display text-2xl font-bold tracking-tight">
-            {mode === 'signup' ? 'Start decoding your spending' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}
+          <h2 className="font-display text-[2rem] font-normal leading-tight tracking-[-0.015em]">
+            {mode === 'signup' ? 'Create your account' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}
           </h2>
           <p className="mt-1.5 mb-7 text-sm text-muted">
             {mode === 'signup'

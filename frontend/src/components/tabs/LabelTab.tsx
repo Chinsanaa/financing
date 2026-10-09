@@ -239,7 +239,7 @@ export default function LabelTab() {
               </div>
               <div>
                 <p className="section-label mb-1">Amount</p>
-                <p className="font-display text-lg font-semibold tabular-nums">
+                <p className="font-display text-lg font-medium tabular-nums">
                   {formatCurrency(tx.amount)}
                 </p>
               </div>

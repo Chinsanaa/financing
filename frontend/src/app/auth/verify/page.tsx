@@ -140,9 +140,8 @@ function VerifyContent() {
 
   if (recoveryReady) {
     return (
-      <div className="glass w-full max-w-md rounded-card p-8 shadow-card animate-fade-up">
-        <p className="section-label mb-2">Almost there</p>
-        <h1 className="font-display text-2xl font-bold tracking-tight mb-4">Set a new password</h1>
+      <div className="w-full max-w-md border-t border-ink/80 pt-8 animate-fade-up">
+        <h1 className="font-display text-2xl font-medium tracking-[-0.015em] mb-4">Set a new password</h1>
 
         <form onSubmit={handleSetNewPassword} className="space-y-4">
           <div>
@@ -185,9 +184,8 @@ function VerifyContent() {
   }
 
   return (
-    <div className="glass w-full max-w-md rounded-card p-8 shadow-card animate-fade-up">
-      <p className="section-label mb-2">Almost there</p>
-      <h1 className="font-display text-2xl font-bold tracking-tight mb-4">Email verification</h1>
+    <div className="w-full max-w-md border-t border-ink/80 pt-8 animate-fade-up">
+      <h1 className="font-display text-2xl font-medium tracking-[-0.015em] mb-4">Email verification</h1>
 
       {loading && (
         <div className="space-y-2.5" aria-hidden="true">

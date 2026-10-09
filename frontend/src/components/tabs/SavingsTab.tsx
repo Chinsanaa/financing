@@ -98,7 +98,7 @@ export default function SavingsTab() {
                     label="Progress toward monthly savings goal"
                     color={hit ? 'rgb(var(--success))' : 'rgb(var(--accent))'}
                   >
-                    <p className="font-display text-3xl font-bold">
+                    <p className="font-display text-3xl font-medium">
                       <RollingNumber value={Math.max(0, Math.round(pct))} suffix="%" />
                     </p>
                     <p className="text-xs text-muted">of goal</p>
@@ -138,7 +138,7 @@ export default function SavingsTab() {
                             setGoalInput(goal > 0 ? String(goal) : '');
                             setEditingGoal(true);
                           }}
-                          className="font-display text-2xl font-bold tabular-nums underline decoration-edge/30 decoration-dotted underline-offset-8 transition-colors hover:text-accent-strong hover:decoration-accent"
+                          className="font-display text-2xl font-medium tabular-nums underline decoration-edge/30 decoration-dotted underline-offset-8 transition-colors hover:text-accent-strong hover:decoration-accent"
                           title="Edit monthly savings goal"
                         >
                           {goal > 0 ? formatCurrencyWhole(goal) : 'Set a goal'}
@@ -172,14 +172,14 @@ export default function SavingsTab() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="mb-1 text-sm text-muted">3-month average</p>
-                <p className="font-display text-2xl font-bold tabular-nums">
+                <p className="font-display text-2xl font-medium tabular-nums">
                   {formatCurrencyWhole(savings.average_monthly_spend)}
                 </p>
               </div>
               <div>
                 <p className="mb-1 text-sm text-muted">This month vs average</p>
                 <p
-                  className={`flex items-center gap-1 font-display text-2xl font-bold tabular-nums ${
+                  className={`flex items-center gap-1 font-display text-2xl font-medium tabular-nums ${
                     savings.current_spend > savings.average_monthly_spend
                       ? 'text-danger'
                       : 'text-success'

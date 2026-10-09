@@ -121,7 +121,7 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
             </m.span>
           </AnimatePresence>
           <div className="min-w-0">
-            <h2 className="font-display text-xl font-semibold tracking-tight">{currentStepData.label}</h2>
+            <h2 className="font-display text-xl font-medium tracking-[-0.015em]">{currentStepData.label}</h2>
             <p className="text-sm text-muted">{currentStepData.description}</p>
           </div>
           <span className="ml-auto shrink-0 rounded-pill bg-edge/5 px-3 py-1 text-xs font-medium tabular-nums text-muted">

@@ -84,7 +84,7 @@ export default function InsightsTab() {
                         </p>
                       </div>
                     </div>
-                    <p className={`font-display text-xl font-bold tabular-nums ${tone}`}>
+                    <p className={`font-display text-xl font-medium tabular-nums ${tone}`}>
                       {up ? '+' : ''}
                       {trend.pct_change}%
                     </p>
@@ -139,7 +139,7 @@ export default function InsightsTab() {
                   </p>
                   </div>
                 </div>
-                <p className="font-display text-sm font-bold tabular-nums">
+                <p className="font-display text-sm font-medium tabular-nums">
                   {formatCurrencyWhole(txn.amount)}
                 </p>
               </div>

@@ -139,7 +139,7 @@ export default function TrainingTab() {
           </span>
         </div>
         <div className="flex-1">
-          <p className="font-display text-lg font-semibold">
+          <p className="font-display text-lg font-medium">
             {training ? 'Learning your spending patterns…' : 'Ready when you are'}
           </p>
           <p className="mt-1 text-sm text-muted">
@@ -188,19 +188,19 @@ export default function TrainingTab() {
                 <div className="grid grid-cols-3 gap-2 rounded-lg bg-surface-2 p-3 text-sm">
                   <div>
                     <p className="section-label mb-0.5">CV accuracy</p>
-                    <p className="font-display text-lg font-semibold">
+                    <p className="font-display text-lg font-medium">
                       <RollingNumber value={run.cv_accuracy * 100} decimals={1} suffix="%" />
                     </p>
                   </div>
                   <div>
                     <p className="section-label mb-0.5">F1-macro</p>
-                    <p className="font-display text-lg font-semibold">
+                    <p className="font-display text-lg font-medium">
                       {run.f1_macro != null ? <RollingNumber value={run.f1_macro} decimals={3} /> : '—'}
                     </p>
                   </div>
                   <div>
                     <p className="section-label mb-0.5">Samples</p>
-                    <p className="font-display text-lg font-semibold">
+                    <p className="font-display text-lg font-medium">
                       {run.n_labeled_samples != null ? <RollingNumber value={run.n_labeled_samples} /> : '—'}
                     </p>
                   </div>

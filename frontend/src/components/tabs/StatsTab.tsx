@@ -178,7 +178,7 @@ export default function StatsTab({
             </p>
             {isNewUser ? (
               <>
-                <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
+                <h2 className="font-display text-3xl font-medium tracking-[-0.015em] sm:text-4xl">
                   Let&apos;s decode your <span className="text-accent-strong">spending.</span>
                 </h2>
                 <p className="mt-2 max-w-md text-sm text-muted">
@@ -190,7 +190,7 @@ export default function StatsTab({
               <>
                 <p className="text-sm text-muted">Spent in {formatMonthLong(latest.date)}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-3">
-                  <p className="font-display text-5xl font-bold tracking-tight sm:text-6xl">
+                  <p className="font-display text-5xl font-medium tracking-[-0.015em] sm:text-6xl">
                     <RollingNumber value={latest.total_spend} currency />
                   </p>
                   {deltaPct !== null && (
@@ -202,7 +202,7 @@ export default function StatsTab({
                 </div>
               </>
             ) : (
-              <h2 className="font-display text-3xl font-bold tracking-tight">Your spending at a glance</h2>
+              <h2 className="font-display text-3xl font-medium tracking-[-0.015em]">Your spending at a glance</h2>
             )}
           </div>
 
@@ -352,7 +352,7 @@ export default function StatsTab({
                   <p className="max-w-[110px] truncate text-[11px] font-medium uppercase tracking-wider text-muted">
                     {hoveredCat ? hoveredCat.category : 'Total'}
                   </p>
-                  <p className="font-display text-xl font-bold tabular-nums">
+                  <p className="font-display text-xl font-medium tabular-nums">
                     {formatCurrencyWhole(hoveredCat ? hoveredCat.total_amount : categoryTotal)}
                   </p>
                 </div>

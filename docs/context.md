@@ -4730,5 +4730,19 @@ EmptyState (no float/ping), new `Stamp` (the one bouncing spring), inputs,
 switch, stepper, ⌘K, toaster, ring restyled; browser surfaces themed
 (selection, caret, scrollbars, focus ring).
 
-**Next:** Stage 2 landing + auth → 3 dashboard shell + Overview → 4 other
-tabs → 5 skill audits + DESIGN_SYSTEM.md v4.
+**Stage 2 (landing + auth):** landing rebuilt as a ledger page — serif
+headline "Every yuan, accounted for.", a sample statement whose categories
+get **stamped** row by row (solid = you, dashed outline = model guess; "Stamp
+again" replays), a sticky-scroll "Three steps, once a month" story
+(Upload → Teach → Read the month; sheets turn on the right, inline on
+phones), capabilities as ruled definition rows, a plain closing line.
+Lenis smooth scroll (`lenis@1.3.26`) on the landing only. Deleted
+`HeroChart`/`DemoStrip` (tilt card, floating chips, marquee, bento, step
+cards). Auth: brand panel = darker paper well with three stamped rows (no
+self-drawing line chart), form on the page (no glass card), underline
+mode tabs; PasswordInput now reuses Input's `FIELD_CLASSES`. Public pages
+lost their eyebrows; serif headings use medium weight repo-wide. `/` First
+Load JS 132 → 129 kB.
+
+**Next:** Stage 3 dashboard shell + Overview → 4 other tabs → 5 skill
+audits + DESIGN_SYSTEM.md v4.

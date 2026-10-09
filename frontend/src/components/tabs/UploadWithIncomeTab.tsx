@@ -61,7 +61,7 @@ export default function UploadWithIncomeTab() {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
               <Banknote className="h-[18px] w-[18px]" />
             </span>
-            <h3 className="font-display font-semibold text-ink">
+            <h3 className="font-display font-medium text-ink">
               Monthly income <span className="font-sans text-sm font-normal text-muted">(optional)</span>
             </h3>
           </div>

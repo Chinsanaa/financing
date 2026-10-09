@@ -2,9 +2,7 @@
 
 import { useId, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-
-const FIELD_CLASSES =
-  'w-full rounded-lg bg-surface-2 border border-edge/10 pl-3.5 pr-10 py-2.5 text-sm text-ink placeholder:text-muted outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/20';
+import { FIELD_CLASSES } from '@/components/ui/Input';
 
 export default function PasswordInput({
   label,
@@ -39,7 +37,7 @@ export default function PasswordInput({
           autoComplete={autoComplete}
           aria-invalid={!!error}
           aria-describedby={error ? errorId : undefined}
-          className={`${FIELD_CLASSES} ${error ? 'border-danger/60 focus:border-danger/60 focus:ring-danger/20' : ''}`}
+          className={`${FIELD_CLASSES} pr-10 ${error ? 'border-danger focus:border-danger focus:ring-danger' : ''}`}
         />
         <button
           type="button"

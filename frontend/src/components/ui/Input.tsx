@@ -2,7 +2,8 @@
 
 import { InputHTMLAttributes, SelectHTMLAttributes, ReactNode, useId } from 'react';
 
-const FIELD_CLASSES =
+/** Shared text-field look (also used by auth/PasswordInput). */
+export const FIELD_CLASSES =
   'w-full rounded-md bg-surface border border-edge/20 px-3 py-2.5 text-sm text-ink placeholder:text-muted/80 outline-none transition-colors hover:border-edge/35 focus:border-accent focus:ring-1 focus:ring-accent focus-visible:outline-none';
 
 export default function Input({
