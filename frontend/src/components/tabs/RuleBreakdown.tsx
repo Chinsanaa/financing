@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { Lightbulb, PiggyBank, Sparkles } from 'lucide-react';
+import { Lightbulb, PiggyBank } from 'lucide-react';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Card from '@/components/ui/Card';
 import EmptyState from '@/components/ui/EmptyState';
@@ -9,7 +9,6 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useApi } from '@/utils/useApi';
 import { chartFillColorForKey } from '@/utils/categoryColors';
 import { formatCurrencyWhole } from '@/utils/format';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 export interface BucketCategory {
   category: string;
@@ -51,24 +50,13 @@ const BUCKET_LABEL: Record<'needs' | 'wants' | 'savings', string> = {
 
 const ADVICE_TOLERANCE_PCT = 3;
 
-function ChartTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0];
-  return (
-    <div className="glass rounded-lg px-3 py-2 text-xs shadow-card">
-      <p className="font-medium">{p.name}</p>
-      <p className="tabular-nums text-muted">{formatCurrencyWhole(Number(p.value))}</p>
-    </div>
-  );
-}
-
 /** Fetches the 50/30/20 breakdown for a given month (empty string = current month). */
 export function useRuleData(month: string) {
   return useApi<RuleData>(month ? `/dashboard/rule-503020?month=${month}` : '/dashboard/rule-503020');
 }
 
 /**
- * Needs/Wants/Savings pie + per-bucket actual-vs-target breakdown, plus a
+ * Needs/Wants/Savings: one income-wide bar + per-bucket actual-vs-target bars, plus a
  * guidance box. Shared between the standalone 50/30/20 tab and the Budget
  * tab, which both show this for the same selected month.
  */
@@ -88,12 +76,6 @@ export default function RuleBreakdown({
   const hasIncome = !!data && data.income > 0;
   const hasAnySpend =
     !!buckets && (buckets.needs.spent > 0 || buckets.wants.spent > 0 || buckets.savings.spent > 0);
-
-  const pieData = buckets
-    ? (['needs', 'wants', 'savings'] as const)
-        .map((key) => ({ key, name: BUCKET_LABEL[key], value: buckets[key].spent }))
-        .filter((d) => d.value > 0)
-    : [];
 
   const pctOfIncome = (spent: number) => (hasIncome ? Math.round((spent / data!.income) * 100) : 0);
 
@@ -157,7 +139,7 @@ export default function RuleBreakdown({
         </Alert>
       )}
 
-      <Card className="p-6">
+      <Card variant="plain" className="pt-4">
         {header}
         {!hasAnySpend ? (
           <EmptyState
@@ -166,42 +148,33 @@ export default function RuleBreakdown({
             description="Categorize some transactions to see your Needs/Wants/Savings split."
           />
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,220px),1fr]">
-            <div className="relative flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={62}
-                    outerRadius={90}
-                    paddingAngle={2.5}
-                    cornerRadius={4}
-                    animationDuration={900}
-                    stroke="rgb(var(--surface))"
-                    strokeWidth={2}
-                  >
-                    {pieData.map((d) => (
-                      <Cell key={d.key} fill={BUCKET_COLOR[d.key]} />
+          <div className="space-y-8">
+            {hasIncome && (
+              // One bar = your income. Segments are what each bucket took;
+              // the ticks are where the rule puts the 50 / 80 boundaries.
+              <div>
+                <div className="relative">
+                  <div className="flex h-10 w-full gap-[2px] bg-edge/8" role="img" aria-label="Share of income by bucket">
+                    {(['needs', 'wants', 'savings'] as const).map((key) => (
+                      <span
+                        key={key}
+                        className="progress-fill h-full"
+                        style={{ width: `${Math.min(pctOfIncome(buckets![key].spent), 100)}%`, backgroundColor: BUCKET_COLOR[key] }}
+                      />
                     ))}
-                  </Pie>
-                  <Tooltip content={<ChartTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
-              {/* Center: share of income spent so far */}
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
-                  {hasIncome ? 'Of income' : 'Spent'}
-                </p>
-                <p className="font-display text-xl font-medium tabular-nums">
-                  {hasIncome
-                    ? `${pctOfIncome(buckets!.needs.spent + buckets!.wants.spent + buckets!.savings.spent)}%`
-                    : formatCurrencyWhole(buckets!.needs.spent + buckets!.wants.spent + buckets!.savings.spent)}
-                </p>
+                  </div>
+                  {[50, 80].map((t) => (
+                    <span key={t} aria-hidden="true" className="absolute -bottom-1.5 -top-1.5 w-px bg-ink" style={{ left: `${t}%` }} />
+                  ))}
+                </div>
+                <div className="relative mt-2 h-4 text-[11px] text-muted">
+                  <span className="absolute left-0">0</span>
+                  <span className="absolute -translate-x-1/2" style={{ left: '50%' }}>50% needs</span>
+                  <span className="absolute -translate-x-1/2" style={{ left: '80%' }}>+30% wants</span>
+                  <span className="absolute right-0">100% of income</span>
+                </div>
               </div>
-            </div>
-
+            )}
             <div className="space-y-6">
               {(['needs', 'wants', 'savings'] as const).map((key) => {
                 const b = buckets![key];
@@ -211,13 +184,14 @@ export default function RuleBreakdown({
                     <div className="mb-1 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
                           style={{ backgroundColor: BUCKET_COLOR[key] }}
+                          aria-hidden="true"
                         />
-                        <span className="text-sm font-semibold">{BUCKET_LABEL[key]}</span>
+                        <span className="text-sm font-medium">{BUCKET_LABEL[key]}</span>
                       </div>
-                      <p className="text-sm tabular-nums text-muted">
-                        {formatCurrencyWhole(b.spent)}
+                      <p className="text-[13px] text-muted">
+                        <span className="num text-[15px] text-ink">{formatCurrencyWhole(b.spent)}</span>
                         {hasIncome && ` · ${actualPct}%`}
                         {b.target_amount !== null && ` of ${formatCurrencyWhole(b.target_amount)} (${b.target_pct}%) target`}
                       </p>
@@ -239,15 +213,11 @@ export default function RuleBreakdown({
 
       {advice && (
         <div
-          className={`flex items-start gap-3 rounded-card border p-5 ${
-            advice.onTrack ? 'border-success/25 bg-success/10' : 'border-warn/25 bg-warn/10'
+          className={`flex items-start gap-3 rounded-md border p-5 ${
+            advice.onTrack ? 'border-success/25 bg-success/[0.06]' : 'border-warn/25 bg-warn/[0.06]'
           }`}
         >
-          {advice.onTrack ? (
-            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-          ) : (
-            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-warn" />
-          )}
+          {!advice.onTrack && <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-warn" aria-hidden="true" />}
           <div>
             <p className={`font-medium ${advice.onTrack ? 'text-success' : 'text-warn'}`}>
               {advice.onTrack ? 'On track' : 'Guidance'}

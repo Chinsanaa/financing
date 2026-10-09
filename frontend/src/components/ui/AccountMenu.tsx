@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { LogOut, Settings } from 'lucide-react';
 import { setTheme, useIsDark } from '@/utils/theme';
+import Segmented from './Segmented';
 
 /**
  * One account menu instead of a row of icon buttons: who you are, Settings,
@@ -66,31 +67,17 @@ export default function AccountMenu({ name, onSignOut }: { name: string; onSignO
             <div className="my-1.5 border-t border-edge/12" />
             <div className="flex items-center justify-between px-2.5 py-1.5">
               <span className="text-sm">Theme</span>
-              <div className="flex rounded-md border border-edge/15 p-0.5" role="radiogroup" aria-label="Theme">
-                {(['light', 'dark'] as const).map((t) => {
-                  const on = (t === 'dark') === dark;
-                  return (
-                    <button
-                      key={t}
-                      role="radio"
-                      aria-checked={on}
-                      onClick={() => setTheme(t)}
-                      className={`relative rounded-[4px] px-2.5 py-1 text-[13px] capitalize transition-colors ${
-                        on ? 'text-bg' : 'text-muted hover:text-ink'
-                      }`}
-                    >
-                      {on && (
-                        <m.span
-                          layoutId="theme-choice"
-                          className="absolute inset-0 rounded-[4px] bg-ink"
-                          transition={{ type: 'spring', bounce: 0, duration: 0.25 }}
-                        />
-                      )}
-                      <span className="relative">{t}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <Segmented
+                label="Theme"
+                layoutId="theme-choice"
+                size="sm"
+                value={dark ? 'dark' : 'light'}
+                onChange={setTheme}
+                options={[
+                  { value: 'light', label: 'Light' },
+                  { value: 'dark', label: 'Dark' },
+                ]}
+              />
             </div>
             <div className="my-1.5 border-t border-edge/12" />
             <button role="menuitem" className={`${item} hover:text-danger`} onClick={onSignOut}>

@@ -53,10 +53,6 @@ module.exports = {
           from: { opacity: '0', transform: 'translateY(6px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
-        'glow-pulse': {
-          '0%, 100%': { opacity: '0.6' },
-          '50%': { opacity: '1' },
-        },
         marquee: {
           from: { transform: 'translateX(0)' },
           to: { transform: 'translateX(-50%)' },
@@ -64,7 +60,6 @@ module.exports = {
       },
       animation: {
         'fade-up': 'fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards',
-        'glow-pulse': 'glow-pulse 3s ease-in-out infinite',
         marquee: 'marquee 30s linear infinite',
       },
     },

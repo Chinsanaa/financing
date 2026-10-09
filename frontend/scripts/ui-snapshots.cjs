@@ -50,7 +50,7 @@ const tx = (i) => {
     description: `${merchant} order`, amount: +(amount * (1 + (i % 5) / 10)).toFixed(2),
     category, category_id: (CATS.find((c) => c[1] === category) || CATS[11])[0],
     confidence: 0.42 + ((i * 7) % 50) / 100, suggested_category: category,
-    is_split: false, splits: null, label_source: i % 3 ? 'model' : 'user',
+    is_split: false, splits: null, label_source: i % 3 ? 'model' : 'override',
     bucket: ['Food', 'Transport', 'Groceries', 'Housing'].includes(category) ? 'Need' : 'Want',
   };
 };
@@ -78,7 +78,7 @@ const MOCKS = {
   '/dashboard/action': { actions: [
     { type: 'over_budget', category: 'Food', current: 4210, limit: 4000, overage: 210, pct: 105 },
     { type: 'approaching_budget', category: 'Shopping', current: 1620, limit: 1800, pct: 90 },
-    { type: 'pending_review', count: 23 } ] },
+    { type: 'pending_review', count: 23, message: '23 transactions are waiting for your review.' } ] },
   '/dashboard/insights': { category_trends: [
     { category: 'Food', current: 4210, avg_3mo: 3620, pct_change: 16.3 }, { category: 'Transport', current: 1980, avg_3mo: 2240, pct_change: -11.6 },
     { category: 'Shopping', current: 1620, avg_3mo: 1490, pct_change: 8.7 } ],
@@ -88,7 +88,7 @@ const MOCKS = {
     { id: 's2', merchant: 'Bilibili Premium', cadence: 'monthly', typical_amount: 25, last_seen: '2026-09-11', is_confirmed: true, categories: { name: 'Entertainment' } },
     { id: 's3', merchant: 'NetEase Cloud Music', cadence: 'monthly', typical_amount: 15, last_seen: '2026-09-19', is_confirmed: false, categories: { name: 'Entertainment' } },
     { id: 's4', merchant: 'Keep Fitness', cadence: 'monthly', typical_amount: 82, last_seen: '2026-09-21', is_confirmed: false, categories: { name: 'Personal Care & Health' } } ] },
-  '/transactions': { transactions: Array.from({ length: 25 }, (_, i) => tx(i)), total_count: 1284, page: 1, per_page: 25 },
+  '/dashboard/reports': { transactions: Array.from({ length: 20 }, (_, i) => tx(i)), total_count: 1284, page: 1, per_page: 20 },
   '/training': { training_runs: [
     { id: 'r2', status: 'succeeded', cv_accuracy: 0.874, f1_macro: 0.81, n_labeled_samples: 1093, created_at: '2026-09-27T20:55:00Z', finished_at: '2026-09-27T21:00:00Z' },
     { id: 'r1', status: 'succeeded', cv_accuracy: 0.836, f1_macro: 0.77, n_labeled_samples: 640, created_at: '2026-08-30T10:00:00Z', finished_at: '2026-08-30T10:04:00Z' } ] },
@@ -100,8 +100,8 @@ const MOCKS = {
     { id: 'u1', original_filename: 'alipay_record_202609.csv', file_type: 'alipay', created_at: '2026-09-28T10:00:00Z', row_count: 214, status: 'processed' },
     { id: 'u2', original_filename: 'wechat_bill_202609.xlsx', file_type: 'wechat', created_at: '2026-09-28T10:01:00Z', row_count: 97, status: 'processed' } ] },
   '/dashboard/savings': { savings_goal_monthly: 4000, income: 18000, current_spend: 12480, projected_savings: 5520, average_monthly_spend: 11780, is_anomaly: false },
-  '/settings/profile': { id: 'u', username: 'chinsanaa', email_verified_at: '2026-07-01T00:00:00Z', onboarding_phase: 'done', created_at: '2026-07-01T00:00:00Z',
-    alert_email_enabled: true, alert_threshold_pct: 90, budget_inapp_enabled: true, pending_review_inapp_enabled: true, monthly_overview_email_enabled: false, monthly_income: 18000 },
+  '/settings/profile': { profile: { id: 'u', username: 'chinsanaa', email_verified_at: '2026-07-01T00:00:00Z', onboarding_phase: 'done', created_at: '2026-07-01T00:00:00Z',
+    alert_email_enabled: true, alert_threshold_pct: 90, budget_inapp_enabled: true, pending_review_inapp_enabled: true, monthly_overview_email_enabled: false, monthly_income: 18000 } },
 };
 
 function mockFor(url) {

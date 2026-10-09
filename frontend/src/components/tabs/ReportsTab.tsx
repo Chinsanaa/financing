@@ -310,7 +310,6 @@ export default function ReportsTab() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        label="Reports"
         title="All transactions"
         description="Search, filter, re-categorize, split and export everything you've imported."
         action={
@@ -318,6 +317,7 @@ export default function ReportsTab() {
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
+                variant="outline"
                 onClick={handleExportXlsx}
                 loading={exporting}
                 disabled={exporting || reports.transactions.length === 0}
@@ -523,7 +523,7 @@ export default function ReportsTab() {
         ) : (
           <div className="overflow-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10 border-b border-edge/8 bg-surface-2">
+              <thead className="sticky top-0 z-10 border-b border-edge/15 bg-surface">
                 <tr>
                   <th className="w-10 px-4 py-3">
                     <input
@@ -547,7 +547,7 @@ export default function ReportsTab() {
                 {reports.transactions.map((txn) => (
                   <tr
                     key={txn.id}
-                    className={`transition-colors hover:bg-edge/5 ${selectedIds.has(txn.id) ? 'bg-accent/[0.06]' : ''}`}
+                    className={`transition-colors hover:bg-edge/5 ${selectedIds.has(txn.id) ? 'bg-edge/[0.06]' : ''}`}
                   >
                     <td className="px-4 py-3">
                       <input
@@ -584,7 +584,7 @@ export default function ReportsTab() {
                           defaultValue={txn.category_id ?? ''}
                           onChange={(e) => handleCategoryChange(txn, e.target.value)}
                           onBlur={() => setEditingId(null)}
-                          className="rounded-pill border border-edge/20 bg-surface px-3 py-1 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
+                          className="rounded-md border border-edge/20 bg-surface px-2.5 py-1 text-sm text-ink focus:border-accent focus:outline-none"
                         >
                           <option value="" disabled>
                             Choose category…
@@ -608,7 +608,7 @@ export default function ReportsTab() {
                             className="group inline-flex items-center gap-1 disabled:opacity-60"
                           >
                             {txn.category === 'Uncategorized' ? (
-                              <span className="rounded-pill border border-dashed border-edge/40 px-2 py-0.5 text-xs text-muted group-hover:border-accent-strong/50">
+                              <span className="rounded-[4px] border border-dashed border-edge/40 px-1.5 py-0.5 text-xs text-muted group-hover:border-ink/50">
                                 Uncategorized
                               </span>
                             ) : (
@@ -635,7 +635,7 @@ export default function ReportsTab() {
                     <td className="px-4 py-3">
                       {txn.bucket && <Badge tone={BUCKET_TONE[txn.bucket]}>{txn.bucket}</Badge>}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums">
+                    <td className="num px-4 py-3 text-right text-[15px]">
                       {formatCurrencyWhole(txn.amount)}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -672,8 +672,9 @@ export default function ReportsTab() {
           {pageNumbers.map((n) => (
             <Button
               key={n}
-              variant={n === page ? 'primary' : 'outline'}
+              variant={n === page ? 'outline' : 'ghost'}
               size="sm"
+              className={`num min-w-8 ${n === page ? 'border-ink' : ''}`}
               onClick={() => setPage(n)}
               aria-current={n === page ? 'page' : undefined}
             >

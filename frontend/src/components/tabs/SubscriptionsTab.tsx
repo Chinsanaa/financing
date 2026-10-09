@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { CalendarClock, Check, Repeat, X } from 'lucide-react';
+import { Check, Repeat, X } from 'lucide-react';
 import { toast } from 'sonner';
 import RollingNumber from '@/components/ui/RollingNumber';
 import { useCategoryColors } from '@/utils/useCategoryColors';
@@ -10,7 +10,7 @@ import { useApi, invalidate } from '@/utils/useApi';
 import { api } from '@/utils/api';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
-import Card, { SectionHeader } from '@/components/ui/Card';
+import { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
@@ -42,7 +42,7 @@ export default function SubscriptionsTab() {
   const [actionError, setActionError] = useState('');
 
   const subscriptions = data?.subscriptions || [];
-  const { chartColorFor } = useCategoryColors();
+  const { toneFor } = useCategoryColors();
 
   const handleConfirm = async (id: string) => {
     setActioningId(id);
@@ -83,19 +83,18 @@ export default function SubscriptionsTab() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        label="Planning"
         title="Subscriptions"
         description="Merchants that charge you on a regular schedule, detected automatically."
         action={
           data && subscriptions.length > 0 ? (
-            <Card className="px-5 py-3 text-right">
-              <p className="font-display text-2xl font-medium">
+            <div className="text-right">
+              <p className="num text-4xl leading-none">
                 <RollingNumber value={data.monthly_total} currency />
               </p>
-              <p className="text-xs text-muted">
+              <p className="mt-1.5 text-xs text-muted">
                 est. per month · ≈ {formatCurrencyWhole(data.monthly_total * 12)} a year
               </p>
-            </Card>
+            </div>
           ) : undefined
         }
       />
@@ -110,74 +109,54 @@ export default function SubscriptionsTab() {
           description="Once you have a few months of transactions, merchants that charge you on a regular schedule (subscriptions, memberships) will show up here automatically."
         />
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <ul className="border-t border-ink/80">
           <AnimatePresence initial={false}>
-          {subscriptions.map((sub) => {
-            const tint = sub.categories?.name ? chartColorFor(sub.categories.name) : 'rgb(var(--muted))';
-            return (
-            <m.div
-              key={sub.id}
-              layout
-              exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
-            >
-            <Card hover className="h-full p-4">
-              <div className="flex items-start gap-3">
-                {/* Monogram tinted with the category color */}
-                <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-base font-medium"
-                  style={{ color: tint, backgroundColor: `color-mix(in srgb, ${tint} 15%, transparent)` }}
-                  aria-hidden="true"
-                >
-                  {sub.merchant.trim().charAt(0).toUpperCase() || '?'}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-semibold">{sub.merchant}</p>
-                    {sub.is_confirmed && <Badge tone="success"><Check className="mr-1 h-3 w-3" />Confirmed</Badge>}
-                  </div>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-                    <Repeat className="h-3 w-3" />
-                    {CADENCE_LABEL[sub.cadence] || sub.cadence}
-                    {sub.categories?.name ? ` · ${sub.categories.name}` : ''}
+            {subscriptions.map((sub) => (
+              <m.li
+                key={sub.id}
+                layout
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-edge/12 py-4"
+              >
+                <div className="min-w-0 flex-1 basis-60">
+                  <p className="truncate font-display text-xl">{sub.merchant}</p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px] text-muted">
+                    <span>{CADENCE_LABEL[sub.cadence] || sub.cadence}</span>
+                    {sub.categories?.name && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <Badge tone={toneFor(sub.categories.name)}>{sub.categories.name}</Badge>
+                      </>
+                    )}
                     {sub.last_seen && (
                       <>
                         <span aria-hidden="true">·</span>
-                        <CalendarClock className="h-3 w-3" /> last {formatDate(sub.last_seen)}
+                        <span>last charged {formatDate(sub.last_seen)}</span>
                       </>
                     )}
                   </p>
                 </div>
-                <p className="font-display text-lg font-medium tabular-nums">
-                  {formatCurrencyWhole(sub.typical_amount)}
-                </p>
-              </div>
-
-              {!sub.is_confirmed && (
-                <div className="mt-3 flex gap-2 pl-[52px]">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={actioningId === sub.id}
-                    onClick={() => handleConfirm(sub.id)}
-                  >
-                    <Check className="h-3 w-3" /> Looks right
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={actioningId === sub.id}
-                    onClick={() => handleDismiss(sub.id)}
-                  >
-                    <X className="h-3 w-3" /> Not recurring
-                  </Button>
+                <div className="flex items-center gap-2">
+                  {sub.is_confirmed ? (
+                    <span className="inline-flex items-center gap-1 text-[13px] text-success">
+                      <Check className="h-3.5 w-3.5" aria-hidden="true" /> Confirmed
+                    </span>
+                  ) : (
+                    <>
+                      <Button variant="outline" size="sm" disabled={actioningId === sub.id} onClick={() => handleConfirm(sub.id)}>
+                        <Check className="h-3 w-3" /> Looks right
+                      </Button>
+                      <Button variant="ghost" size="sm" disabled={actioningId === sub.id} onClick={() => handleDismiss(sub.id)}>
+                        <X className="h-3 w-3" /> Not recurring
+                      </Button>
+                    </>
+                  )}
                 </div>
-              )}
-            </Card>
-            </m.div>
-            );
-          })}
+                <p className="num w-24 text-right text-xl">{formatCurrencyWhole(sub.typical_amount)}</p>
+              </m.li>
+            ))}
           </AnimatePresence>
-        </div>
+        </ul>
       )}
     </div>
   );

@@ -4760,4 +4760,30 @@ dropped; top 5 + "Everything else"), hover-synced. Month names pinned to
 `en-US` (closes the Session 69 open item: a Chinese-locale browser showed
 Chinese month names). Dashboard skeleton mirrors the new layout.
 
-**Next:** Stage 4 other tabs → 5 skill audits + DESIGN_SYSTEM.md v4.
+**Stage 4 (every other tab):** wizard shell = one ruled 5-step strip
+(no icon tile / step pill / duplicate title / blur slide; no dead "Next" on
+the last step). Upload: plain drop zone, uploads table on rules, status
+"processed" no longer vermilion (red read as an error). Categories: ruled
+list (banned 4px colored rails + glow removed). Review: suggestions use the
+outlined *guess* badge; new `Segmented` control (also in AccountMenu)
+replaced a toggle that used `bg-surface-3` — a token that never existed
+(silent no-CSS bug). **Label:** raised paper slip; **drag right to accept,
+left to set aside** with Apple-style momentum projection (velocity ×
+0.099); each slip owns its motion value; a solid **Stamp** lands before the
+slip flies off; "N set aside · bring them back" (cutting-bench raise).
+Training: words + a ruled working line instead of pulsing brain/rings;
+history is a table; success **stamps** the run ("Trained") — confetti +
+`canvas-confetti` removed. Budget: "Close" → "Near limit", ledger figures.
+50/30/20: donut → one income-wide bar with 50/80 ticks (recharts dropped
+from that chunk). Savings: ring → goal bar with a goal tick; comparison
+card folded into the fact row; `ProgressRing` deleted. Subscriptions,
+Insights, Action plan: ruled lists/tables (monogram + icon tiles, colored
+rails removed; status word leads each row). Reports: ink pagination,
+export as outline, ledger figures. Tour, spotlight, split modal, upload
+queue, settings restyled. Dead CSS removed (ping/float/glow-pulse).
+Harness fixes: Reports crashed in screenshots because the mock lacked
+`/dashboard/reports` (not an app bug); `/settings/profile` mock now wraps
+`{profile}`. THE RULE grep: only comments. 76 shots, 0 page errors.
+
+**Next:** Stage 5 skill audits (impeccable detector/critique,
+review-animations, web-design-guidelines) + DESIGN_SYSTEM.md v4.

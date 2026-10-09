@@ -58,7 +58,7 @@ export default function TourSpotlight({ targetId }: { targetId: string }) {
   return (
     <div className="pointer-events-none fixed inset-0 z-[60]" aria-hidden="true">
       <div
-        className="absolute rounded-xl border-2 border-accent transition-all duration-200 ease-out"
+        className="absolute rounded-md border-2 border-accent transition-all duration-200 ease-out"
         style={{
           top: rect.top - PADDING,
           left: rect.left - PADDING,

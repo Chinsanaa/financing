@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Banknote } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/utils/api';
 import Button from '@/components/ui/Button';
+import { FIELD_CLASSES } from '@/components/ui/Input';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import { Alert } from '@/components/ui-feedback';
 import UploadTab from './UploadTab';
@@ -57,14 +57,9 @@ export default function UploadWithIncomeTab() {
     <UploadTab
       aside={
         <Card className="p-6">
-          <div className="mb-3 flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
-              <Banknote className="h-[18px] w-[18px]" />
-            </span>
-            <h3 className="font-display font-medium text-ink">
-              Monthly income <span className="font-sans text-sm font-normal text-muted">(optional)</span>
-            </h3>
-          </div>
+          <h3 className="mb-2 font-display text-xl font-normal text-ink">
+            Monthly income <span className="font-sans text-sm text-muted">(optional)</span>
+          </h3>
           <p className="mb-4 text-sm text-muted">
             Enter your monthly income to enable budget tracking and savings calculations.
           </p>
@@ -72,14 +67,14 @@ export default function UploadWithIncomeTab() {
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium text-ink mb-2">
-                Income Amount ({CURRENCY_SYMBOL})
+                Income amount ({CURRENCY_SYMBOL})
               </label>
               <input
                 type="number"
                 value={income}
                 onChange={(e) => setIncome(e.target.value)}
                 placeholder="e.g., 15000"
-                className="w-full rounded-pill border border-edge/15 bg-surface-2 px-4 py-2 text-ink placeholder-muted transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20"
+                className={FIELD_CLASSES}
               />
             </div>
             <Button

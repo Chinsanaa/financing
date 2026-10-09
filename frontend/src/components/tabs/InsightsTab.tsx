@@ -1,9 +1,11 @@
 'use client';
 
-import { Sparkles, TrendingDown, TrendingUp, TriangleAlert } from 'lucide-react';
+import { LineChart, TriangleAlert } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
 import { Alert } from '@/components/ui-feedback';
-import Card, { SectionHeader } from '@/components/ui/Card';
+import { SectionHeader } from '@/components/ui/Card';
+import Badge from '@/components/ui/Badge';
+import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole, formatDate } from '@/utils/format';
@@ -32,6 +34,7 @@ export default function InsightsTab() {
   const { data, loading, error } = useApi<InsightsData>('/dashboard/insights');
   const trends = data?.category_trends || [];
   const flagged = data?.flagged_transactions || [];
+  const { toneFor } = useCategoryColors();
 
   if (loading) {
     return (
@@ -44,80 +47,67 @@ export default function InsightsTab() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        label="Planning"
         title="Insights"
         description="What changed this month compared with your usual, and anything that stands out."
       />
 
       {error && <Alert kind="error">{error}</Alert>}
 
-      <div>
-        <p className="section-label mb-3">Spending trends vs. 3-month average</p>
+      <section className="border-t border-ink/80 pt-4">
+        <h3 className="mb-4 font-display text-2xl">This month vs your 3-month average</h3>
         {trends.length === 0 ? (
           <EmptyState
-            icon={Sparkles}
+            icon={LineChart}
             title="Not enough history yet"
-            description="Once you have a few months of categorized transactions, we'll show you which categories are trending up or down."
+            description="Once you have a few months of categorized transactions, categories trending up or down show up here."
           />
         ) : (
-          <div className="grid gap-3 xl:grid-cols-2">
-            {trends.map((trend) => {
-              const up = trend.pct_change > 0;
-              const tone = up ? 'text-warn' : 'text-success';
-              const borderTone = up ? 'border-warn/25' : 'border-success/25';
-              const max = Math.max(trend.current, trend.avg_3mo, 1);
-              return (
-                <Card key={trend.category} hover className={`${borderTone} p-4`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${up ? 'bg-warn/10' : 'bg-success/10'}`}>
-                        {up ? (
-                          <TrendingUp className={`h-4 w-4 ${tone}`} />
-                        ) : (
-                          <TrendingDown className={`h-4 w-4 ${tone}`} />
-                        )}
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold">{trend.category}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {up ? 'Spending more than usual' : 'Spending less than usual'}
-                        </p>
-                      </div>
-                    </div>
-                    <p className={`font-display text-xl font-medium tabular-nums ${tone}`}>
-                      {up ? '+' : ''}
-                      {trend.pct_change}%
-                    </p>
-                  </div>
-                  {/* This month vs 3-month average, on a shared scale */}
-                  <div className="mt-4 space-y-2 text-xs">
-                    <div className="flex items-center gap-3">
-                      <span className="w-20 shrink-0 text-muted">This month</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-edge/8">
-                        <div
-                          className={`progress-fill h-full rounded-full ${up ? 'bg-warn' : 'bg-success'}`}
-                          style={{ width: `${(trend.current / max) * 100}%` }}
-                        />
-                      </div>
-                      <span className="w-16 shrink-0 text-right font-medium tabular-nums">{formatCurrencyWhole(trend.current)}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="w-20 shrink-0 text-muted">3-mo avg</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-edge/8">
-                        <div className="progress-fill h-full rounded-full bg-muted/50" style={{ width: `${(trend.avg_3mo / max) * 100}%` }} />
-                      </div>
-                      <span className="w-16 shrink-0 text-right tabular-nums text-muted">{formatCurrencyWhole(trend.avg_3mo)}</span>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-edge/15 text-left text-[12px] text-muted">
+                <tr>
+                  <th className="py-2 pr-4 font-normal">Category</th>
+                  <th className="hidden py-2 pr-4 font-normal sm:table-cell">
+                    <span className="mr-3 inline-flex items-center gap-1.5"><span className="h-2 w-3 bg-ink" aria-hidden="true" />this month</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-3 bg-ink/25" aria-hidden="true" />3-month avg</span>
+                  </th>
+                  <th className="py-2 pr-4 text-right font-normal">This month</th>
+                  <th className="py-2 pr-4 text-right font-normal">Average</th>
+                  <th className="py-2 text-right font-normal">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trends.map((trend) => {
+                  const up = trend.pct_change > 0;
+                  const max = Math.max(...trends.map((t) => Math.max(t.current, t.avg_3mo)), 1);
+                  return (
+                    <tr key={trend.category} className="border-b border-edge/10">
+                      <td className="py-3 pr-4">
+                        <Badge tone={toneFor(trend.category)}>{trend.category}</Badge>
+                      </td>
+                      <td className="hidden w-[40%] py-3 pr-4 sm:table-cell">
+                        <div className="space-y-1">
+                          <div className="progress-fill h-2 bg-ink" style={{ width: `${(trend.current / max) * 100}%` }} />
+                          <div className="progress-fill h-2 bg-ink/25" style={{ width: `${(trend.avg_3mo / max) * 100}%` }} />
+                        </div>
+                      </td>
+                      <td className="num py-3 pr-4 text-right text-[15px]">{formatCurrencyWhole(trend.current)}</td>
+                      <td className="num py-3 pr-4 text-right text-[15px] text-muted">{formatCurrencyWhole(trend.avg_3mo)}</td>
+                      <td className={`num py-3 text-right text-[15px] ${up ? 'text-warn' : 'text-success'}`}>
+                        {up ? '▲' : '▼'} {Math.abs(trend.pct_change)}%
+                        <span className="sr-only">{up ? ' more than usual' : ' less than usual'}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </section>
 
-      <div>
-        <p className="section-label mb-3">Unusually large transactions</p>
+      <section className="border-t border-ink/80 pt-4">
+        <h3 className="mb-4 font-display text-2xl">Unusually large for their category</h3>
         {flagged.length === 0 ? (
           <EmptyState
             icon={TriangleAlert}
@@ -125,28 +115,21 @@ export default function InsightsTab() {
             description="No transactions in the last 3 months stand out as unusually large for their category."
           />
         ) : (
-          <Card className="stagger-in divide-y divide-edge/8 overflow-hidden">
+          <ul>
             {flagged.map((txn) => (
-              <div key={txn.id} className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-edge/[0.03]">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger">
-                    <TriangleAlert className="h-4 w-4" />
-                  </span>
-                  <div>
-                  <p className="text-sm font-medium">{txn.merchant}</p>
-                  <p className="mt-0.5 text-xs text-muted">
+              <li key={txn.id} className="flex items-baseline justify-between gap-4 border-b border-edge/10 py-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{txn.merchant}</p>
+                  <p className="mt-0.5 text-[13px] text-muted">
                     {txn.category} · {formatDate(txn.timestamp)}
                   </p>
-                  </div>
                 </div>
-                <p className="font-display text-sm font-medium tabular-nums">
-                  {formatCurrencyWhole(txn.amount)}
-                </p>
-              </div>
+                <p className="num text-xl">{formatCurrencyWhole(txn.amount)}</p>
+              </li>
             ))}
-          </Card>
+          </ul>
         )}
-      </div>
+      </section>
     </div>
   );
 }

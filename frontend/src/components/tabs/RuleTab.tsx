@@ -39,7 +39,6 @@ export default function RuleTab() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        label="Planning"
         title="50/30/20 rule"
         description="A simple guideline: about 50% of income on needs, 30% on wants, 20% saved or invested. Ticks on each bar mark the target."
       />

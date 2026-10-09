@@ -70,7 +70,7 @@ export default function SplitModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <Card className="w-full max-w-md space-y-4 p-5">
+      <Card variant="raised" className="w-full max-w-md space-y-4 p-6">
         <h3 className="text-sm font-semibold">Split transaction</h3>
 
         <div className="space-y-2">
@@ -97,7 +97,7 @@ export default function SplitModal({
                 value={line.amount}
                 onChange={(e) => setLine(idx, { amount: e.target.value })}
                 placeholder="Amount"
-                className="w-[110px] rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
+                className="num w-[110px] rounded-md border border-edge/20 bg-surface px-3 py-1.5 text-[15px] text-ink focus:border-accent focus:outline-none"
               />
               {lines.length > 2 && (
                 <Button variant="ghost" size="sm" onClick={() => removeLine(idx)}>

@@ -132,7 +132,6 @@ export default function BudgetTab() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        label="Planning"
         title="Budget and forecast"
         description="Monthly limits per category, and how this month is tracking against them."
         action={
@@ -160,11 +159,11 @@ export default function BudgetTab() {
         </div>
       )}
 
-      <Card className="p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="section-label">
-            Budget by category — {selectedMonth ? formatMonthLong(selectedMonth) : 'this month'}
-          </p>
+      <Card variant="plain" className="border-ink/80 pt-4">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-display text-2xl">
+            By category <span className="text-muted">· {selectedMonth ? formatMonthLong(selectedMonth) : 'this month'}</span>
+          </h3>
           <div className="flex flex-wrap items-center gap-2">
             {!editing && categories.length > 0 && (
               <Button variant="outline" size="sm" onClick={startEditing}>
@@ -260,10 +259,10 @@ export default function BudgetTab() {
                       <Badge tone={toneFor(cat.category)}>{cat.category}</Badge>
                       {isOverBudget && <Badge tone="danger">Over</Badge>}
                       {isApproaching && (
-                        <Badge tone="bg-warn/15 text-warn">Close</Badge>
+                        <Badge tone="warn">Near limit</Badge>
                       )}
                     </span>
-                    <p className={`text-sm font-semibold tabular-nums ${statusTextColor}`}>
+                    <p className={`num text-[15px] ${statusTextColor}`}>
                       {formatCurrencyWhole(cat.current_spend)} / {formatCurrencyWhole(cat.monthly_budget)}
                     </p>
                   </div>
@@ -282,9 +281,9 @@ export default function BudgetTab() {
 
       {!editing && (
         <div>
-          <p className="section-label mb-4">
-            50/30/20 breakdown — {selectedMonth ? formatMonthLong(selectedMonth) : 'this month'}
-          </p>
+          <h3 className="mb-4 border-t border-ink/80 pt-4 font-display text-2xl">
+            50/30/20 <span className="text-muted">· {selectedMonth ? formatMonthLong(selectedMonth) : 'this month'}</span>
+          </h3>
           <RuleBreakdown data={ruleQ.data} loading={ruleQ.loading} error={ruleQ.error} />
         </div>
       )}

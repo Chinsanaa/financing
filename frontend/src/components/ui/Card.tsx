@@ -1,7 +1,6 @@
 'use client';
 
 import { HTMLAttributes, ReactNode } from 'react';
-import { LucideIcon } from 'lucide-react';
 
 /**
  * Ledger surfaces. Cards are the exception, not the page structure: most
@@ -44,18 +43,15 @@ export default function Card({
 /**
  * Section heading: a serif title that carries its own weight, an optional
  * one-line description and a right-aligned action. No eyebrow, no dot, no
- * icon chip (impeccable craft floor). `label` and `icon` are accepted for
- * old call sites and intentionally not rendered.
+ * icon chip (impeccable craft floor).
  */
 export function SectionHeader({
   title,
   description,
   action,
 }: {
-  label?: string;
   title: string;
   description?: ReactNode;
-  icon?: LucideIcon;
   action?: ReactNode;
 }) {
   return (

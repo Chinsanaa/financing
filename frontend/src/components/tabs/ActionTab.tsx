@@ -1,10 +1,10 @@
 'use client';
 
-import { ArrowRight, CheckCircle2, ClipboardList, TriangleAlert } from 'lucide-react';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useApi } from '@/utils/useApi';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
-import Card, { SectionHeader } from '@/components/ui/Card';
+import { SectionHeader } from '@/components/ui/Card';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole } from '@/utils/format';
 
@@ -41,7 +41,6 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
   return (
     <div className="space-y-6">
       <SectionHeader
-        label="Planning"
         title="Action plan"
         description={actions.length > 0 ? `${actions.length} thing${actions.length === 1 ? '' : 's'} worth a look, most urgent first.` : 'Your to-do list for healthier spending.'}
       />
@@ -49,111 +48,75 @@ export default function ActionTab({ onNavigate }: { onNavigate?: (tab: string) =
       {error && <Alert kind="error">{error}</Alert>}
 
       {actions.length === 0 ? (
-        <div className="relative flex items-center gap-4 overflow-hidden rounded-card border border-success/25 bg-success/10 p-6">
-          <span className="relative flex h-12 w-12 shrink-0 items-center justify-center">
-            <span className="absolute inset-0 rounded-full bg-success/25 animate-ping-soft" />
-            <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-success text-bg">
-              <CheckCircle2 className="h-6 w-6" />
-            </span>
-          </span>
-          <div className="relative">
-            <p className="font-display text-lg font-medium text-success">All clear</p>
-            <p className="mt-0.5 text-sm text-muted">
-              No over-budget categories or pending items. Nice work.
-            </p>
+        <div className="flex items-center gap-3 border-y border-success/30 py-5">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+          <div>
+            <p className="font-display text-2xl text-success">All clear</p>
+            <p className="mt-0.5 text-sm text-muted">No over-budget categories or pending items.</p>
           </div>
         </div>
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
+        // A to-do list, most urgent first. The status word leads each row,
+        // so color is never the only signal.
+        <ol className="border-t border-ink/80">
           {actions.map((action, idx) => {
+            const row = 'grid grid-cols-[6.5rem,1fr,auto] items-baseline gap-x-4 border-b border-edge/12 py-4';
             if (action.type === 'over_budget') {
               return (
-                <Card key={idx} hover className="relative overflow-hidden border-danger/25 p-4 pl-5">
-                  <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-danger" />
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
-                      <div>
-                        <p className="text-sm font-semibold">Over budget: {action.category}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          Spent {formatCurrencyWhole(action.current || 0)} of {formatCurrencyWhole(action.limit || 0)} budget
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-display text-lg font-medium text-danger tabular-nums">
-                        {formatCurrencyWhole(action.overage || 0)}
-                      </p>
-                      <p className="text-xs text-danger">over</p>
-                    </div>
+                <li key={idx} className={row}>
+                  <span className="text-[13px] font-medium text-danger">Over budget</span>
+                  <div>
+                    <p className="font-medium">{action.category}</p>
+                    <p className="mt-0.5 text-[13px] text-muted">
+                      Spent {formatCurrencyWhole(action.current || 0)} of a {formatCurrencyWhole(action.limit || 0)} budget
+                    </p>
                   </div>
-                </Card>
+                  <p className="num text-xl text-danger">
+                    {formatCurrencyWhole(action.overage || 0)} <span className="text-[13px]">over</span>
+                  </p>
+                </li>
               );
             } else if (action.type === 'approaching_budget') {
               return (
-                <Card key={idx} hover className="relative overflow-hidden border-warn/25 p-4 pl-5">
-                  <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-warn" />
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-                      <div>
-                        <p className="text-sm font-semibold">Approaching budget: {action.category}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          Spent {formatCurrencyWhole(action.current || 0)} of {formatCurrencyWhole(action.limit || 0)} budget
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-display text-lg font-medium text-warn tabular-nums">
-                        {action.pct}%
-                      </p>
-                      <p className="text-xs text-warn">used</p>
-                    </div>
+                <li key={idx} className={row}>
+                  <span className="text-[13px] font-medium text-warn">Near limit</span>
+                  <div>
+                    <p className="font-medium">{action.category}</p>
+                    <p className="mt-0.5 text-[13px] text-muted">
+                      Spent {formatCurrencyWhole(action.current || 0)} of a {formatCurrencyWhole(action.limit || 0)} budget
+                    </p>
                   </div>
-                </Card>
+                  <p className="num text-xl text-warn">
+                    {action.pct}% <span className="text-[13px]">used</span>
+                  </p>
+                </li>
               );
             } else if (action.type === 'pending_review') {
               return (
-                <Card key={idx} hover className="relative overflow-hidden p-4 pl-5">
-                  <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-accent" />
-                  <div className="flex items-start gap-2.5">
-                    <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" />
-                    <div>
-                      <p className="text-sm font-semibold">Pending review</p>
-                      <p className="mt-0.5 text-xs text-muted">{action.message}</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-3"
-                        onClick={() => onNavigate?.('review')}
-                      >
-                        Review transactions <ArrowRight className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
+                <li key={idx} className={row}>
+                  <span className="text-[13px] font-medium">To review</span>
+                  <p className="text-sm text-muted">{action.message}</p>
+                  <Button variant="outline" size="sm" onClick={() => onNavigate?.('review')}>
+                    Review <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </li>
               );
             }
             return null;
           })}
-        </div>
+        </ol>
       )}
 
-      <div>
-        <p className="section-label mb-3">Tips to improve your finances</p>
-        <ul className="stagger-in grid gap-3 sm:grid-cols-2">
-          {TIPS.map((tip, i) => (
-            <li key={i}>
-              <Card hover className="flex h-full gap-3 p-4 text-sm">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/12 font-display text-sm font-medium text-accent-strong">
-                  {i + 1}
-                </span>
-                <span className="text-muted">{tip}</span>
-              </Card>
+      <section className="pt-4">
+        <h3 className="mb-3 font-display text-2xl">Habits that help</h3>
+        <ul className="max-w-3xl border-t border-edge/15">
+          {TIPS.map((tip) => (
+            <li key={tip} className="border-b border-edge/10 py-3 text-sm text-muted">
+              {tip}
             </li>
           ))}
         </ul>
-      </div>
+      </section>
     </div>
   );
 }
