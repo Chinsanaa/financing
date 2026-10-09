@@ -4744,5 +4744,20 @@ mode tabs; PasswordInput now reuses Input's `FIELD_CLASSES`. Public pages
 lost their eyebrows; serif headings use medium weight repo-wide. `/` First
 Load JS 132 → 129 kB.
 
-**Next:** Stage 3 dashboard shell + Overview → 4 other tabs → 5 skill
-audits + DESIGN_SYSTEM.md v4.
+**Stage 3 (shell + Overview):** one-row header (wordmark · text nav with a
+vermilion rule · quiet ⌘K field · bell · new `AccountMenu` with Settings,
+Light/Dark choice and Sign out) — replaces 5 bordered icon buttons +
+sun/moon `ThemeToggle` (deleted; `utils/theme.ts` gains `setTheme`). Phones
+get the nav as a second row; `TourSpotlight` now targets the *visible*
+copy of a duplicated `data-tour-id`. Bell dropdown grows from the bell
+(critically damped). Overview: big serif month figure + ▲/▼ vs prior
+month (greeting eyebrow dropped); `FactRow` (income · left over · labeled
+% with bar · all-time total) replaces 4 KPI cards incl. the duplicated
+"Labeled"/"Labeling complete"; monthly **bars** (discrete months; past =
+faint ink, latest = vermilion, dashed average line) replace the smoothed
+area; "Where it went" = one bold stacked bar + ranked ledger rows (donut
+dropped; top 5 + "Everything else"), hover-synced. Month names pinned to
+`en-US` (closes the Session 69 open item: a Chinese-locale browser showed
+Chinese month names). Dashboard skeleton mirrors the new layout.
+
+**Next:** Stage 4 other tabs → 5 skill audits + DESIGN_SYSTEM.md v4.

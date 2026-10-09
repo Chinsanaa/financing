@@ -22,7 +22,12 @@ export default function TourSpotlight({ targetId }: { targetId: string }) {
     let scrolled = false;
 
     const update = () => {
-      const el = document.querySelector(`[data-tour-id="${targetId}"]`);
+      // The section nav renders twice (desktop row / phone row) — take the
+      // copy that is actually laid out (display:none has no client rects).
+      const el =
+        Array.from(document.querySelectorAll(`[data-tour-id="${targetId}"]`)).find(
+          (n) => n.getClientRects().length > 0
+        ) || null;
       if (el && !scrolled) {
         scrolled = true;
         el.scrollIntoView({ block: 'center', behavior: 'smooth' });

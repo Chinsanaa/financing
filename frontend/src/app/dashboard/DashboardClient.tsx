@@ -30,7 +30,7 @@ import { TabBar, PillTabs, TabPanel, TabItem } from '@/components/ui/Tabs';
 import CommandPalette, { Command } from '@/components/ui/CommandPalette';
 import { toggleTheme } from '@/utils/theme';
 import { SkeletonRows } from '@/components/ui/Skeleton';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import AccountMenu from '@/components/ui/AccountMenu';
 import NotificationBell from '@/components/ui/NotificationBell';
 import Tooltip from '@/components/ui/Tooltip';
 import DashboardLoading from './loading';
@@ -202,32 +202,34 @@ export default function DashboardClient() {
         Skip to content
       </a>
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg">
-        <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-          <Link href="/dashboard" className="group flex items-center gap-2 font-display text-lg font-medium tracking-[-0.015em]">
-            <span>
-              Financing<span className="text-accent-strong">.</span>
-            </span>
+      {/* Header: one row on desktop — wordmark, section nav, ⌘K, bell, account.
+          Phones get a second row for the nav. */}
+      <header className="sticky top-0 z-40 border-b border-edge/15 bg-bg">
+        <div className="mx-auto flex w-full max-w-[1800px] items-center gap-6 px-4 sm:px-6 lg:px-8 2xl:px-12">
+          <Link href="/dashboard" className="shrink-0 py-3 font-display text-xl font-semibold tracking-[-0.01em]">
+            Financing<span className="text-accent">.</span>
           </Link>
 
-          {/* ⌘K launcher — a search field on wide screens, an icon on phones */}
-          <button
-            onClick={() => setPaletteOpen(true)}
-            className="group hidden h-10 flex-1 items-center gap-2.5 rounded-pill border border-edge/10 bg-surface/60 px-4 text-sm text-muted transition-colors hover:border-edge/25 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 md:flex md:max-w-xs lg:max-w-sm"
-            aria-label="Open command menu"
-          >
-            <Search className="h-4 w-4" />
-            <span className="flex-1 text-left">Jump to…</span>
-            <span className="kbd">⌘K</span>
-          </button>
+          <div className="hidden md:block">
+            <TabBar tabs={SECTIONS} active={activeSection} onChange={goToSection} layoutId="section-tab" />
+          </div>
 
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
+            {/* ⌘K launcher — a quiet field on wide screens, an icon on phones */}
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="mr-2 hidden h-9 w-56 items-center gap-2 rounded-md border border-edge/15 px-3 text-[13px] text-muted transition-colors hover:border-edge/30 hover:text-ink lg:flex xl:w-64"
+              aria-label="Open command menu"
+            >
+              <Search className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="flex-1 text-left">Jump to…</span>
+              <span className="kbd">⌘K</span>
+            </button>
             <Tooltip label="Search (⌘K)">
               <button
                 onClick={() => setPaletteOpen(true)}
                 aria-label="Open command menu"
-                className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 md:hidden"
+                className="flex h-10 w-10 items-center justify-center rounded-md text-muted transition-colors hover:bg-edge/6 hover:text-ink lg:hidden"
               >
                 <Search className="h-4 w-4" />
               </button>
@@ -235,51 +237,18 @@ export default function DashboardClient() {
             <Tooltip label="Notifications" disabled={bellOpen}>
               <NotificationBell onOpenChange={setBellOpen} />
             </Tooltip>
-            <ThemeToggle />
-            <Tooltip label="Settings">
-              <Link
-                href="/settings"
-                aria-label="Settings"
-                className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              >
-                <Settings className="h-4 w-4 transition-transform duration-500 hover:rotate-90" />
-              </Link>
-            </Tooltip>
-            <Tooltip label="Sign out">
-              <button
-                onClick={handleLogout}
-                aria-label="Sign out"
-                className="flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-danger hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </Tooltip>
-            {displayName && (
-              <span
-                title={displayName}
-                className="ml-1 hidden h-9 w-9 items-center justify-center rounded-full bg-accent font-display text-sm font-medium text-accent-ink ring-2 ring-bg sm:flex"
-                aria-hidden="true"
-              >
-                {displayName.charAt(0).toUpperCase()}
-              </span>
-            )}
+            <AccountMenu name={displayName} onSignOut={handleLogout} />
           </div>
         </div>
 
-        {/* Section tabs */}
-        <div className="mx-auto w-full max-w-[1800px] border-t border-edge/8 px-4 sm:px-6 lg:px-8 2xl:px-12">
-          <TabBar
-            tabs={SECTIONS}
-            active={activeSection}
-            onChange={goToSection}
-            layoutId="section-tab"
-          />
+        <div className="mx-auto w-full max-w-[1800px] border-t border-edge/10 px-4 sm:px-6 md:hidden">
+          <TabBar tabs={SECTIONS} active={activeSection} onChange={goToSection} layoutId="section-tab-m" />
         </div>
       </header>
 
       {/* Content */}
       {/* Fluid shell: fills large screens (1920 included), caps only on ultrawides. */}
-      <main id="main" className="relative z-[1] mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 2xl:px-12">
+      <main id="main" className="mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8 2xl:px-12">
         <OnboardingTour
           onNavigate={goToTab}
           activeTab={isWizardStep ? resolvedTab! : activeTab}
@@ -288,7 +257,7 @@ export default function DashboardClient() {
         {/* Planning sub-tabs (restored — dropped by accident in c08568f,
             which left Savings/Subscriptions/Insights/etc. unreachable). */}
         {activeSectionData && activeSectionData.subs.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-8">
             <PillTabs
               tabs={activeSectionData.subs}
               active={activeTab}
