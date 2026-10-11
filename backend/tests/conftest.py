@@ -189,18 +189,16 @@ def fake_db(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fx_background(monkeypatch):
-    """Record fx background work (rate backfills) instead of spawning real
-    threads, and reset fx's in-process throttle/cache state around every
-    test — same idea as `translation_requests`. No-op if backend/fx.py is
-    absent on this branch."""
+    """Reset fx's in-process throttle/cache state around every test. fx's
+    own suite (test_fx.py) needs real background threads, so `_spawn` is
+    NOT stubbed here; tests that want to record spawns patch it locally.
+    No-op if backend/fx.py is absent on this branch."""
     try:
         import fx
     except ImportError:
         yield []
         return
     calls: list = []
-    if hasattr(fx, "_spawn"):
-        monkeypatch.setattr(fx, "_spawn", lambda *args, **kwargs: calls.append((args, kwargs)))
     reset = getattr(fx, "_reset_state", None)
     if reset:
         reset()

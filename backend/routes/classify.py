@@ -117,7 +117,7 @@ async def _apply_to_merchant_siblings(
                 "needs_review": False,
                 "is_manually_labeled": True,
                 "is_split": False,
-            }).eq("user_id", user_id).in_("id", sibling_ids).execute()
+            }).eq("user_id", user_id).in_("id", sibling_ids).eq("kind", "expense").execute()
         )
         return len(sibling_ids)
     except Exception as e:
@@ -158,7 +158,7 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
             "needs_review": False,
             "is_manually_labeled": True,
             "is_split": False,
-        }).eq("id", transaction_id).eq("user_id", user_id).execute()
+        }).eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
     )
     if not response.data:
         return None
@@ -304,7 +304,7 @@ async def split_transaction(request: Request, transaction_id: str, req: SplitReq
                 "needs_review": False,
                 "is_manually_labeled": True,
                 "label_source": "override",
-            }).eq("id", transaction_id).eq("user_id", user_id).execute()
+            }).eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -369,7 +369,7 @@ async def accept_model_suggestion(request: Request, transaction_id: str, backgro
                 "needs_review": False,
                 "is_manually_labeled": True,
                 "label_source": confirmed_label_source,
-            }).eq("id", transaction_id).eq("user_id", user_id).execute()
+            }).eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
         )
 
         if not response.data:
