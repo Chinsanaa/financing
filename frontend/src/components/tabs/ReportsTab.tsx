@@ -29,6 +29,7 @@ import Input, { Select } from '@/components/ui/Input';
 import { formatCurrency, formatDate, formatHomeCurrency } from '@/utils/format';
 import { rateTooltip } from '@/components/ui/MoneyPair';
 import SplitModal from '@/components/tabs/SplitModal';
+import { OWN_ACCOUNT_SUBTYPES } from '@/types/v5';
 import type { FlowSubtype, KindFilter, ReportRow, ReportsResponse, TransactionKind } from '@/types/v5';
 
 type Transaction = ReportRow;
@@ -76,8 +77,22 @@ const NON_EXPENSE_HINT =
 
 /** Money came IN to the user (API_V5 §1.1 sign rule: income rows are + when
  *  money comes in; expense/transfer rows are − when money comes in). */
-function isMoneyIn(t: Pick<Transaction, 'kind' | 'amount'>): boolean {
+function isMoneyIn(t: Pick<Transaction, 'kind' | 'amount' | 'flow_subtype'>): boolean {
+  if (isOwnAccount(t)) return false; // moving your own money is neither in nor out
   return t.kind === 'income' ? t.amount > 0 : t.amount < 0;
+}
+
+/** Transfers between the user's own accounts (top-up, repayment, …). They are
+ *  shown NEUTRAL — muted, unsigned, "⇄" — never as income or spending. */
+function isOwnAccount(t: Pick<Transaction, 'kind' | 'flow_subtype'>): boolean {
+  return t.kind === 'transfer' && !!t.flow_subtype && OWN_ACCOUNT_SUBTYPES.includes(t.flow_subtype);
+}
+
+/** CNY amount as shown in the table/editor: "+¥260.00" (in), "⇄ ¥2,000.00"
+ *  (own-account), "¥18.50" (out / spending). */
+function amountText(t: Pick<Transaction, 'kind' | 'amount' | 'flow_subtype'>): string {
+  if (isOwnAccount(t)) return `⇄ ${formatCurrency(Math.abs(t.amount))}`;
+  return isMoneyIn(t) ? `+${formatCurrency(Math.abs(t.amount))}` : formatCurrency(t.amount);
 }
 
 /** Plain-English type label for a row, direction-aware ("Red packet received").
@@ -94,7 +109,7 @@ function typeLabel(t: Pick<Transaction, 'kind' | 'flow_subtype' | 'amount'>): st
     case 'red_packet':
       return incoming ? 'Red packet received' : 'Red packet sent';
     case 'aa_collection':
-      return 'Shared bill (AA) collected';
+      return 'AA collected';
     case 'p2p_transfer':
       return incoming ? 'Transfer from a person' : 'Transfer to a person';
     case 'own_account':
@@ -194,6 +209,7 @@ function toCsv(transactions: Transaction[]): string {
  *  equivalent underneath. Rate tooltip uses the row's own date. */
 function AmountCell({ txn, currencyHome }: { txn: Transaction; currencyHome: string | null }) {
   const incoming = isMoneyIn(txn);
+  const own = isOwnAccount(txn);
   const showHome = !!currencyHome && txn.amount_home !== null && Number.isFinite(txn.amount_home);
   const day = (txn.date || '').slice(0, 10);
   // The row carries no rate, so derive it from the two rounded amounts —
@@ -207,14 +223,19 @@ function AmountCell({ txn, currencyHome }: { txn: Transaction; currencyHome: str
     : undefined;
   return (
     <span className="inline-flex flex-col items-end" title={title}>
-      <span className={`num whitespace-nowrap text-[15px] ${incoming ? 'text-positive' : ''}`}>
-        {incoming ? `+${formatCurrency(Math.abs(txn.amount))}` : formatCurrency(txn.amount)}
+      <span
+        className={`num whitespace-nowrap text-[15px] ${incoming ? 'text-positive' : own ? 'text-muted' : ''}`}
+        title={own ? 'Moved between your own accounts — not income or spending' : undefined}
+      >
+        {amountText(txn)}
       </span>
       {showHome && (
         <span className="num whitespace-nowrap text-xs text-muted">
           <span aria-hidden="true">≈ </span>
           <span className="sr-only">approximately </span>
-          {incoming
+          {own
+            ? formatHomeCurrency(Math.abs(txn.amount_home as number), currencyHome as string)
+            : incoming
             ? `+${formatHomeCurrency(Math.abs(txn.amount_home as number), currencyHome as string)}`
             : formatHomeCurrency(txn.amount_home as number, currencyHome as string)}
         </span>
@@ -794,16 +815,9 @@ export default function ReportsTab() {
                   const label = typeLabel(txn);
                   const typeOpen = typeEditId === txn.id;
                   const categoryCell = !isExpense ? (
-                    <span className="inline-flex items-center gap-2" title={NON_EXPENSE_HINT}>
-                      <span className="text-xs text-muted">No category</span>
-                      <button
-                        type="button"
-                        disabled
-                        aria-label="Split (only for spending)"
-                        className="cursor-not-allowed text-xs text-muted/60 underline decoration-dotted"
-                      >
-                        Split
-                      </button>
+                    <span className="text-muted" title={NON_EXPENSE_HINT}>
+                      <span aria-hidden="true">—</span>
+                      <span className="sr-only">No category (only spending has categories)</span>
                     </span>
                   ) : txn.is_split ? (
                     <button
@@ -896,7 +910,7 @@ export default function ReportsTab() {
                             <span className="sm:hidden">{formatDate(txn.date)}</span>
                             {label && (
                               <span
-                                className={`rounded-[4px] border px-1.5 py-px leading-4 ${
+                                className={`max-w-full truncate whitespace-nowrap rounded-[4px] border px-1.5 py-px leading-4 ${
                                   isMoneyIn(txn) ? 'border-positive/35 text-positive' : 'border-edge/20 text-muted'
                                 }`}
                               >
@@ -949,8 +963,7 @@ export default function ReportsTab() {
                               <p className="text-sm text-ink">
                                 What is <span className="font-medium">{txn.merchant}</span>{' '}
                                 <span className="num">
-                                  ({isMoneyIn(txn) ? '+' : ''}
-                                  {formatCurrency(isMoneyIn(txn) ? Math.abs(txn.amount) : txn.amount)})
+                                  ({amountText(txn)})
                                 </span>
                                 ?
                               </p>
