@@ -58,7 +58,7 @@ export default function AccountMenu({ name, onSignOut }: { name: string; onSignO
             exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.12 } }}
             transition={{ type: 'spring', bounce: 0, duration: 0.24 }}
             style={{ transformOrigin: 'top right' }}
-            className="glass absolute right-0 top-full z-50 mt-2 w-64 rounded-card p-1.5 shadow-card"
+            className="panel absolute right-0 top-full z-50 mt-2 w-64 rounded-card p-1.5 shadow-card"
           >
             <p className="truncate px-2.5 pb-2 pt-1.5 text-[13px] text-muted">Signed in as {name}</p>
             <Link href="/settings" role="menuitem" className={item} onClick={() => setOpen(false)}>

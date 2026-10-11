@@ -1,4 +1,4 @@
-# Design System — "Ledger" (v4)
+# Design System — "Ledger" (v5)
 
 The visual language of the Financing frontend. **Read this before adding UI.**
 Everything is token-driven, so light and dark stay in sync automatically.
@@ -13,8 +13,15 @@ Everything is token-driven, so light and dark stay in sync automatically.
   **web-design-guidelines**. If a skill contradicts THE RULE (taste-skill
   recommends grain, noise and gradients), THE RULE wins.
 - History: v1/v2 dark + electric lime + Space Grotesk; v3 (2026-09-27) flat;
-  **v4 (2026-10-09, user decision): "Ledger"** — warm paper + ink, one
-  seal-vermilion accent, serif figures, hairline rules instead of cards.
+  v4 (2026-10-09): "Ledger" — warm paper + ink, one seal-vermilion accent,
+  serif figures, hairline rules instead of cards.
+  **v5 (2026-10-11, user decisions): grey-green "ledger paper"** replaces the
+  warm cream (all tokens re-derived, light + dark); **Fraunces** (SOFT 100)
+  replaces Newsreader; category palette retuned for the green paper;
+  `--positive` token; Stamp `size`/`once`; official Alipay / WeChat Pay marks;
+  `scripts/design_gate.sh`; legacy `.glass` class renamed `.panel`; `Card`'s
+  legacy `glass` boolean prop removed (use `variant="raised"`). Validation:
+  `docs/design/palette-validation-2026-10.txt`.
 
 > ## THE RULE: NO gradients. ONLY solid colors.
 > - No `linear-/radial-/conic-gradient` anywhere — backgrounds, text, borders,
@@ -27,15 +34,20 @@ Everything is token-driven, so light and dark stay in sync automatically.
 > - **No purple** (violet / indigo / fuchsia / purple / plum) — not as an accent,
 >   not in charts, not in the category palette.
 > - One flat page background (`bg`); surfaces are one flat color + a hairline.
-> - Check before shipping: `grep -rnEi "gradient|violet|indigo|fuchsia|purple|backdrop-blur|shadow-glow|blur\(" frontend/src`
->   should only hit comments.
+> - Check before shipping: **`bash scripts/design_gate.sh`** (exit 0 = clean).
+>   It greps `frontend/src` for `gradient|backdrop-blur|blur-|blur\(|\bblur\b|glass|violet|indigo|fuchsia|purple|plum|shadow-glow|drop-shadow`
+>   (case-insensitive; the bare `\bblur\b` class is checked on code lines only,
+>   not on comment lines; a line containing `design-gate: allow` is skipped — only
+>   for comments that explain the rule or a proven-solid legacy name) and fails
+>   on any color literal (`#rrggbb`, `R G B` channels, `hsl(`, `oklch(`) in any
+>   `.ts/.tsx/.css` under `frontend/src` with OKLCH hue 270–335° and chroma > 0.04.
 
 ---
 
 ## 1. Principles
 
-1. **Paper first.** Light (warm paper + ink) is the flagship; dark is a quiet
-   "night ledger". Never hardcode a hex/`white`/`black` in a component.
+1. **Paper first.** Light (grey-green ledger paper + green-black ink) is the
+   flagship; dark is a quiet green-black "night ledger". Never hardcode a hex/`white`/`black` in a component.
 2. **Rules, not boxes.** Sections are separated by hairline rules and
    whitespace. A card exists only when something genuinely floats (popovers,
    the label slip, modals). No card grids of icon + heading + text.
@@ -64,44 +76,67 @@ name (`bg-surface-3` generated nothing for months).
 
 | Token | Use | Light | Dark |
 |---|---|---|---|
-| `bg` | page (paper) | `244 241 234` | `21 20 17` |
-| `surface` | lifted paper: popovers, inputs, label slip | `251 250 246` | `29 27 24` |
-| `surface-2` | inset well (auth brand panel) | `235 231 222` | `38 36 31` |
-| `ink` / `muted` | text (muted 5.3:1 on paper) | `27 26 23` / `104 99 90` | `237 233 224` / `163 157 145` |
-| `edge` | hairlines — always low alpha (`/10`–`/25`); `ink/80` for heavy section rules | ink | ink |
-| `accent` | seal vermilion fills | `194 55 27` | `226 86 56` |
-| `accent-strong` | vermilion **text** | `176 48 26` | `234 106 78` |
-| `accent-ink` | text on a vermilion fill (≥5:1) | paper | near-black |
-| `danger` | crimson, always with a word | `155 28 49` | `240 122 134` |
-| `success` / `warn` / `cyan` (info) | ink green / ochre / slate blue | | |
+| `bg` | page (grey-green ledger paper) | `#e8ece4` | `#121814` |
+| `surface` | lifted paper: popovers, inputs, label slip | `#f4f6f1` | `#19201b` |
+| `surface-2` | inset well (auth brand panel) | `#dbe1d8` | `#232b25` |
+| `ink` | text (13.9:1 on paper) | `#18201b` | `#e4eae2` |
+| `muted` | secondary text (≥4.85:1 everywhere) | `#56615a` | `#9ba69e` |
+| `edge` | hairlines — always low alpha (`/10`–`/25`); `ink/80` for heavy section rules | = ink | = ink |
+| `accent` | seal vermilion **fills** (≥3:1) | `#c2371b` | `#e25638` |
+| `accent-strong` | vermilion **text** | `#b0301a` | `#ea6a4e` |
+| `accent-ink` | text on a vermilion fill (≥5:1) | `#fff8f2` | `#1a0f0b` |
+| `positive` | **money in / income** (new in v5; Tailwind `text-positive`) | `#0f6b57` | `#5cc6a6` |
+| `danger` | crimson, always with a word | `#9b1c31` | `#f07a86` |
+| `success` | ink green (status) | `#2f6b3a` | `#7dba84` |
+| `warn` | ochre "approaching" | `#835500` | `#d69e2e` |
+| `cyan` | info (slate blue) | `#1f5f7a` | `#6fb3cf` |
 | `--cat-*` | 12 category colors (keys stored in DB) | see `categoryColors.ts` | |
 
-All text tokens were contrast-checked (≥4.5:1 on bg, surface and wells).
+`globals.css` stores these as `R G B` channels (hex in a trailing comment).
+Every text token is ≥4.5:1 on bg, surface **and** surface-2 in both themes,
+computed by script — table in `docs/design/palette-validation-2026-10.txt`.
+`positive` (deep teal-green) is deliberately a different hue from `success`
+(status green) so "income" never reads as "done".
 
 **Category palette.** Same 12 keys (`lime, blue, cyan, pink, amber, sky,
 emerald, rose, green, teal, orange, olive` — changing keys needs a migration,
-changing values doesn't). Values found by a constrained OKLCH search and
-validated with the dataviz validator in stored order, on page *and* card
-surfaces: lightness, chroma, CVD separation, normal-vision floor and 3:1
-contrast **all PASS in both themes**. Display labels follow the real color
-(lime → "Moss", amber → "Ochre", orange → "Rust"). "pink" is held to rose
-hues (OKLCH 354–4°) so it never reads as purple. One value per theme serves
-swatches, bars and chart fills; the name is always printed in ink beside it.
+changing values doesn't). v5 values were found by a constrained OKLCH search
+for the grey-green paper (each key held to its hue family, chroma 0.10–0.165,
+≥3:1 against page *and* card surface) and validated with the dataviz
+validator in picker order: lightness, chroma, CVD separation, normal-vision
+floor and 3:1 contrast **all PASS in both themes**. The five green-family
+keys are spread by lightness and hue (green darkest, emerald most saturated,
+teal toward blue, olive toward yellow, lime/"Moss" between). An all-pairs
+check cannot pass for 12 hue-locked colors (worst pair improved from ΔE 3.7
+to 7.5), which is why the name is **always** printed in ink beside the color.
+Display labels follow the real color (lime → "Moss", amber → "Ochre",
+orange → "Rust"). "pink" is held to rose hues (OKLCH 352–8°). The values
+live twice — `categoryColors.ts` and the `--cat-*` vars in `globals.css` —
+keep them in sync.
 
-**Type.** `font-display` = **Newsreader** (variable, optical size axis —
-big figures get the fine display cut, table cells the sturdy text cut),
-`font-sans` = **Schibsted Grotesk**. Money and counts use `.num` (serif,
-lining, tabular). Serif headings at `font-normal`/`font-medium`, roman (no
-italic display — flagged by impeccable as the AI-startup hero cliché),
-sentence case. Scale: caption 13px, body 14–15px, section title 24px,
-page title 28px, fact figure 32px, month figure 72–96px.
+**Type.** `font-display` = **Fraunces** (variable: `opsz` 9–144 automatic,
+`SOFT` set to **100** for rounded, friendlier terminals, `WONK` 0), loaded
+with `next/font/google` (`axes: ['opsz','SOFT','WONK']`). `font-sans` =
+**Schibsted Grotesk**. **Figures (v5 decision — looks over strict column
+alignment):** all money and counts use `.num` (alias `.num-display`) =
+Fraunces SOFT 100, WONK 0. Verified in the built font files: the Fraunces
+web subset has **no `tnum`/`lnum`** — its default figures are lining but
+proportional — and it contains ¥ (U+00A5). Right-aligned amount columns
+therefore line up at the right edge, not digit-by-digit; that is accepted.
+Do not use Schibsted's tabular figures for money (its `tnum` also widens
+`.`/`,` to a full figure width: "¥12 , 480"), and do not rely on
+`font-feature-settings` for Fraunces figure alignment.
+Serif headings at `font-normal`/`font-medium`, roman (no italic display),
+sentence case. Scale: caption 13px, body 14–15px, section title 24px, page
+title 28px, fact figure 32px, month figure 72–96px. (impeccable lists
+Fraunces among over-used faces; it is the user's explicit v5 choice.)
 
 **Radius.** `rounded-card` 10px for floating surfaces, `rounded-md` for
 controls, `rounded-[2px]` swatches, `rounded-[3px]` stamps, `rounded-pill`
 only for kbd/number chips.
 
-**Elevation.** Flat by default; `shadow-card` (warm-ink, offset + soft blur,
-never colored) only on floating things.
+**Elevation.** Flat by default; `shadow-card` (ink-tinted, offset + soft
+spread, never colored) only on floating things.
 
 **Browser surfaces** are themed: `::selection`, `caret-color`, scrollbars,
 `:focus-visible` (2px vermilion outline), `color-scheme`, `theme-color`
@@ -151,7 +186,8 @@ Rules (apple-design + review-animations):
 | `.dash-march` | dashed drop-zone border; marches only under `.is-active` |
 | `.skeleton` | solid block, opacity pulse |
 | `.kbd` | keyboard hint chip |
-| `.num` | serif tabular lining figures |
+| `.num` / `.num-display` | money and counts: Fraunces SOFT 100, lining, proportional (aliases) |
+| `.panel` | solid lifted popover surface + hairline (was the legacy `.glass`) |
 | `.section-label` | quiet 13px caption for a chart/column — **not** an eyebrow |
 | `.cat-<key>` | sets `--cat` for swatches/bars |
 
@@ -173,10 +209,10 @@ override the caller's.
 
 | Component | Notes |
 |---|---|
-| `Card` | `variant="sheet"` (default), `"plain"` (no box, top hairline), `"raised"` (floats). `hover` only darkens the border. `SectionHeader` = serif title + description + action (no label/icon). |
+| `Card` | `variant="sheet"` (default), `"plain"` (no box, top hairline), `"raised"` (floats; the legacy boolean prop was removed in v5). `hover` only darkens the border. `SectionHeader` = serif title + description + action (no label/icon). |
 | `StatTile` + `FactRow` + `DeltaChip` | a "fact" (caption, serif figure, footer) — put facts in a `FactRow` (hairline-divided), never in four cards. |
 | `Badge` | category: square swatch + ink name; `guess` → outlined swatch. Status tones: `accent`, `success`, `danger`, `warn`, `neutral` (squared label). |
-| `Stamp` | the signature: vermilion seal, `solid` (confirmed) / `outline` (dashed, model guess), lands tilted with the one bouncy spring. Landing hero, auth panel, label accept, training success (replaced confetti). |
+| `Stamp` | the signature: vermilion seal — see **Stamp** below. |
 | `Button` | `primary` (vermilion — one per screen), `outline`, `ghost`, `danger` (outlined), `link`; `sm/md/lg`; `loading`. |
 | `Segmented` | 2–4 way choice with a sliding ink block (Review mode, theme). |
 | `TabBar` / `PillTabs` / `TabPanel` | text nav with a vermilion 2px rule / secondary nav with an ink 1px rule / panel fade-rise. |
@@ -185,6 +221,54 @@ override the caller's.
 | `CommandPalette` | ⌘K / Ctrl+K; instant. |
 | `EmptyState` | dashed-rule note: what will appear and how. No floating icon. |
 | `Input` (`FIELD_CLASSES`), `Switch` (ink when on), `MonthSelect`, `Stepper`, `Toaster`, `Tooltip`, `Skeleton*`, `RollingNumber` (650ms) | |
+
+### Stamp (`ui/Stamp.tsx`)
+
+```tsx
+<Stamp label="Imported" />                       // solid = confirmed
+<Stamp label="Food" variant="outline" />          // dashed = model guess
+<Stamp label="Sorted" size="sm" tilt={-2} delay={0.3} />
+<Stamp label="Under budget" once="overview-2026-09" />  // animate once per session
+```
+
+Props: `label`, `variant?: 'solid' | 'outline'`, `size?: 'sm' | 'md'`
+(default `md`), `tilt?` (resting angle, default −3°), `delay?`, `once?`
+(session key: plays the spring only the first time per browser session —
+`sessionStorage`, wrapped in try/catch — then renders statically),
+`className?`. Under `prefers-reduced-motion` it renders statically. Both
+decisions are made in a layout effect after hydration, never during render
+(no #418). The spring (`bounce 0.25, 0.42s`) is the app's only bounce.
+
+**Approved stamp sites (exhaustive — never two stamps visible at once):**
+1. "Imported" on a finished upload row.
+2. "Under budget" on Overview for a closed past month — with `once`.
+3. "Sorted" in the landing LiveDemo (replaces the hero StatementSheet stamps).
+4. "Void" on the 404 page.
+5. One stamp in the auth brand panel (D2 reduces AuthClient's three to one).
+6. LabelTab accept (existing).
+7. TrainingTab "Trained" (existing).
+
+### Brand marks (`components/brand/`)
+
+`AlipayLogo`, `WeChatPayLogo` (`size` = height px, `variant?: 'color' | 'mono'`,
+`decorative?`) and `FormatBadges` (row "Alipay · WeChat Pay · Bank CSV",
+props `size`, `compact`, `variant`). Rules:
+- Official artwork only, inline SVG, unmodified paths, official flat colors
+  (Alipay `#1677FF`, WeChat Pay `#22AC38`); source URL + download date are in
+  each file. No gradients — where an official file has one, the official flat
+  variant is used.
+- Use **only next to "accepted formats" text** (upload, landing formats line),
+  never as decoration, never larger than the adjacent text needs (16–20px).
+- The text label is always visible next to each mark.
+- Any page that shows the marks carries, in its footer: *"Not affiliated with
+  Tencent or Ant Group. WeChat Pay and Alipay are trademarks of their
+  respective owners."* (`layout/SiteFooter.tsx` is the shared footer.)
+- **The 支 exception:** the Alipay mark contains the character 支 as part of
+  its artwork. This is the single user-approved exception to "no Chinese in
+  the UI": it is an image (`role="img"`, `aria-label="Alipay"`), never text.
+- WeChat Pay green is 2.75:1 on light paper (logos are exempt from WCAG
+  1.4.11; the label carries the meaning); use `variant="mono"` for a single-ink
+  look.
 
 Deleted in v4: `ThemeToggle`, `ProgressRing`, `utils/celebrate.ts`
 (+ `canvas-confetti`), landing `HeroChart`/`DemoStrip`.
@@ -195,8 +279,8 @@ Deleted in v4: `ThemeToggle`, `ProgressRing`, `utils/celebrate.ts`
 
 | Screen | Shape |
 |---|---|
-| Landing | serif headline "Every yuan, accounted for." → a sample statement whose categories get **stamped** (solid = you, dashed = model) with "Stamp again" → sticky-scroll "Three steps, once a month" (sheets turn on the right; inline on phones) → capability rows (`dl`) → plain close. Lenis smooth scroll here only. Claims = mechanism only. |
-| Auth | darker paper well with three stamped rows; form on the page; underline mode tabs. |
+| Landing | (v5: LiveDemo "Sorted" stamp, shared `SiteFooter`) serif headline "Every yuan, accounted for." → a sample statement whose categories get **stamped** (solid = you, dashed = model) with "Stamp again" → sticky-scroll "Three steps, once a month" (sheets turn on the right; inline on phones) → capability rows (`dl`) → plain close. Lenis smooth scroll here only. Claims = mechanism only. |
+| Auth | darker paper well with one stamped row; form on the page; underline mode tabs. |
 | Shell | one-row header: wordmark · text nav · quiet ⌘K field · bell · account. Phones: nav as a second row. |
 | Overview | month figure + ▲/▼ · `FactRow` · twelve monthly bars (latest vermilion, dashed average) · "Where it went" stacked bar + ranked rows. |
 | Wizard | one ruled 5-step strip (done = ink + check, current = vermilion). |
@@ -249,4 +333,4 @@ a tab shows the error boundary, check the mock shape first (e.g.
 - impeccable's rendered detector: `IMPECCABLE_BROWSER=<chromium --no-sandbox wrapper> .claude/skills/impeccable/scripts/impeccable detect --viewport 390x844 http://localhost:3100/`
   (static file scans of `.tsx` find nothing — scan URLs).
 - Emulate `prefers-reduced-motion` and watch for hydration errors (#418).
-- The rule grep at the top of this file.
+- `bash scripts/design_gate.sh` (THE RULE + purple-hue check).
