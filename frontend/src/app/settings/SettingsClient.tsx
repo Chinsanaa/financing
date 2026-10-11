@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Bell, Download, FileText, ScrollText } from 'lucide-react';
+import { invalidate } from '@/utils/useApi';
+import type { FxCurrency } from '@/types/v5';
 import { createClient } from '@/utils/supabase';
 import { api } from '@/utils/api';
 import { formatDate } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Input from '@/components/ui/Input';
+import Input, { Select } from '@/components/ui/Input';
 import Switch from '@/components/ui/Switch';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
@@ -27,6 +29,15 @@ interface Profile {
   budget_inapp_enabled: boolean;
   pending_review_inapp_enabled: boolean;
   monthly_overview_email_enabled: boolean;
+  home_currency?: string | null;
+}
+
+/** FastAPI error detail → one readable line (422s may carry a list). */
+function errorDetail(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map((d: any) => d?.msg).filter(Boolean).join('; ') || fallback;
+  return fallback;
 }
 
 export default function SettingsClient() {
@@ -51,6 +62,15 @@ export default function SettingsClient() {
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertError, setAlertError] = useState('');
   const [alertSuccess, setAlertSuccess] = useState('');
+
+  // Home currency (v5): '' = none, CNY only.
+  const [currencies, setCurrencies] = useState<FxCurrency[]>([]);
+  const [currenciesError, setCurrenciesError] = useState('');
+  const [homeCurrency, setHomeCurrency] = useState('');
+  const [savedHomeCurrency, setSavedHomeCurrency] = useState('');
+  const [homeSaving, setHomeSaving] = useState(false);
+  const [homeError, setHomeError] = useState('');
+  const [homeSuccess, setHomeSuccess] = useState('');
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -86,6 +106,8 @@ export default function SettingsClient() {
         setBudgetInappEnabled(res.data.profile.budget_inapp_enabled ?? true);
         setPendingReviewInappEnabled(res.data.profile.pending_review_inapp_enabled ?? true);
         setMonthlyOverviewEmailEnabled(!!res.data.profile.monthly_overview_email_enabled);
+        setHomeCurrency(res.data.profile.home_currency || '');
+        setSavedHomeCurrency(res.data.profile.home_currency || '');
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load profile');
       } finally {
@@ -94,7 +116,35 @@ export default function SettingsClient() {
     };
 
     checkAuth();
+    api.fx
+      .currencies()
+      .then((res) => setCurrencies(res.data.supported || []))
+      .catch((err) => setCurrenciesError(errorDetail(err, "Couldn't load the currency list")));
   }, [supabase, router]);
+
+  const handleSaveHomeCurrency = async () => {
+    setHomeSaving(true);
+    setHomeError('');
+    setHomeSuccess('');
+    try {
+      const res = await api.settings.setHomeCurrency(homeCurrency || null);
+      const saved = res.data.profile?.home_currency || '';
+      setHomeCurrency(saved);
+      setSavedHomeCurrency(saved);
+      // Every dashboard response carries *_home fields — refetch them.
+      invalidate('/dashboard');
+      invalidate('/settings/profile');
+      setHomeSuccess(
+        saved
+          ? `Saved. Amounts will also show in ${saved} once rates have loaded.`
+          : 'Saved. Amounts now show in CNY only.'
+      );
+    } catch (err: any) {
+      setHomeError(errorDetail(err, "Couldn't save your home currency"));
+    } finally {
+      setHomeSaving(false);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -252,6 +302,54 @@ export default function SettingsClient() {
               </p>
             </div>
           </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <SectionHeader title="Home currency" />
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              Everything stays in CNY. Pick the currency you think in and an approximate amount is
+              shown underneath, e.g. &ldquo;&yen;100 &asymp; $13.87&rdquo;.
+            </p>
+            <div className="max-w-[320px]">
+              <Select
+                label="Also show amounts in"
+                value={homeCurrency}
+                onChange={(e) => {
+                  setHomeCurrency(e.target.value);
+                  setHomeError('');
+                  setHomeSuccess('');
+                }}
+              >
+                <option value="">None (CNY only)</option>
+                {/* Keep a saved code selectable even if the list failed to load. */}
+                {homeCurrency && !currencies.some((c) => c.code === homeCurrency) && (
+                  <option value={homeCurrency}>{homeCurrency}</option>
+                )}
+                {currencies.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <p className="text-[13px] text-muted">
+              Amounts are converted with European Central Bank reference rates on each
+              transaction&apos;s date (via Frankfurter). Rates update in the background — the first
+              conversion can take a minute.
+            </p>
+            {currenciesError && <Alert kind="error">{currenciesError}</Alert>}
+            {homeError && <Alert kind="error">{homeError}</Alert>}
+            {homeSuccess && <Alert kind="success">{homeSuccess}</Alert>}
+            <Button
+              variant="outline"
+              onClick={handleSaveHomeCurrency}
+              loading={homeSaving}
+              disabled={homeSaving || homeCurrency === savedHomeCurrency}
+            >
+              {homeSaving ? 'Saving' : 'Save home currency'}
+            </Button>
           </div>
         </Card>
 
