@@ -4680,3 +4680,21 @@ locally), `tsc` clean.
 **Open:** 4 old `model_runs` rows stay "running" in the DB (the UI already
 flags them stale). After deploy, press Start training once and confirm the
 run reaches "succeeded" with no `server_failed` event.
+
+### Session 74 (2026-10-11): training verified; translations started from the Overview
+
+**Verified in production:**
+- **Training works:** run 9d2f0e2e succeeded on 2026-09-29 02:34 with 78.6% cross-validated accuracy (LSA path). It's the first production run ever to finish, and Render has recorded no `server_failed` event since PR #63.
+- **4 old runs stuck at "running":** these are from before the fix. They stay in the DB; the UI already flags them stale.
+
+**Found:** translations hadn't moved (1,388/1,436 rows still NULL `merchant_en`).
+- **Not a hang:** Render logs show no "Translation pass" line at all since PR #62. The worker never ran.
+- **Why:** passes are only requested by Reports, Review, Export, insights, uploads and manual entry. The only visits in the logs were Overview loads.
+
+**Built:**
+- **`translations.request_translation_periodic`:** requests a pass at most once per user every 30 min (in-memory throttle under `_lock`).
+- **Overview trigger:** `/dashboard/summary` calls it, so the backfill progresses without anyone opening Reports.
+- **Tests:** 2 new tests (throttle window, per-user). Backend: 160 passed.
+- **Branch:** `claude/translation-overview-trigger`, a separate branch because PR #64 (the Ledger redesign) is still open on the usual branch.
+
+**Next:** after deploy, open the Overview once. Then check the Render logs for "Translation pass start/done" and check that `merchant_en IS NULL` drops toward 0. If the pass logs "stopped early", Google is unreachable from Render and needs another approach.

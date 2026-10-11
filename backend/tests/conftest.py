@@ -128,6 +128,7 @@ def translation_requests(monkeypatch):
     record = lambda user_id: calls.append(user_id) or True
     monkeypatch.setattr(translations, "request_translation", record)
     monkeypatch.setattr(transactions_module, "request_translation", record)
+    monkeypatch.setattr(translations, "_last_periodic", {})  # throttle state per test
     return calls
 
 

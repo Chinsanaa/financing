@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
 from src.translate import merchant_label_stored, description_label_stored
-from translations import request_translation_if_missing
+from translations import request_translation_if_missing, request_translation_periodic
 from src.categories import CATEGORY_BUCKET
 
 router = APIRouter()
@@ -55,6 +55,9 @@ def _months_ago_start(n: int, now: datetime = None) -> datetime:
 async def get_summary(request: Request):
     """Overall summary: total transactions, labeled%, total spend."""
     user_id = request.state.user_id
+    # Every Overview load hits this: keep the English-label backfill moving
+    # even if Reports/Review are never opened (throttled, background-only).
+    request_translation_periodic(user_id)
 
     try:
         # Four independent queries, run concurrently (one round-trip of
