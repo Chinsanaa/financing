@@ -65,9 +65,9 @@ const tx = (i) => {
 const flowTx = [
   { merchant: 'Acme Shanghai Ltd. (payroll)', amount: 18000, kind: 'income', flow_subtype: 'salary', source: 'bank', day: '10' },
   { merchant: 'Yu\'e Bao interest', amount: 12.84, kind: 'income', flow_subtype: 'interest', source: 'alipay', day: '01' },
-  { merchant: 'Li Wei', amount: 260, kind: 'transfer', flow_subtype: 'aa_collection', source: 'wechat', day: '21' },
+  { merchant: 'Li Wei', amount: -260, kind: 'transfer', flow_subtype: 'aa_collection', source: 'wechat', day: '21' },
   { merchant: 'Zhang Min', amount: -88.8, kind: 'transfer', flow_subtype: 'red_packet', source: 'wechat', day: '18' },
-  { merchant: 'China Merchants Bank (top-up)', amount: 2000, kind: 'transfer', flow_subtype: 'top_up', source: 'alipay', day: '05' },
+  { merchant: 'China Merchants Bank (top-up)', amount: -2000, kind: 'transfer', flow_subtype: 'top_up', source: 'alipay', day: '05' },
   { merchant: 'Landlord (Mr. Chen)', amount: 4500, kind: 'transfer', flow_subtype: 'p2p_transfer', source: 'wechat', day: '02' },
 ].map((r, i) => ({
   id: `f${i}`, date: `2026-09-${r.day}T09:00:00`, merchant: r.merchant, description: r.merchant,
@@ -84,7 +84,7 @@ const transfersOut = [4500, 4500, 4688, 4500, 6200, 4500, 4500, 4588.8, 4500, 45
 const MOCKS = {
   '/dashboard/summary': { total_transactions: 1284, labeled_transactions: 1093, labeling_percentage: 85.1, total_spend: 141400.5, monthly_income: 18000,
     month: '2026-09', month_spend: 12480, month_income: 18012.84, month_income_source: 'statements',
-    home: { currency: 'USD', total_spend_home: 19694.62, month_spend_home: home(12480), month_income_home: home(18012.84), rate_asof: RATE_DATE, rate: USD_RATE } },
+    home: { currency: 'USD', total_spend_home: 19694.62, month_spend_home: home(12480), month_income_home: home(18012.84), rate_asof: RATE_DATE, rate: USD_RATE, approx: false } },
   '/dashboard/cashflow': { currency_home: 'USD', own_account_moved: 26400, months: months.map((month, i) => ({
     month, spend: spend[i], income: income[i], transfers_in: transfersIn[i], transfers_out: transfersOut[i],
     net: +(income[i] - spend[i]).toFixed(2), spend_home: home(spend[i]), income_home: home(income[i]), net_home: home(income[i] - spend[i]) })) },

@@ -8,6 +8,12 @@ Base: v4 API as of `origin/main` 106ec73. Everything not mentioned here is
 unchanged. All changes are **additive** to response shapes: no v4 field is
 removed, renamed or re-typed, so v4 clients keep working.
 
+| Owner | Scope |
+|---|---|
+| B1 | §1.1 kind migrations, SQL functions (§3.11), `dashboard.py` (§3.3–3.7, §3.10), `transactions.py` (§3.8) |
+| B2 | parsers (`src/parse.py`), `uploads.py` incl. re-import (§1.4, §3.9) |
+| B3 | FX: `fx_rates` (§1.3), `backend/fx.py` (§2), `profiles.home_currency` + settings (§1.2, §3.2), `/fx/currencies` (§3.1), `/health/deep` refresh |
+
 ---
 
 ## 0. Global conventions
@@ -17,7 +23,7 @@ removed, renamed or re-typed, so v4 clients keep working.
 | Base currency | Every money field without a suffix is **CNY**. |
 | Home fields | `*_home` = same value in the user's home currency, or `null` (no home currency set, or no usable rate). The UI hides the "≈" line on `null`. |
 | Rounding | All money in responses is rounded to **2 decimals** (half-even is fine, Python `round`). Aggregates are summed from unrounded values and rounded once at the end. Rates are returned unrounded (as stored, ≤ 6 decimals). |
-| Time zone | Transaction timestamps are naive **China time (Asia/Shanghai)**. "Today", month boundaries and the date used for an FX lookup are all China-time calendar dates (use `_now_cn()` in `backend/routes/dashboard.py`). |
+| Time zone | Transaction timestamps are **China wall-clock time stored as UTC `timestamptz`** (the naive export time is written with a `+00:00` offset). The calendar date of a row is therefore `("timestamp" AT TIME ZONE 'UTC')::date` — the same expression the existing SQL functions use; never convert to Asia/Shanghai a second time. "Today" and month boundaries come from `_now_cn()` in `backend/routes/dashboard.py` (naive China clock), compared against that wall-clock date. The FX lookup date of a row is `("timestamp" AT TIME ZONE 'UTC')::date`. |
 | Months | `"YYYY-MM"`. Dates `"YYYY-MM-DD"`. |
 | "Spend" | **Always** `kind = 'expense'` only, refunds netted (refunds are negative expense rows). |
 | Errors | FastAPI shape `{"detail": "..."}` (422 validation errors keep FastAPI's list shape). |
@@ -26,22 +32,34 @@ removed, renamed or re-typed, so v4 clients keep working.
 
 ## 1. Data model (migration owned by the backend/DB agent)
 
-### 1.1 `transactions`
+### 1.1 `transactions` (owner: B1)
+
+Two migration files. `ALTER TYPE ... ADD VALUE` cannot share a transaction
+with statements that use the new value, so it gets **its own file**:
 
 ```sql
+-- 2026101100000_add_bank_transaction_source.sql  (alone in its file)
+ALTER TYPE transaction_source ADD VALUE IF NOT EXISTS 'bank';
+```
+
+```sql
+-- 2026101100010_transaction_kinds.sql
 CREATE TYPE transaction_kind AS ENUM ('expense', 'income', 'transfer');
 ALTER TABLE transactions
   ADD COLUMN kind transaction_kind NOT NULL DEFAULT 'expense',
   ADD COLUMN flow_subtype text NULL CHECK (flow_subtype IN (
     'refund','red_packet','p2p_transfer','aa_collection','salary','interest',
     'own_account','repayment','top_up','withdrawal','other'));
-ALTER TYPE transaction_source ADD VALUE 'bank';
 CREATE INDEX ON transactions (user_id, kind, timestamp);
+
+-- Explicit backfill (the v1 parser only ever kept expense + refund rows;
+-- the column default already set kind='expense', restated for clarity).
+UPDATE transactions SET kind = 'expense' WHERE kind IS DISTINCT FROM 'expense';
+UPDATE transactions SET flow_subtype = 'refund' WHERE amount < 0 AND flow_subtype IS NULL;
 ```
 
-Backfill: every existing row is `kind='expense'` (the v1 parser only ever
-kept expense and refund rows). Rows with `amount < 0` get
-`flow_subtype='refund'`; others stay `NULL`.
+(Exact timestamps in the file names are B1's choice; ordering must be
+source-value file first.)
 
 #### Kind / subtype semantics
 
@@ -60,6 +78,17 @@ kept expense and refund rows). Rows with `amount < 0` get
 | transfer | `repayment` | Credit card / Huabei (花呗) repayment | `+` | own_account_moved |
 | transfer | `top_up` | Bank → wallet top-up (充值) | `−` (into wallet) | own_account_moved |
 | transfer | `withdrawal` | Wallet → bank withdrawal (提现) | `+` | own_account_moved |
+
+**JUDGMENT CALL — `aa_collection` and received `red_packet` are
+`transfer`, not `income`.** Money friends pay you back for a meal you
+fronted is reimbursement, and a red packet from a friend is usually part of
+a back-and-forth. Trade-off: when the user fronts a group meal, the whole
+bill stays in their spend (spend is **overstated** by the friends' shares,
+because the collection doesn't net against it), but income stays clean
+(salary and interest only, so savings-rate maths isn't inflated by
+pass-through money). The per-row escape hatch is
+`PATCH /transactions/{id}/kind` (§3.8), e.g. turn a large received red
+packet into `income`.
 
 Sign rule in one line: **for expense and transfer rows `+` = money left the
 user, `−` = money came in; income rows are always `+` (money in).** A
@@ -92,7 +121,8 @@ CREATE TABLE fx_rates (
   fetched_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (quote, rate_date)
 );
--- Global reference data: RLS on, SELECT for authenticated, writes only via service role.
+ALTER TABLE fx_rates ENABLE ROW LEVEL SECURITY;
+-- Deliberately NO policies: only the backend's service role reads/writes it.
 ```
 
 Source: Frankfurter (`https://api.frankfurter.dev/v1/{start}..{end}?base=CNY&symbols=XXX`
@@ -110,36 +140,53 @@ Existing rows stay `1`. Every upload created by v5 is written with `2`.
 
 ## 2. FX rules
 
-**Rate lookup for a transaction** (date `d` = China-time calendar date of
-`timestamp`): the row in `fx_rates` for the home currency with the greatest
-`rate_date ≤ d` **and** `rate_date ≥ d − 7 days`. None → no rate →
-`amount_home = null`.
+Owner: B3 (`backend/fx.py`, settings `home_currency`, `/health/deep`).
 
-**Per-row conversion:** `amount_home = round(amount × rate, 2)`.
+**Row date** `d = ("timestamp" AT TIME ZONE 'UTC')::date` (§0).
 
-**Aggregates** (`total_spend_home`, monthly sums, …): sum of
-`amount × rate(row date)` over the contributing rows, rounded once. If **any**
-contributing row has no rate the aggregate is `null` (never a partial sum).
-An aggregate over zero rows is `0` (not null) when a home currency is set.
+**Strict lookup** (used everywhere except `total_spend_home`): the
+`fx_rates` row for the home currency with the greatest `rate_date ≤ d`
+**and** `rate_date ≥ d − 7 days`. None → no rate.
+
+**Per-row conversion:** `amount_home = round(amount × rate, 2)`, `null` when
+the strict lookup finds nothing.
+
+**Per-month / per-bucket aggregates** (`month_spend_home`,
+`month_income_home`, trends `total_spend_home`, cash-flow `*_home`, budget
+`*_home`): sum of `amount × rate(row)` over the contributing rows, rounded
+once. If **any** contributing row has no strict rate the aggregate is `null`
+(never a partial sum). An aggregate over zero rows is `0` (not `null`) when a
+home currency is set.
+
+**All-time total `home.total_spend_home` — lenient:** each row uses the
+nearest rate with `rate_date ≤ d` with **no age limit**; rows dated before
+the earliest stored rate use the **earliest** stored rate. It is `null` only
+when no rate at all is stored for the currency. `home.approx = true` when
+at least one row needed either fallback (no strict rate), else `false`
+(`false` also when there are no rows).
 
 **Budget amounts** (not dated): converted at the **reference rate** of the
-month = lookup with `d = min(last day of month, today)`.
+month = strict lookup with `d = min(last day of month, today)`; `null` if none.
 
 **`rate_asof` / `rate`** (summary): newest `fx_rates` row for the home
 currency with `rate_date ≤ today`; `null`/`null` if none.
 
-**Fetching / caching (backend):**
-- When `home_currency` is set (PATCH), synchronously backfill rates from
-  `min(transaction date) − 7 days` (or today − 400 days if no transactions)
-  to today for that quote in one Frankfurter time-series call; if
-  Frankfurter fails, the PATCH still succeeds (home fields read `null`
-  until a later refresh).
-- On every request that needs home fields, if the newest stored rate is
-  older than 1 calendar day (China time) refresh at most once per
-  6 hours per currency (in-process throttle), best-effort, never blocking
-  the response for more than ~3 s; on failure serve what is cached.
-- Uploads that add rows older than the earliest cached rate trigger a
-  background backfill for the user's home currency.
+**Fetching / caching — no outbound FX call on any GET.** Request handlers
+only read `fx_rates`. Refresh triggers (all background, ~5 s HTTP timeout,
+failures logged and ignored):
+1. **After `PATCH /settings/profile` sets `home_currency`:** the PATCH stores
+   the value and returns immediately; a background task backfills that quote
+   from `min(row date) − 7 days` (or today − 400 days if the user has no
+   rows) to today in one Frankfurter time-series call.
+2. **After a successful upload** (user has a home currency): background
+   backfill covering the uploaded rows' date range − 7 days → today.
+3. **`/health/deep`:** for every distinct `profiles.home_currency`, refresh
+   at most once per 6 h per currency (in-process throttle).
+
+Each trigger skips the network call when the newest stored rate for that
+quote is ≤ 1 calendar day old **and** the requested range's start is
+already covered (trigger 3 only checks the age). Upserts on
+`(quote, rate_date)`.
 
 ---
 
@@ -183,7 +230,9 @@ base and is not selectable. Static list (a backend constant); no DB read.
 
 PATCH body gains `home_currency?: string | null`:
 - trimmed + upper-cased, then must be in the supported list →
-  stored; triggers the FX backfill (§2).
+  stored; the response returns immediately and the FX backfill runs in
+  the background (§2 trigger 1), so home fields may read `null` for a few
+  seconds.
 - `null` → cleared (CNY only; all `*_home` become `null`).
 - `"CNY"` → **422** `{"detail": "CNY is the base currency; clear home_currency with null instead"}`.
 - anything else → **422** `{"detail": "Unsupported home currency 'XYZ'. See GET /fx/currencies."}`.
@@ -210,7 +259,8 @@ Response: `{"profile": {...}}` (full row, as today).
     "month_spend_home": 1730.98,
     "month_income_home": 2498.38,
     "rate_asof": "2026-09-30",
-    "rate": 0.1387
+    "rate": 0.1387,
+    "approx": false                // true when total_spend_home used a fallback rate (§2)
   }
 }
 ```
@@ -280,7 +330,12 @@ Spend is expense-only (as before). Each `category_budgets[]` row gains
 ```
 `total_budget` = Σ `category_budgets[].monthly_budget`; `total_spent` = Σ
 `category_budgets[].current_spend` (budgeted categories only — same numbers
-BudgetTab computes today). Both `0` when there are no category budgets.
+BudgetTab computes today). The **early-return path** (user has no category
+budgets) must also return `total_budget: 0`, `total_spent: 0`,
+`currency_home`, and `total_budget_home`/`total_spent_home` (`0` with a home
+currency, `null` without). `budget_config.currency` is a legacy display
+setting from `budget_config` and is **unrelated** to `currency_home`; do not
+derive one from the other.
 `*_spent_home`/`current_spend_home`: per-transaction rates (split line-items
 use their parent transaction's date). `*_budget_home`: month reference
 rate. All home fields `null` without a home currency.
@@ -308,7 +363,7 @@ For non-expense rows: `category` = `"Income"` or `"Transfer"`, `category_id`
 = `null`, `bucket` = `null`, `is_split` = `false`. Response top level gains
 `kind` (the applied filter) and `currency_home`.
 
-### 3.8 `PATCH /transactions/{id}/kind` (new)
+### 3.8 `PATCH /transactions/{id}/kind` (new, owner: B1, `transactions.py`)
 
 Lets the user fix a parser misjudgement, e.g. rent paid by WeChat transfer
 (`transfer` → `expense`) or a refund that is really income.
@@ -319,10 +374,16 @@ Body: `{"kind": "expense"|"income"|"transfer", "flow_subtype": <subtype>|null}`
 - Not the caller's row → 404 `Transaction not found`.
 - Row `is_split = true` and new kind ≠ expense → 409
   `"Unsplit this transaction before changing its kind"`.
+- Same kind **and** same subtype as stored → 200 with the row unchanged
+  (no write).
 - → `income`/`transfer`: set `category_id=NULL`, `needs_review=false`,
   `label_source='none'`, `confidence=NULL`.
-- → `expense` from another kind: `needs_review=true`, `label_source='none'`
-  (lands in the review queue and is classified on the next pass).
+- → `expense` from another kind: `needs_review=true`, `label_source='none'`,
+  `is_manually_labeled=false` (lands in the review queue and is classified
+  on the next pass).
+- Never creates or modifies merchant rules. No retrain is triggered: a row
+  that became non-expense simply drops out of training, subscription
+  detection and alerts on their next scheduled run.
 - Amount is never changed. Rate limit 120/hour.
 
 Response: `{"transaction": {"id", "kind", "flow_subtype", "category_id", "needs_review"}}`.
@@ -335,31 +396,75 @@ Response: `{"transaction": {"id", "kind", "flow_subtype", "category_id", "needs_
   recognisable date column **and** an amount or debit/credit column).
   Undetected → 400 `"Could not detect file source. Expected an Alipay, WeChat or bank statement export."`
 - v5 parser (version 2) keeps **all** settled rows and assigns
-  `kind`/`flow_subtype` per §1.1. Expense and refund rows must produce
-  exactly the same `(timestamp, merchant, description, amount)` as v1 so
-  row-level dedup still matches previously imported rows.
+  `kind`/`flow_subtype` per §1.1. Expense and refund rows must keep the
+  same `(timestamp, merchant, description)` as v1 (amounts may differ; the
+  re-import algorithm below reconciles them).
 - Bank rows whose counterparty is a payment wallet (支付宝 / Alipay,
   财付通 / Tenpay / 微信支付 / WeChat Pay) are imported as
   `kind='transfer', flow_subtype='own_account'` so the same purchase isn't
   counted twice (it is already in the Alipay/WeChat statement).
-- Dedup key unchanged (`timestamp, merchant, description, amount, source`).
-- **Re-uploading a parser-v1 file** (same file hash as an existing upload
-  with `parser_version = 1` and status ≠ failed): no 409. The file is
-  re-parsed, dedup skips every row already present (all its expense/refund
-  rows), and only the new non-expense rows are inserted **under the existing
-  upload's id**. That upload row is then updated to `parser_version = 2`,
-  `row_count += inserted`. Response `upload_id` is the existing id and
-  `reimported: true`. A hash match on a `parser_version = 2` upload is still
-  409 as before.
+- Dedup key for ordinary inserts unchanged
+  (`timestamp, merchant, description, amount, source`).
+
+#### Re-import over parser-v1 data (owner: B2, `uploads.py`)
+
+Transactions store no statement order id, so matching is **content-based**.
+
+**Trigger:** the parsed file's time window `[t_min, t_max]` (min/max row
+timestamp) overlaps existing rows of the **same `source`** whose upload has
+`parser_version = 1` (status ≠ failed). This applies to any upload, not only
+a byte-identical file. A file-hash match on a `parser_version = 1` upload
+does **not** 409 (it runs this algorithm); a hash match on a
+`parser_version = 2` upload still 409s as before.
+
+**Algorithm:**
+1. Parse the file with the v2 parser (all kinds).
+2. Load the v1 rows in `[t_min, t_max]` (same user, same source, upload
+   `parser_version = 1`) and index them by
+   `(timestamp, merchant, description)`, **ignoring amount**. Each key maps
+   to a list (in `timestamp, id` order) so duplicates are handled.
+3. For each v2 row in file order, take the first **unconsumed** v1 row with
+   the same key, if any, and mark it consumed:
+   - v2 row is expense/refund and the amount differs → `UPDATE amount` (and
+     `flow_subtype` = `'refund'` if the new amount < 0, else `NULL`) **in
+     place**, keeping `category_id`, `label_source`, `is_manually_labeled`,
+     `needs_review` and splits untouched;
+   - v2 row is income/transfer → `UPDATE kind`, `flow_subtype`, `amount`
+     and apply the non-expense defaults (§1.1: `category_id=NULL`,
+     `needs_review=false`, `label_source='none'`, `confidence=NULL`;
+     delete any `transaction_splits` and set `is_split=false`);
+   - identical → leave as is.
+   The v2 row is then done (not inserted).
+4. Every **unconsumed** v1 `expense` row of the overlapping v1 upload(s)
+   whose timestamp is inside `[t_min, t_max]` has no counterpart in the new
+   statement (e.g. a closed, unpaid order v1 wrongly kept) → `DELETE`
+   (splits cascade).
+5. The remaining (unmatched) v2 rows go through the **normal** dedup +
+   insert. Upload row: if the file hash matched a v1 upload, rows are
+   inserted under **that existing `upload_id`** (the per-user unique hash
+   index forbids a second row) and it is updated with `row_count` = its
+   current row count; otherwise a new upload row is created as usual
+   (`parser_version = 2`).
+6. Set `parser_version = 2` on every v1 upload touched in steps 3–4.
+
+`rows_imported` = inserted rows (step 5), `rows_skipped` = rows dropped by
+the normal dedup, `rows_updated` = rows changed in step 3 (identical
+matches are not counted), `rows_removed` = rows deleted in step 4.
+`reimported = true` whenever the trigger fired. Run classification
+(`schedule_classification`) afterwards as usual.
 
 Response (added fields marked):
 ```jsonc
 { "upload_id": "…", "file_name": "…", "file_type": "bank", "status": "parsed",
   "message": "Imported 41 transactions (3 income, 9 transfers). Categorization is running.",
   "rows_imported": 41, "rows_skipped": 0,
+  "rows_updated": 0,                                         // NEW
+  "rows_removed": 0,                                         // NEW
   "reimported": false,                                       // NEW
-  "rows_by_kind": { "expense": 29, "income": 3, "transfer": 9 } }  // NEW (imported rows only)
+  "rows_by_kind": { "expense": 29, "income": 3, "transfer": 9 } }  // NEW (inserted rows only)
 ```
+When `reimported` is true the message also says e.g. `"Updated 12 and
+removed 2 earlier transactions from this statement."`
 
 `GET /uploads/` and `GET /uploads/{id}`: unchanged fields; rows now also
 carry `parser_version` and `file_type` may be `'bank'`.
@@ -376,6 +481,10 @@ XLSX now contains **all kinds**. Columns:
 - `Category` for non-expense rows: empty string.
 - `Home amount`: number (`#,##0.00`) or empty cell when null.
 - `Home currency`: the code, or empty when no home currency.
+- **Column positions shift**: `Amount` moves from E to F and `Label Source`
+  from F to I. Backend export tests (and the `#,##0.00` number-format /
+  column-width code) must be updated to the new positions; `Home amount`
+  (G) also gets `#,##0.00`.
 
 ### 3.11 Expense-only endpoints (semantics clarified, shapes unchanged)
 
@@ -383,11 +492,23 @@ Add `kind = 'expense'` to every query/RPC behind:
 `/dashboard/by-category`, `/dashboard/rule-503020`, `/dashboard/savings`,
 `/dashboard/insights`, `/dashboard/action` (budget crossings), alerts,
 `/dashboard/review-queue`, `/subscriptions/*` detection, `/classify/*`,
-`/training/*` (training set), `available_months_for_user` (months that have
-**any** row — so a salary-only month is selectable). The SQL RPCs
-`sum_user_transactions`, `spend_by_category_for_user`,
-`spend_trend_for_user`, `spend_by_category_in_range` must filter
-`kind = 'expense'`.
+`/training/*` (training set).
+
+SQL functions (owner: B1, new migration replacing the function bodies):
+
+| function | change |
+|---|---|
+| `sum_user_transactions` | filter `kind = 'expense'` |
+| `spend_trend_for_user` | filter `kind = 'expense'` |
+| `monthly_spend_by_user` (backs `/dashboard/savings`) | filter `kind = 'expense'` |
+| `spend_by_category_for_user` | filter `kind = 'expense'` in **both** branches — the direct-category branch **and** the `transaction_splits` branch (join the parent transaction and filter its kind) |
+| `available_months_for_user` | **no** kind filter — counts rows of all kinds, so a salary-only month is selectable |
+
+Any range-variant RPC the dashboard uses for per-month category spend
+(`_spend_by_category`) must get the same filter; B1 checks the actual
+function names in `supabase/migrations/` (there is no
+`spend_by_category_in_range`). New RPCs B1 adds for cash flow / home
+amounts are B1's to name.
 
 `POST /transactions/` (manual entry) stays expense-only; it writes
 `kind='expense'` implicitly via the column default.
@@ -399,9 +520,10 @@ Add `kind = 'expense'` to every query/RPC behind:
 | Case | Behaviour |
 |---|---|
 | No home currency | every `*_home` = `null`, `home` = `null`, `currency_home` = `null`. |
-| Home currency set, Frankfurter never reachable | `home` object present, `rate_asof`/`rate` `null`, home amounts `null`. |
+| Home currency set, Frankfurter never reachable | `home` object present, `rate_asof`/`rate` `null`, home amounts `null`, `approx: false`. |
+| Home currency just set | PATCH returns at once; home amounts `null` until the background backfill lands (seconds). |
 | Transaction on a weekend/holiday | uses the previous business day's rate (≤ 7 days back). |
-| Transaction older than the cache | `null` until backfill fills it (aggregates containing it are `null`). |
+| Transaction older than the cache | row and month home values `null` until a backfill covers it; `total_spend_home` uses the earliest stored rate and sets `approx: true`. |
 | Home currency changed | home fields switch immediately; nothing stored per transaction (always computed). |
 | Refund in a month with no purchases | negative `spend` for that month is allowed. |
 | Negative `net` | allowed. |

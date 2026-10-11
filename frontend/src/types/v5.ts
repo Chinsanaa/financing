@@ -142,6 +142,9 @@ export interface SummaryHome {
   rate_asof: string | null;
   /** CNY → home rate on `rate_asof` (1 CNY = rate home units). */
   rate: number | null;
+  /** True when total_spend_home used a fallback (older than 7 days, or the
+   *  earliest stored rate for rows before the cache). */
+  approx: boolean;
 }
 
 export type IncomeSource = 'statements' | 'settings';
@@ -322,10 +325,14 @@ export interface UploadResult {
   message: string;
   rows_imported: number;
   rows_skipped: number;
-  /** v5: true when the file had been imported by parser v1 and this upload
-   *  only added its non-expense rows to the existing upload. */
+  /** v5: existing parser-v1 rows corrected in place (amount or kind). */
+  rows_updated: number;
+  /** v5: parser-v1 expense rows with no counterpart in this statement, deleted. */
+  rows_removed: number;
+  /** v5: true when the file overlapped parser-v1 rows of the same source and
+   *  the re-import reconciliation ran (API_V5.md §3.9). */
   reimported: boolean;
-  /** v5: imported rows per kind. */
+  /** v5: inserted rows per kind. */
   rows_by_kind: Record<TransactionKind, number>;
 }
 
