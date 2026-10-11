@@ -2,6 +2,54 @@
 
 import { ReactNode } from 'react';
 import RollingNumber from './RollingNumber';
+import { rateTooltip } from './MoneyPair';
+import { formatHomeCurrency } from '@/utils/format';
+
+/** Home-currency equivalent of a CNY figure (docs/contracts/API_V5.md §0). */
+export interface HomeAmount {
+  /** `null` = no usable rate: the line is hidden. */
+  amount: number | null | undefined;
+  currency: string;
+  rate?: number | null;
+  rateDate?: string | null;
+  /** Some rows needed a fallback (older) rate: adds an "approx." note. */
+  approx?: boolean;
+}
+
+/**
+ * The muted "≈ $1,110" line under a CNY figure. Renders nothing without a
+ * home currency or a rate, so callers can pass `summary.home` fields blindly.
+ * Same reading as MoneyPair's home line, without re-rendering the CNY figure
+ * (tiles roll theirs with RollingNumber).
+ */
+export function HomeLine({
+  home,
+  decimals = 0,
+  className = '',
+}: {
+  home?: HomeAmount | null;
+  decimals?: number;
+  className?: string;
+}) {
+  if (!home || !home.currency || home.amount === null || home.amount === undefined || !Number.isFinite(home.amount)) {
+    return null;
+  }
+  const rateTitle = rateTooltip(home.rate ?? undefined, home.rateDate ?? undefined);
+  const approxTitle = 'Some older transactions use the nearest available ECB rate, so this total is approximate.';
+  return (
+    <span className={`num block text-muted ${className}`} title={home.approx ? approxTitle : rateTitle}>
+      <span aria-hidden="true">≈ </span>
+      <span className="sr-only">approximately </span>
+      {formatHomeCurrency(home.amount, home.currency, decimals)}
+      {home.approx && (
+        <span className="ml-1.5 font-sans text-[11px] text-muted underline decoration-dotted underline-offset-2">
+          approx.
+          <span className="sr-only"> {approxTitle}</span>
+        </span>
+      )}
+    </span>
+  );
+}
 
 /**
  * A ledger "fact": caption, a serif rolling figure and an optional footer
@@ -16,26 +64,38 @@ export default function StatTile({
   decimals = 0,
   suffix,
   tone,
+  home,
   footer,
   className = '',
 }: {
   label: string;
-  value: number;
+  /** `null` = unknown: shows "—" instead of a figure. */
+  value: number | null;
   currency?: boolean;
   decimals?: number;
   suffix?: string;
-  tone?: 'success' | 'danger' | 'warn';
+  tone?: 'success' | 'danger' | 'warn' | 'positive';
+  /** Optional home-currency line under the figure (hidden when null). */
+  home?: HomeAmount | null;
   footer?: ReactNode;
   className?: string;
 }) {
   const toneClass =
-    tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : '';
+    tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : tone === 'positive' ? 'text-positive' : '';
   return (
     <div className={`flex min-w-0 flex-col py-1 ${className}`}>
       <p className="text-[13px] text-muted">{label}</p>
       <p className={`num mt-1 text-[2rem] font-normal leading-none tracking-[-0.01em] ${toneClass}`}>
-        <RollingNumber value={value} currency={currency} decimals={decimals} suffix={suffix} />
+        {value === null ? (
+          <span className="text-muted">
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">Not available</span>
+          </span>
+        ) : (
+          <RollingNumber value={value} currency={currency} decimals={decimals} suffix={suffix} />
+        )}
       </p>
+      <HomeLine home={home} className="mt-1.5 text-sm" />
       {footer && <div className="mt-2 text-xs text-muted">{footer}</div>}
     </div>
   );
