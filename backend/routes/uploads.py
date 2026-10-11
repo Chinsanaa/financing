@@ -1,7 +1,13 @@
-"""File upload and parsing: accept CSV/Excel, normalize to common schema."""
+"""File upload and parsing: accept CSV/Excel, normalize to common schema.
+
+API v5 (docs/contracts/API_V5.md §1.4, §3.9): the v2 parser keeps every
+settled row with a `kind` (expense / income / transfer) and `flow_subtype`;
+bank statements are accepted as source 'bank'; uploads that overlap rows
+imported by the v1 parser are reconciled in place (the "re-import" below).
+"""
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from pydantic import BaseModel
-from typing import Optional
+from typing import Dict, List, Optional
 from pathlib import Path
 from starlette.concurrency import run_in_threadpool
 from config import supabase_client
@@ -9,21 +15,32 @@ from db import run_query
 from errors import internal_error, logger
 from limiter import limiter
 import pandas as pd
-from datetime import datetime
 from uuid import uuid4
 import re
 import tempfile
-import os
-import shutil
 import hashlib
-import csv
 
-from src.parse import parse_alipay, parse_wechat_excel, parse_wechat_csv
+from src.parse import (
+    PARSER_VERSION,
+    detect_export_filter,
+    detect_statement_source,
+    parse_alipay,
+    parse_generic_bank_csv,
+    parse_wechat_csv,
+    parse_wechat_excel,
+)
 
 router = APIRouter()
 
 MAX_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_ROWS = 50000
+UNDETECTED_MESSAGE = "Could not detect file source. Expected an Alipay, WeChat or bank statement export."
+NON_EXPENSE_DEFAULTS = {
+    "category_id": None,
+    "needs_review": False,
+    "label_source": "none",
+    "confidence": None,
+}
 
 # XLSX (like all modern Office formats) is a ZIP container — a real one
 # always starts with a ZIP local-file-header signature. An empty/spanned
@@ -53,29 +70,31 @@ class UploadResponse(BaseModel):
     message: str
     rows_imported: int
     rows_skipped: int
+    rows_updated: int
+    rows_removed: int
+    reimported: bool
+    rows_by_kind: Dict[str, int]
 
 
 @router.post("/")
 @limiter.limit("20/hour")
 async def upload_file(request: Request, file: UploadFile = File(...)):
-    """Upload a CSV/Excel file (Alipay or WeChat format) with strict validation.
+    """Upload a CSV/Excel file (Alipay, WeChat or bank statement).
 
-    Validations:
-    1. Extension check (CSV or XLSX only)
-    2. Size limit (10MB max)
-    3. Duplicate file check (same file already uploaded)
-    4. Content sniffing (read headers to detect format)
-    5. Row limit (50k max post-parse)
-    6. Normalize to common schema
-    7. Store original in Storage, insert into transactions table
+    1. Extension, size and magic-byte checks.
+    2. Duplicate file check by content hash: a match on a parser-v2 upload
+       409s; a match on a parser-v1 upload re-imports into that upload.
+    3. Detect the source, parse with the v2 parser (all kinds).
+    4. Re-import over overlapping parser-v1 rows (contract §3.9 steps 1-6).
+    5. Normal row-level dedup + insert of the remaining rows.
 
-    Returns upload_id. Failed uploads stay in history with status='failed'
-    and an error_message, so the user can see what happened and retry.
+    Failed uploads stay in history with status='failed' and an error_message,
+    so the user can see what happened and retry.
     """
     user_id = request.state.user_id
     upload_id = None
+    created_upload = False
 
-    # Validation 1: Extension check
     if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
         raise HTTPException(status_code=400, detail="Only CSV and Excel files are supported")
 
@@ -83,46 +102,48 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     try:
         content = await file.read()
 
-        # Validation 2: Size limit
         if len(content) > MAX_SIZE:
             raise ValueError(f"File exceeds 10MB limit ({len(content) / 1024 / 1024:.1f}MB)")
 
-        # Validation 2b: content matches declared extension (magic bytes)
         _validate_file_content(file.filename, content)
 
-        # Validation 3: Duplicate file check (per user, by content hash)
         file_hash = calculate_file_hash(content)
         existing = await check_duplicate_upload(user_id, file_hash)
+        hash_match_v1 = None
         if existing:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"This file was already uploaded on {existing['created_at'][:10]} "
-                    f"as \"{existing['original_filename']}\". Delete it from the upload "
-                    f"history first if you want to re-import it."
-                ),
+            if _parser_version(existing) >= PARSER_VERSION:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"This file was already uploaded on {existing['created_at'][:10]} "
+                        f"as \"{existing['original_filename']}\". Delete it from the upload "
+                        f"history first if you want to re-import it."
+                    ),
+                )
+            # Same bytes as an upload made by the v1 parser: re-import it
+            # into that upload (the per-user unique hash index forbids a
+            # second row with this hash).
+            hash_match_v1 = existing
+            upload_id = existing['id']
+        else:
+            # Record the upload FIRST so it always appears in history — even
+            # when detection/parsing fails below, the row survives with
+            # status='failed'. If this insert fails, the whole upload fails
+            # loudly: transactions must never exist without a history row.
+            upload_id = await create_upload_record(
+                user_id, file.filename, file_type=None,
+                size_bytes=len(content), file_hash=file_hash, status='uploaded',
             )
+            created_upload = True
 
-        # Record the upload FIRST so it always appears in history — even when
-        # detection/parsing fails below, the row survives with status='failed'.
-        # If this insert fails, the whole upload fails loudly: transactions
-        # must never exist without a history row to manage them by.
-        upload_id = await create_upload_record(
-            user_id, file.filename, file_type=None,
-            size_bytes=len(content), file_hash=file_hash, status='uploaded',
-        )
-
-        # Save to a temporary location for the parsers (always cleaned up in finally)
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
-        # Validation 4: Content sniffing - detect format
         file_type = detect_source(tmp_path)
         if not file_type:
-            raise ValueError("Could not detect file source. Expected Alipay or WeChat format.")
+            raise ValueError(UNDETECTED_MESSAGE)
 
-        # Validation 5: Parse and check row count
         df = parse_with_src(tmp_path, file_type)
         if df is None or len(df) == 0:
             raise ValueError(f"Could not parse {file_type} file. Check format and encoding.")
@@ -130,32 +151,56 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         if len(df) > MAX_ROWS:
             raise ValueError(f"File exceeds {MAX_ROWS} rows limit ({len(df)} rows)")
 
-        # Normalize to common schema
         df_normalized = normalize_schema(df, file_type)
+        export_filter = detect_export_filter(tmp_path)
+
+        # Re-import over parser-v1 rows (steps 2-4 and 6 inside).
+        reimport = await reimport_v1_rows(
+            user_id, df_normalized, file_type,
+            hash_match_upload_id=hash_match_v1['id'] if hash_match_v1 else None,
+            skip_deletions=export_filter is not None,
+        )
+        if export_filter is not None:
+            logger.info(
+                "Upload %s is a filtered export (%s): re-import deletions skipped",
+                upload_id, export_filter,
+            )
+        df_remaining = df_normalized[~df_normalized.index.isin(reimport['matched_index'])]
 
         # Store the original file in the private 'uploads' bucket, under the
         # user's folder (first path segment = user_id, required by the
         # bucket's RLS policies and by account-deletion cleanup).
-        storage_path = await store_original(user_id, file.filename, content)
+        storage_path = None
+        if created_upload:
+            storage_path = await store_original(user_id, file.filename, content)
 
-        # Row-level dedup: skip transactions that already exist for this user
-        # (handles overlapping export date ranges, not just identical files).
-        df_new, skipped = await dedup_new_rows(user_id, df_normalized, file_type)
-
+        # Step 5: normal dedup + insert of unmatched rows.
+        df_new, skipped = await dedup_new_rows(user_id, df_remaining, file_type)
         if len(df_new) > 0:
             await insert_transactions(user_id, df_new, upload_id, file_type)
 
-        await finalize_upload_record(upload_id, file_type, storage_path, len(df_new))
+        if created_upload:
+            await finalize_upload_record(upload_id, file_type, storage_path, len(df_new))
+        else:
+            await refresh_upload_row_count(upload_id)
 
-        # Classify the new rows in the background (rules first, then the
-        # user's trained model if one exists) so the review queue fills up
-        # with suggestions without blocking the upload response.
+        # Step 6 (amended): flip touched v1 uploads to parser_version 2 only
+        # when this file's window covers their whole row range — and never
+        # from a filtered export: its step-4 deletions were skipped, so rows
+        # v1 wrongly kept (e.g. closed unpaid orders) would otherwise be
+        # frozen in place forever, since v2 uploads are never re-reconciled.
+        if export_filter is None:
+            await promote_covered_uploads(
+                user_id, reimport['touched_uploads'], reimport['t_min'], reimport['t_max'],
+            )
+
         schedule_classification(request, user_id)
+        schedule_fx_backfill(user_id, df_normalized['timestamp'].min())
 
-        message = f"Imported {len(df_new)} transactions"
-        if skipped:
-            message += f" ({skipped} duplicate{'s' if skipped != 1 else ''} skipped)"
-        message += ". Categorization is running."
+        rows_by_kind = {
+            kind: int((df_new['kind'] == kind).sum()) for kind in ('expense', 'income', 'transfer')
+        }
+        message = _upload_message(len(df_new), skipped, rows_by_kind, reimport)
 
         return {
             "upload_id": upload_id,
@@ -165,23 +210,53 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
             "message": message,
             "rows_imported": len(df_new),
             "rows_skipped": skipped,
+            "rows_updated": reimport['rows_updated'],
+            "rows_removed": reimport['rows_removed'],
+            "reimported": reimport['reimported'],
+            "rows_by_kind": rows_by_kind,
         }
 
     except ValueError as e:
-        # Validation failed - keep the history row, marked failed
         error_msg = str(e)
-        if upload_id:
+        # Only mark OUR new history row failed — never an earlier, successful
+        # upload that this file merely hash-matched.
+        if upload_id and created_upload:
             await update_upload_error(upload_id, error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
     except HTTPException:
         raise
     except Exception as e:
-        if upload_id:
+        if upload_id and created_upload:
             await update_upload_error(upload_id, "Upload failed due to an internal error")
         raise internal_error(e, "uploads/upload_file")
     finally:
         if tmp_path:
             Path(tmp_path).unlink(missing_ok=True)
+
+
+def _plural(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
+def _upload_message(imported: int, skipped: int, rows_by_kind: Dict[str, int], reimport: dict) -> str:
+    message = f"Imported {_plural(imported, 'transaction', 'transactions')}"
+    extras = []
+    if rows_by_kind.get('income'):
+        extras.append(f"{rows_by_kind['income']} income")
+    if rows_by_kind.get('transfer'):
+        extras.append(_plural(rows_by_kind['transfer'], 'transfer', 'transfers'))
+    if extras:
+        message += f" ({', '.join(extras)})"
+    if skipped:
+        message += f" ({_plural(skipped, 'duplicate', 'duplicates')} skipped)"
+    message += "."
+    if reimport['reimported']:
+        message += (
+            f" Updated {reimport['rows_updated']} and removed {reimport['rows_removed']} "
+            f"earlier transactions from this statement."
+        )
+    message += " Categorization is running."
+    return message
 
 
 def schedule_classification(request: Request, user_id: str) -> None:
@@ -203,6 +278,21 @@ def schedule_classification(request: Request, user_id: str) -> None:
     # so Reports/Review never call Google Translate on page load.
     from translations import request_translation
     request_translation(user_id)
+
+
+def schedule_fx_backfill(user_id: str, earliest) -> None:
+    """Ask the FX module to backfill rates from the earliest uploaded row's
+    date (contract §2 trigger 2). Imported lazily: uploads keep working if
+    the FX module is missing or broken; it is non-blocking by contract."""
+    try:
+        from fx import request_backfill_for_user
+    except ImportError:
+        return
+    try:
+        start = pd.Timestamp(earliest).date() if earliest is not None and not pd.isna(earliest) else None
+        request_backfill_for_user(user_id, start=start)
+    except Exception as e:
+        logger.warning("Could not schedule FX backfill for %s: %s", user_id, e)
 
 
 @router.get("/{upload_id}")
@@ -253,7 +343,6 @@ async def delete_upload(request: Request, upload_id: str):
     """
     user_id = request.state.user_id
     try:
-        # Verify the upload exists and belongs to the user
         upload_resp = await run_query(
             lambda: supabase_client.table("uploads").select("*").eq("id", upload_id).eq("user_id", user_id).execute()
         )
@@ -269,18 +358,15 @@ async def delete_upload(request: Request, upload_id: str):
             lambda: supabase_client.table("transactions").delete().eq("user_id", user_id).eq("upload_id", upload_id).execute()
         )
 
-        # Delete the upload record
         await run_query(
             lambda: supabase_client.table("uploads").delete().eq("id", upload_id).eq("user_id", user_id).execute()
         )
 
-        # Delete the original file from storage if it was stored
         if upload.get("storage_path"):
             try:
                 await run_in_threadpool(lambda: supabase_client.storage.from_("uploads").remove([upload["storage_path"]]))
             except Exception as e:
                 logger.warning("Failed to delete upload file from storage: %s", e)
-                # Don't fail the whole operation if storage deletion fails
 
         return {"success": True, "message": f"Deleted upload {upload_id} and all its transactions"}
 
@@ -292,81 +378,12 @@ async def delete_upload(request: Request, upload_id: str):
 
 # --- Helpers ---
 
-def _read_headers(file_path: str) -> list:
-    """Read just the column headers, using the reader that matches the file
-    format — pd.read_csv on an .xlsx file raises, which used to make Excel
-    uploads undetectable."""
-    if file_path.endswith('.xlsx'):
-        # WeChat Excel files may have metadata rows before the actual headers
-        # Read all sheets and look for transaction table headers
-        try:
-            # Try reading first sheet with no header, look for header row
-            df = pd.read_excel(file_path, header=None, nrows=50)
-            for idx, row in df.iterrows():
-                row_str = ' '.join(str(v) for v in row.dropna() if pd.notna(v))
-                if '交易时间' in row_str or 'Transaction Time' in row_str:
-                    return row.dropna().tolist()
-        except Exception:
-            pass
-
-        # Fallback: try reading with default header
-        try:
-            return pd.read_excel(file_path, nrows=0).columns.tolist()
-        except Exception:
-            return []
-
-    # Alipay/WeChat CSVs have metadata rows before the actual headers, and
-    # real exports are often GBK/GB18030-encoded rather than UTF-8. Scan raw
-    # lines (not pd.read_csv(header=None)) so a ragged preamble — a 1-field
-    # title line ahead of a 13-field header row — can never raise a
-    # ParserError; we only ever hand pandas a single already-matched line to
-    # split into fields. Same encoding fallback order as src/parse.py's
-    # _find_alipay_header/parse_generic_bank_csv, so a file that parses
-    # successfully later also detects successfully here.
-    for encoding in ('utf-8-sig', 'utf-8', 'gbk', 'gb18030'):
-        try:
-            with open(file_path, encoding=encoding) as f:
-                for i, line in enumerate(f):
-                    if i >= 50:
-                        break
-                    if ('交易时间' in line and ('收/支' in line or '交易类型' in line)) or 'Transaction Time' in line:
-                        return next(csv.reader([line]))
-        except UnicodeDecodeError:
-            continue
-
-    # Fallback: assume headers are in the first row, across the same encodings.
-    for encoding in ('utf-8-sig', 'utf-8', 'gbk', 'gb18030'):
-        try:
-            return pd.read_csv(file_path, nrows=0, encoding=encoding).columns.tolist()
-        except (UnicodeDecodeError, LookupError):
-            continue
-    return []
-
-
 def detect_source(file_path: str) -> Optional[str]:
-    """Detect if a file is an Alipay or WeChat export by its headers."""
-    try:
-        columns = _read_headers(file_path)
-        logger.info(f"Detected columns: {columns}")
-
-        # Alipay: has '交易时间' (Transaction Time), '交易对方' (Counterparty), etc.
-        # WeChat: has '交易类型' (Transaction Type), '当前状态' (Current Status), '金额(元)' (Amount CNY)
-        has_alipay_markers = any(c in columns for c in ['交易时间', '交易对方', 'Transaction Time', 'Transaction Counterparty'])
-        has_wechat_markers = any(c in columns for c in ['交易类型', '当前状态', '金额(元)'])
-
-        logger.info(f"Alipay markers: {has_alipay_markers}, WeChat markers: {has_wechat_markers}")
-
-        # WeChat markers are unique to WeChat exports, so check them first;
-        # Alipay markers alone (e.g. English-only Alipay headers with no
-        # WeChat-specific columns) are otherwise sufficient for 'alipay'.
-        if has_wechat_markers:
-            return 'wechat'
-        elif has_alipay_markers:
-            return 'alipay'
-        return None
-    except Exception as e:
-        logger.error(f"Error detecting source: {e}", exc_info=True)
-        return None
+    """'wechat' | 'alipay' | 'bank' | None (see src/parse.py
+    detect_statement_source for the marker rules and order)."""
+    source = detect_statement_source(file_path)
+    logger.info("Detected statement source: %s", source)
+    return source
 
 
 def parse_with_src(file_path: str, file_type: str) -> Optional[pd.DataFrame]:
@@ -374,10 +391,12 @@ def parse_with_src(file_path: str, file_type: str) -> Optional[pd.DataFrame]:
     try:
         if file_type == 'alipay':
             return parse_alipay(file_path)
-        elif file_type == 'wechat':
+        if file_type == 'wechat':
             if file_path.endswith('.xlsx'):
                 return parse_wechat_excel(file_path)
             return parse_wechat_csv(file_path)
+        if file_type == 'bank':
+            return parse_generic_bank_csv(file_path, source='bank')
         return None
     except Exception as e:
         logger.warning("Parse error (%s): %s", file_type, e)
@@ -386,10 +405,8 @@ def parse_with_src(file_path: str, file_type: str) -> Optional[pd.DataFrame]:
 
 def normalize_schema(df: pd.DataFrame, file_type: str = None) -> pd.DataFrame:
     """Normalize parsed df to the transactions table's common schema:
-    timestamp, merchant, description, amount (source/category_id/etc. are
-    added separately in insert_transactions, since they depend on upload
-    metadata, not the parsed file content).
-    """
+    timestamp, merchant, description, amount, kind, flow_subtype
+    (source/category_id/etc. are added in insert_transactions)."""
     df = df.copy()
 
     if 'timestamp' not in df.columns:
@@ -400,8 +417,13 @@ def normalize_schema(df: pd.DataFrame, file_type: str = None) -> pd.DataFrame:
     for col in ['merchant', 'description', 'amount']:
         if col not in df.columns:
             df[col] = ''
+    if 'kind' not in df.columns:
+        df['kind'] = 'expense'
+    if 'flow_subtype' not in df.columns:
+        df['flow_subtype'] = None
+    df['flow_subtype'] = df['flow_subtype'].astype(object).where(df['flow_subtype'].notna(), None)
 
-    return df[['timestamp', 'merchant', 'description', 'amount']]
+    return df[['timestamp', 'merchant', 'description', 'amount', 'kind', 'flow_subtype']].reset_index(drop=True)
 
 
 async def store_original(user_id: str, file_name: str, content: bytes) -> Optional[str]:
@@ -422,10 +444,10 @@ async def store_original(user_id: str, file_name: str, content: bytes) -> Option
 
 
 async def create_upload_record(user_id: str, file_name: str, file_type: Optional[str],
-                         storage_path: Optional[str] = None, size_bytes: int = 0,
-                         row_count: int = 0, file_hash: str = None,
-                         status: str = 'uploaded') -> str:
-    """Create an uploads table entry.
+                               storage_path: Optional[str] = None, size_bytes: int = 0,
+                               row_count: int = 0, file_hash: str = None,
+                               status: str = 'uploaded') -> str:
+    """Create an uploads table entry (parser_version = 2).
 
     Fails LOUDLY on any error: an upload without a history row is unmanageable
     (the user can't see or delete it), so a broken insert must abort the whole
@@ -441,6 +463,7 @@ async def create_upload_record(user_id: str, file_name: str, file_type: Optional
             "status": status,
             "row_count": row_count,
             "file_hash": file_hash,
+            "parser_version": PARSER_VERSION,
         }).execute()
     )
     if not response.data:
@@ -449,7 +472,7 @@ async def create_upload_record(user_id: str, file_name: str, file_type: Optional
 
 
 async def finalize_upload_record(upload_id: str, file_type: str,
-                           storage_path: Optional[str], row_count: int) -> None:
+                                 storage_path: Optional[str], row_count: int) -> None:
     """Mark an upload as successfully parsed and fill in detected metadata."""
     await run_query(
         lambda: supabase_client.table("uploads").update({
@@ -458,6 +481,17 @@ async def finalize_upload_record(upload_id: str, file_type: str,
             "storage_path": storage_path,
             "row_count": row_count,
         }).eq("id", upload_id).execute()
+    )
+
+
+async def refresh_upload_row_count(upload_id: str) -> None:
+    """Re-import into an existing upload: row_count = its current row count."""
+    resp = await run_query(
+        lambda: supabase_client.table("transactions").select("id", count="exact").eq("upload_id", upload_id).execute()
+    )
+    count = resp.count if resp.count is not None else len(resp.data or [])
+    await run_query(
+        lambda: supabase_client.table("uploads").update({"row_count": count}).eq("id", upload_id).execute()
     )
 
 
@@ -479,18 +513,201 @@ async def update_upload_error(upload_id: str, error_msg: str) -> None:
         logger.warning("Error updating upload record: %s", e)
 
 
+def _norm_ts(ts) -> str:
+    """Naive wall-clock ISO string, comparable between parsed rows and
+    timestamptz strings read back from Postgres."""
+    return pd.to_datetime(ts, utc=True).tz_convert(None).isoformat(timespec='seconds')
+
+
 def _dedup_key(ts, merchant, description, amount, source) -> tuple:
     """Normalized identity of a transaction row, comparable between a parsed
     file (naive timestamps) and rows read back from Postgres (UTC-suffixed
     timestamptz strings)."""
-    ts = pd.to_datetime(ts, utc=True).tz_convert(None).isoformat(timespec='seconds')
     return (
-        ts,
+        _norm_ts(ts),
         str(merchant or '').strip(),
         str(description or '').strip(),
         f"{float(amount):.2f}",
         source,
     )
+
+
+def _content_key(ts, merchant, description) -> tuple:
+    """Re-import key: (timestamp, merchant, description), amount ignored."""
+    return (_norm_ts(ts), str(merchant or '').strip(), str(description or '').strip())
+
+
+def _parser_version(row: dict) -> int:
+    """Rows written before the parser_version column existed read as 1 (the
+    column default)."""
+    v = row.get('parser_version')
+    return int(v) if v is not None else 1
+
+
+def _window(df: pd.DataFrame):
+    t_min = pd.to_datetime(df['timestamp'].min(), utc=True).tz_convert(None)
+    t_max = pd.to_datetime(df['timestamp'].max(), utc=True).tz_convert(None)
+    return t_min, t_max
+
+
+def _chunks(items: list, size: int = 200):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+async def reimport_v1_rows(user_id: str, df: pd.DataFrame, file_type: str,
+                           hash_match_upload_id: Optional[str] = None,
+                           skip_deletions: bool = False) -> dict:
+    """Contract §3.9 re-import, steps 2-4.
+
+    Returns {reimported, rows_updated, rows_removed, matched_index (df index
+    labels consumed in step 3, not to be inserted), touched_uploads, t_min,
+    t_max}. Step 5 (insert) and step 6 (parser_version) are done by the
+    caller.
+    """
+    from db import fetch_all_async
+
+    t_min, t_max = _window(df)
+    result = {
+        'reimported': hash_match_upload_id is not None,
+        'rows_updated': 0, 'rows_removed': 0,
+        'matched_index': set(), 'touched_uploads': set(),
+        't_min': t_min, 't_max': t_max,
+    }
+    if hash_match_upload_id is not None:
+        result['touched_uploads'].add(hash_match_upload_id)
+
+    uploads_resp = await run_query(
+        lambda: supabase_client.table("uploads")
+        .select("id, parser_version, status, file_type")
+        .eq("user_id", user_id)
+        .neq("status", "failed")
+        .execute()
+    )
+    v1_ids = {
+        u['id'] for u in (uploads_resp.data or [])
+        if _parser_version(u) == 1 and (u.get('file_type') == file_type or u['id'] == hash_match_upload_id)
+    }
+    if not v1_ids:
+        return result
+
+    # Step 2: v1 rows in [t_min, t_max], same user + source, v1 upload.
+    window_rows = await fetch_all_async(
+        lambda: supabase_client.table("transactions")
+        .select("id, timestamp, merchant, description, amount, kind, flow_subtype, upload_id, is_split")
+        .eq("user_id", user_id)
+        .eq("source", file_type)
+        .gte("timestamp", t_min.isoformat())
+        .lte("timestamp", t_max.isoformat())
+    )
+    v1_rows = [r for r in window_rows if r.get('upload_id') in v1_ids]
+    if not v1_rows:
+        return result
+    result['reimported'] = True
+
+    v1_rows.sort(key=lambda r: (_norm_ts(r['timestamp']), str(r['id'])))
+    index: Dict[tuple, List[dict]] = {}
+    for r in v1_rows:
+        index.setdefault(_content_key(r['timestamp'], r['merchant'], r['description']), []).append(r)
+
+    # Step 3: match in file order. Group identical updates into one request.
+    updates: Dict[tuple, List[str]] = {}
+    unsplit_ids: List[str] = []
+    consumed = set()
+    for idx, row in df.iterrows():
+        bucket = index.get(_content_key(row['timestamp'], row['merchant'], row['description']))
+        if not bucket:
+            continue
+        stored = bucket.pop(0)
+        consumed.add(stored['id'])
+        result['matched_index'].add(idx)
+        result['touched_uploads'].add(stored['upload_id'])
+
+        new_amount = round(float(row['amount']), 2)
+        amount_differs = f"{float(stored['amount']):.2f}" != f"{new_amount:.2f}"
+        stored_kind = stored.get('kind') or 'expense'
+        if row['kind'] == 'expense':
+            if not amount_differs:
+                continue
+            payload = {'amount': new_amount}
+            if stored_kind == 'expense':
+                payload['flow_subtype'] = 'refund' if new_amount < 0 else None
+        else:
+            if (not amount_differs and stored_kind == row['kind']
+                    and stored.get('flow_subtype') == row['flow_subtype']):
+                continue
+            payload = {
+                'kind': row['kind'], 'flow_subtype': row['flow_subtype'], 'amount': new_amount,
+                'is_split': False, **NON_EXPENSE_DEFAULTS,
+            }
+            if stored.get('is_split'):
+                unsplit_ids.append(stored['id'])
+        updates.setdefault(tuple(sorted(payload.items())), []).append(stored['id'])
+        result['rows_updated'] += 1
+
+    for ids in _chunks(unsplit_ids):
+        await run_query(
+            lambda ids=ids: supabase_client.table("transaction_splits")
+            .delete().eq("user_id", user_id).in_("transaction_id", ids).execute()
+        )
+    for payload_items, ids in updates.items():
+        payload = dict(payload_items)
+        for chunk in _chunks(ids):
+            await run_query(
+                lambda chunk=chunk, payload=payload: supabase_client.table("transactions")
+                .update(payload).eq("user_id", user_id).in_("id", chunk).execute()
+            )
+
+    # Step 4: unconsumed v1 expense rows in the window have no counterpart in
+    # the new statement (e.g. a closed, unpaid order v1 wrongly kept).
+    to_delete = [
+        r for r in v1_rows
+        if r['id'] not in consumed and (r.get('kind') or 'expense') == 'expense'
+    ]
+    if to_delete and skip_deletions:
+        logger.info(
+            "Re-import for %s: filtered export, keeping %d unmatched v1 row(s)",
+            user_id, len(to_delete),
+        )
+    elif to_delete:
+        for chunk in _chunks([r['id'] for r in to_delete]):
+            await run_query(
+                lambda chunk=chunk: supabase_client.table("transactions")
+                .delete().eq("user_id", user_id).in_("id", chunk).execute()
+            )
+        result['rows_removed'] = len(to_delete)
+        result['touched_uploads'].update(r['upload_id'] for r in to_delete)
+
+    return result
+
+
+async def promote_covered_uploads(user_id: str, upload_ids: set, t_min, t_max) -> None:
+    """Step 6, as amended: set parser_version = 2 on a touched v1 upload only
+    when [t_min, t_max] covers that upload's ENTIRE row timestamp range.
+    Partially covered uploads stay at 1; re-processing their already
+    reconciled rows on a later upload is harmless (identical matches are
+    no-ops)."""
+    lo, hi = _norm_ts(t_min), _norm_ts(t_max)
+    for upload_id in upload_ids:
+        first = await run_query(
+            lambda: supabase_client.table("transactions").select("timestamp")
+            .eq("user_id", user_id).eq("upload_id", upload_id)
+            .order("timestamp").limit(1).execute()
+        )
+        last = await run_query(
+            lambda: supabase_client.table("transactions").select("timestamp")
+            .eq("user_id", user_id).eq("upload_id", upload_id)
+            .order("timestamp", desc=True).limit(1).execute()
+        )
+        if first.data and last.data:
+            row_min, row_max = _norm_ts(first.data[0]['timestamp']), _norm_ts(last.data[0]['timestamp'])
+            if row_min < lo or row_max > hi:
+                logger.info("Upload %s only partially covered; stays parser_version 1", upload_id)
+                continue
+        await run_query(
+            lambda: supabase_client.table("uploads").update({"parser_version": PARSER_VERSION})
+            .eq("id", upload_id).eq("user_id", user_id).execute()
+        )
 
 
 async def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
@@ -504,13 +721,15 @@ async def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
     """
     from db import fetch_all_async
 
+    if len(df) == 0:
+        return df, 0
+
     keys = [
         _dedup_key(row.timestamp, row.merchant, row.description, row.amount, file_type)
         for row in df.itertuples()
     ]
 
-    t_min = pd.to_datetime(df['timestamp'].min(), utc=True).tz_convert(None)
-    t_max = pd.to_datetime(df['timestamp'].max(), utc=True).tz_convert(None)
+    t_min, t_max = _window(df)
     existing = await fetch_all_async(
         lambda: supabase_client.table("transactions")
         .select("timestamp, merchant, description, amount, source")
@@ -539,20 +758,35 @@ INSERT_CHUNK = 500  # rows per insert request (keeps request bodies small)
 async def insert_transactions(user_id: str, df: pd.DataFrame, upload_id: str, file_type: str):
     """Insert normalized transactions into transactions table.
 
-    file_type ('alipay'/'wechat') maps directly to the transaction_source
-    enum. category_id starts null and needs_review=True; the background
-    classification pass fills in rule matches and model suggestions.
+    file_type ('alipay'/'wechat'/'bank') maps directly to the
+    transaction_source enum. Expense rows start with category_id null and
+    needs_review=True; the background classification pass fills in rule
+    matches and model suggestions. Income/transfer rows are never classified:
+    category_id NULL, needs_review=false, label_source='none', confidence
+    NULL (contract §1.1).
     """
-    df = df.copy()
-    df['timestamp'] = df['timestamp'].apply(lambda ts: ts.isoformat())
-    df['user_id'] = user_id
-    df['upload_id'] = upload_id
-    df['source'] = file_type
-    df['label_source'] = 'none'
-    df['needs_review'] = True
-    df['is_manually_labeled'] = False
+    rows = []
+    for rec in df.to_dict('records'):
+        kind = rec.get('kind') or 'expense'
+        subtype = rec.get('flow_subtype')
+        row = {
+            'timestamp': pd.Timestamp(rec['timestamp']).isoformat(),
+            'merchant': rec['merchant'],
+            'description': rec['description'],
+            'amount': round(float(rec['amount']), 2),
+            'user_id': user_id,
+            'upload_id': upload_id,
+            'source': file_type,
+            'kind': kind,
+            'flow_subtype': None if subtype is None or (isinstance(subtype, float) and pd.isna(subtype)) else subtype,
+            'label_source': 'none',
+            'needs_review': kind == 'expense',
+            'is_manually_labeled': False,
+        }
+        if kind != 'expense':
+            row.update(NON_EXPENSE_DEFAULTS)
+        rows.append(row)
 
-    rows = df.to_dict('records')
     for i in range(0, len(rows), INSERT_CHUNK):
         chunk = rows[i:i + INSERT_CHUNK]
         await run_query(lambda chunk=chunk: supabase_client.table("transactions").insert(chunk).execute())
@@ -566,12 +800,12 @@ def calculate_file_hash(content: bytes) -> str:
 async def check_duplicate_upload(user_id: str, file_hash: str) -> Optional[dict]:
     """Check if a file with this hash was already uploaded by the user.
 
-    Returns the existing upload record if found, None otherwise.
+    Returns the existing upload record (incl. parser_version) if found.
     """
     try:
         response = await run_query(
             lambda: supabase_client.table("uploads")
-            .select("id, created_at, original_filename, file_hash")
+            .select("id, created_at, original_filename, file_hash, file_type, parser_version")
             .eq("user_id", user_id)
             .eq("file_hash", file_hash)
             .neq("status", "failed")

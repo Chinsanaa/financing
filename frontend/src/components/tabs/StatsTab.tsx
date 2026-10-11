@@ -7,19 +7,22 @@ import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis
 import { ArrowRight, FileSpreadsheet, ListTodo, Upload } from 'lucide-react';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
-import StatTile, { DeltaChip, FactRow } from '@/components/ui/StatTile';
+import StatTile, { DeltaChip, FactRow, HomeLine } from '@/components/ui/StatTile';
+import Stamp from '@/components/ui/Stamp';
+import CashFlowCard from './CashFlowCard';
+import { api } from '@/utils/api';
+import type { BudgetResponse, SummaryResponse, TrendsResponse } from '@/types/v5';
 import RollingNumber from '@/components/ui/RollingNumber';
 import Skeleton from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import { formatCurrency, formatCurrencyWhole, formatMonthLong, formatMonthShort, formatNumber } from '@/utils/format';
 
-interface Summary {
-  total_transactions: number;
-  labeled_transactions: number;
-  labeling_percentage: number;
-  total_spend: number;
-  monthly_income: number;
-}
+/** v5 summary; the v5 fields are optional so an older backend still renders. */
+type Summary = Pick<
+  SummaryResponse,
+  'total_transactions' | 'labeled_transactions' | 'labeling_percentage' | 'total_spend' | 'monthly_income'
+> &
+  Partial<Omit<SummaryResponse, 'total_transactions' | 'labeled_transactions' | 'labeling_percentage' | 'total_spend' | 'monthly_income'>>;
 
 interface Category {
   category: string;
@@ -33,6 +36,16 @@ interface Category {
 interface Trend {
   date: string;
   total_spend: number;
+  total_spend_home?: number | null;
+}
+
+/** "2026-09" -> "2026-08". */
+function previousMonth(ym: string): string | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`;
 }
 
 /** Neutral paint for the folded tail bucket. */
@@ -58,7 +71,13 @@ export default function StatsTab({
 } = {}) {
   const summaryQ = useApi<Summary>('/dashboard/summary');
   const categoryQ = useApi<{ categories: Category[] }>('/dashboard/by-category');
-  const trendsQ = useApi<{ trends: Trend[] }>('/dashboard/trends?granularity=month&months=12');
+  const trendsQ = useApi<{ trends: Trend[]; currency_home?: TrendsResponse['currency_home'] }>(
+    '/dashboard/trends?granularity=month&months=12'
+  );
+  // "Under budget" stamp: the most recent CLOSED month = the month before the
+  // current China-time month from the summary (never the current month).
+  const closedMonth = summaryQ.data?.month ? previousMonth(summaryQ.data.month) : null;
+  const closedBudgetQ = useApi<BudgetResponse>(closedMonth ? api.paths.budget(closedMonth) : null);
   // Category identity colors (user-chosen, hash fallback) — shared site-wide.
   const { chartColorFor } = useCategoryColors();
   // Stacked bar ↔ ledger rows hover sync.
@@ -110,7 +129,29 @@ export default function StatsTab({
       ? ((latest.total_spend - previous.total_spend) / previous.total_spend) * 100
       : null;
   const average = trends.length > 0 ? trends.reduce((s, t) => s + t.total_spend, 0) / trends.length : 0;
-  const leftOver = summary && latest && summary.monthly_income > 0 ? summary.monthly_income - latest.total_spend : null;
+
+  // Home currency (v5): null/absent → no "≈" lines anywhere.
+  const homeInfo = summary?.home ?? null;
+  const homeCurrency = homeInfo?.currency ?? trendsQ.data?.currency_home ?? null;
+  const homeOf = (amount: number | null | undefined, approx?: boolean) =>
+    homeCurrency
+      ? { amount: amount ?? null, currency: homeCurrency, rate: homeInfo?.rate, rateDate: homeInfo?.rate_asof, approx }
+      : null;
+
+  // Income lives in the Cash flow section ("Money in"), not in the fact row.
+
+  // Under-budget rule: the closed month's budgeted
+  // spend (total_spent) ≤ its total budget, the budget is > 0, and the month has
+  // transactions. Spend is only budgeted categories — the same numbers BudgetTab shows.
+  const closed = closedBudgetQ.data;
+  const closedBudget =
+    closed && closedMonth && closed.month === closedMonth && (closed.available_months || []).includes(closedMonth)
+      ? (() => {
+          const total = closed.total_budget ?? closed.category_budgets.reduce((s, b) => s + b.monthly_budget, 0);
+          const spent = closed.total_spent ?? closed.category_budgets.reduce((s, b) => s + b.current_spend, 0);
+          return total > 0 ? { month: closedMonth, total, spent, under: spent <= total } : null;
+        })()
+      : null;
 
   const isNewUser = !!summary && summary.total_transactions === 0;
 
@@ -145,9 +186,36 @@ export default function StatsTab({
               <h1 className="num mt-1 text-6xl font-normal leading-none tracking-[-0.02em] sm:text-7xl lg:text-8xl">
                 <RollingNumber value={latest.total_spend} currency />
               </h1>
+              <HomeLine
+                home={homeOf(
+                  latest.total_spend_home ??
+                    (summary?.month === latest.date && homeInfo ? homeInfo.month_spend_home : null)
+                )}
+                className="mt-2 text-xl"
+              />
               {deltaPct !== null && previous && (
                 <p className="mt-3 flex items-center gap-2 text-[13px] text-muted">
                   <DeltaChip pct={deltaPct} goodWhenDown /> vs {formatMonthLong(previous.date)}
+                </p>
+              )}
+              {closedBudget && (
+                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
+                  <span>
+                    {formatMonthLong(closedBudget.month)}:{' '}
+                    <span className="num text-ink">{formatCurrencyWhole(closedBudget.spent)}</span> of{' '}
+                    <span className="num text-ink">{formatCurrencyWhole(closedBudget.total)}</span> budgeted
+                    {!closedBudget.under && (
+                      <>
+                        {' · '}
+                        <span className="text-danger">
+                          {formatCurrencyWhole(closedBudget.spent - closedBudget.total)} over budget
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  {closedBudget.under && (
+                    <Stamp label="Under budget" size="sm" once={`overview-${closedBudget.month}`} />
+                  )}
                 </p>
               )}
             </>
@@ -171,18 +239,7 @@ export default function StatsTab({
       {/* ── Facts: one ruled row, not four boxes ─────────────────── */}
       {summary && (
         <FactRow>
-          <StatTile label="Monthly income" value={summary.monthly_income} currency footer="From your settings" />
-          {leftOver !== null ? (
-            <StatTile
-              label={`Left over in ${latest ? formatMonthShort(latest.date) : 'the month'}`}
-              value={leftOver}
-              currency
-              tone={leftOver < 0 ? 'danger' : undefined}
-              footer={leftOver < 0 ? 'Spent more than income' : 'Income minus spending'}
-            />
-          ) : (
-            <StatTile label="Transactions" value={summary.total_transactions} footer="Imported so far" />
-          )}
+          <StatTile label="Transactions" value={summary.total_transactions} footer="Imported so far" />
           <StatTile
             label="Labeled"
             value={summary.labeling_percentage}
@@ -196,7 +253,13 @@ export default function StatsTab({
               </span>
             }
           />
-          <StatTile label="All imported spending" value={summary.total_spend} currency footer="Every month so far" />
+          <StatTile
+            label="All imported spending"
+            value={summary.total_spend}
+            currency
+            home={homeOf(homeInfo?.total_spend_home, homeInfo?.approx)}
+            footer="Every month so far"
+          />
         </FactRow>
       )}
 
@@ -317,6 +380,9 @@ export default function StatsTab({
           )}
         </section>
       </div>
+
+      {/* ── Cash flow: in / out / net + twelve paired months ──────── */}
+      <CashFlowCard summary={(summary as SummaryResponse) ?? null} onNavigate={onNavigate} />
     </div>
   );
 }

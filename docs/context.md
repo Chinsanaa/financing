@@ -4817,3 +4817,84 @@ impeccable flags warm cream as an AI-reflex surface.
 
 **Next:** user reviews the Vercel preview of PR #64 (light + dark, phone);
 decide the paper question; then merge.
+
+### Session 75 (2026-10-11): Ledger v5 — competitor audit, redesign polish, features for foreigners in China
+
+**Asked:** compare us with Copilot, Monarch, Empower, YNAB, The Budgeting App,
+Expensify and others; list our weak points and fix them; cater to foreigners
+in China; make the "boring" landing page and "bland" footer compelling;
+grey-green ledger paper; a rounder, friendlier font that makes ¥ look good;
+more stamps (not overdone); a palette suited to the new paper; WeChat/Alipay
+icons; parallel agents on disjoint files with Audit, Design and Backend
+managers approving their work.
+
+**Key finding:** no product (Western or Chinese) offers Alipay/WeChat import
+with an English UI and translated merchants. That is our niche.
+Full audit: `docs/audits/COMPETITOR_AUDIT_2026-10.md` (W-01…W-14);
+verification: `docs/audits/VERIFICATION_2026-10.md`.
+
+**Decisions (user):**
+- Grey-green paper (light `#e8ece4`, dark `#121814`).
+- Fraunces with SOFT 100 / WONK 0 for headings and **all money figures**;
+  proportional figures accepted (Fraunces has no tabular figures, and the
+  body font's tabular figures spaced "¥12 , 480" badly).
+- Stamps only at: upload "Imported" (latest row), Overview "Under budget"
+  (closed month, once), landing demo "Sorted", 404 "Void", one in the auth
+  panel, plus Label accept and "Trained"; never two on screen.
+- The 12 palette keys stay (no DB change); the hexes are retuned and validated.
+- Official logos, small, with a not-affiliated disclaimer. The full Alipay
+  logo including 支 is approved as an image exception.
+- Features: home currency, cash flow (income/transfers), painless import.
+- Parser fixes:
+  - partial refunds negate only the refunded amount;
+  - WeChat 朋友已收钱 ("friend received the money") counts as an outgoing
+    transfer;
+  - Alipay 交易关闭 ("closed") is ignored only when unpaid.
+- **Paying your share into a friend's group collection (AA) counts as
+  spending**; receiving AA shares and red packets are transfers.
+
+**Built (merged on `claude/new-user-signup-issue-egambj`):**
+- **D0** tokens/fonts/palette/logos/Stamp(size, once)/design gate.
+- **C0** contract `docs/contracts/API_V5.md` + types + MoneyPair.
+- **B1** transaction kinds, expense-only SQL functions, cash-flow endpoint,
+  home amounts, PATCH kind.
+- **B2** parser v2 (kinds, 3 fixes, WeChat CSV parity), bank CSV/XLSX,
+  content-based re-import of v1 uploads.
+- **B3** FX cache (Frankfurter/ECB, background-only), home currency setting,
+  `/fx/currencies`.
+- **D1** landing page: interactive sample statement, formats strip, currency
+  demo, cash-flow teaser, privacy and how-we-make-money, FAQ.
+- **D2** rich footer with disclaimer, Void 404, one-stamp auth panel,
+  privacy/terms updates including the Groq disclosure.
+- **D3** `/guide` export guide, upload badges, kind breakdown.
+- **D4** Overview cash-flow card, home lines, Under budget.
+- **D5** Reports kind filter and Change type, Settings home currency.
+
+**Integration fixes after review:**
+- Tests stopped stubbing the fx thread spawner, which broke real-thread FX tests.
+- `classify` writes are guarded by `kind`.
+- Filtered exports never mark a v1 upload as reconciled.
+- Bank sign detection: anchor rows (salary, interest, card payment) decide
+  which sign is money in, then the majority sign.
+- The WeChat header check is tighter.
+- Money-market moves are checked before withdrawals.
+
+**Verified:**
+- backend 258 tests, root 150 tests;
+- `tsc`, `next build`, `scripts/design_gate.sh`;
+- managers' combined builds and screenshot reviews (light/dark, desktop/phone);
+- B1's migrations applied to a throwaway Postgres.
+
+**Not yet done / open:**
+- Apply the 5 migrations to the live DB. Needs user approval; capture spend
+  aggregates before and after and confirm they are identical.
+- Deploy (Render, then Vercel).
+- Check Frankfurter is reachable from Render.
+- Fill the privacy/terms placeholders: hosting region, support email,
+  jurisdiction.
+- Real-device check.
+- Not in this round (W-14): monthly recap email; remittance/tax/fapiao ideas
+  are in the audit's opportunities list.
+
+**Next:** user approves the live migrations, then deploy, then upload a real
+statement to see income and transfers and the ≈ home amounts.

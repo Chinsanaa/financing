@@ -143,8 +143,8 @@ def test_realistic_gb18030_preamble_is_detected(client, patch_jwks, make_token, 
     lines = [
         "------------------------------------------------------------------------------------",
         "导出信息：",
-        "姓名：CHULUUNBOLD CHINSANAA",
-        "支付宝账户：chinsanaa0202@gmail.com",
+        "姓名：TEST USER",  # 姓名 = name (fabricated)
+        "支付宝账户：test_user@example.com",  # 支付宝账户 = Alipay account (fabricated)
         "起始时间：[2025-08-23 00:00:00]    终止时间：[2026-05-17 23:59:59]",
         "导出交易类型：[全部]",
         "导出时间：[2026-05-27 18:22:56]",

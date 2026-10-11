@@ -1,6 +1,23 @@
 import axios from 'axios';
 import { createClient } from './supabase';
 import { clearApiCache } from './apiCache';
+import type {
+  BudgetResponse,
+  CashflowResponse,
+  CurrencyCode,
+  FxCurrenciesResponse,
+  ProfileResponse,
+  ProfileUpdate,
+  ReportsQuery,
+  ReportsResponse,
+  SummaryResponse,
+  TransactionKindResponse,
+  TransactionKindUpdate,
+  TrendsResponse,
+  UploadRecord,
+  UploadResult,
+  UploadsListResponse,
+} from '@/types/v5';
 
 /**
  * Single axios client for the FastAPI backend.
@@ -129,4 +146,66 @@ export const api = {
     confirm: (id: string) => apiClient.post(`/subscriptions/${id}/confirm`, {}),
     dismiss: (id: string) => apiClient.post(`/subscriptions/${id}/dismiss`, {}),
   },
+
+  // ── v5 typed helpers (docs/contracts/API_V5.md) ──────────────────────────
+  // Additive only: the untyped helpers above keep working unchanged.
+
+  /** Typed v5 upload (response adds `reimported`, `rows_by_kind`). */
+  uploadsV5: {
+    upload: (file: File, opts?: { onUploadProgress?: (e: any) => void }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return apiClient.post<UploadResult>('/uploads/', formData, opts);
+    },
+    list: () => apiClient.get<UploadsListResponse>('/uploads/'),
+    getStatus: (uploadId: string) => apiClient.get<UploadRecord>(`/uploads/${uploadId}`),
+  },
+
+  dashboard: {
+    summary: () => apiClient.get<SummaryResponse>('/dashboard/summary'),
+    trends: (params: { granularity?: 'day' | 'month'; days?: number; months?: number } = {}) =>
+      apiClient.get<TrendsResponse>(`/dashboard/trends${qs(params)}`),
+    cashflow: (months = 12) => apiClient.get<CashflowResponse>(`/dashboard/cashflow${qs({ months })}`),
+    budget: (month?: string) => apiClient.get<BudgetResponse>(`/dashboard/budget${qs({ month })}`),
+    reports: (query: ReportsQuery = {}) => apiClient.get<ReportsResponse>(`/dashboard/reports${qs(query)}`),
+  },
+
+  /** Path builders for useApi() (shares its cache/invalidation). */
+  paths: {
+    summary: '/dashboard/summary',
+    cashflow: (months = 12) => `/dashboard/cashflow${qs({ months })}`,
+    trends: (params: { granularity?: 'day' | 'month'; days?: number; months?: number } = {}) =>
+      `/dashboard/trends${qs(params)}`,
+    budget: (month?: string) => (month ? `/dashboard/budget${qs({ month })}` : '/dashboard/budget'),
+    reports: (query: ReportsQuery = {}) => `/dashboard/reports${qs(query)}`,
+    fxCurrencies: '/fx/currencies',
+    profile: '/settings/profile',
+  },
+
+  fx: {
+    currencies: () => apiClient.get<FxCurrenciesResponse>('/fx/currencies'),
+  },
+
+  settings: {
+    getProfile: () => apiClient.get<ProfileResponse>('/settings/profile'),
+    updateProfile: (data: ProfileUpdate) => apiClient.patch<ProfileResponse>('/settings/profile', data),
+    setHomeCurrency: (code: CurrencyCode | null) =>
+      apiClient.patch<ProfileResponse>('/settings/profile', { home_currency: code } satisfies ProfileUpdate),
+  },
+
+  transactionKind: {
+    update: (transactionId: string, data: TransactionKindUpdate) =>
+      apiClient.patch<TransactionKindResponse>(`/transactions/${transactionId}/kind`, data),
+  },
 };
+
+/** Query string from defined, non-empty params ("" when none). */
+function qs(params: object): string {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === '' || v === false) continue;
+    sp.set(k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+}

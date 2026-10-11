@@ -87,3 +87,46 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${formatDate(d)} ${hh}:${mm}`;
 }
+
+// ── Home currency (v5) ──────────────────────────────────────────────────────
+// CNY helpers above are untouched. Home-currency amounts use Intl's currency
+// formatting so every ISO code gets its own symbol and minor units (JPY, KRW,
+// ISK have none). en-US symbols disambiguate dollars ($, A$, CA$, HK$).
+
+const homeFormatters = new Map<string, Intl.NumberFormat | null>();
+
+function homeFormatter(currency: string, decimals?: number): Intl.NumberFormat | null {
+  const key = `${currency}|${decimals ?? ''}`;
+  if (!homeFormatters.has(key)) {
+    let fmt: Intl.NumberFormat | null = null;
+    try {
+      fmt = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency,
+        ...(decimals === undefined ? {} : { minimumFractionDigits: decimals, maximumFractionDigits: decimals }),
+      });
+    } catch {
+      fmt = null; // not a valid ISO 4217 code
+    }
+    homeFormatters.set(key, fmt);
+  }
+  return homeFormatters.get(key) ?? null;
+}
+
+/**
+ * Format an amount in the user's home currency, symbol-forward, minus before
+ * the symbol: formatHomeCurrency(-1110.5, 'USD') → "-$1,110.50".
+ * `decimals` defaults to the currency's own minor units. JPY renders as
+ * "JP¥" so it can't be mistaken for the app's CNY "¥". An invalid code
+ * falls back to "1,110.50 XYZ" instead of throwing.
+ */
+export function formatHomeCurrency(value: number, currency: string, decimals?: number): string {
+  const n = Number.isFinite(value) ? value : 0;
+  const code = (currency || '').toUpperCase();
+  const fmt = homeFormatter(code, decimals);
+  if (!fmt) return `${formatNumber(n, decimals ?? 2)} ${code}`.trim();
+  return fmt
+    .formatToParts(n)
+    .map((p) => (p.type === 'currency' && p.value === CURRENCY_SYMBOL && code !== 'CNY' ? `${code.slice(0, 2)}${p.value}` : p.value))
+    .join('');
+}

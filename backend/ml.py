@@ -291,6 +291,9 @@ def _classify_user_transactions(user_id: str) -> int:
         lambda: supabase_client.table("transactions")
         .select("id, timestamp, merchant, description, amount")
         .eq("user_id", user_id)
+        # Only expenses are ever categorized. Non-expense rows are stored
+        # with needs_review=false, so this is belt-and-braces.
+        .eq("kind", "expense")
         .eq("needs_review", True)
         .eq("is_manually_labeled", False)
     )
@@ -359,7 +362,9 @@ def _classify_user_transactions(user_id: str) -> int:
             continue
 
         try:
-            supabase_client.table("transactions").update(update).eq("id", row["id"]).eq("user_id", user_id).execute()
+            # kind filter: a row re-kinded to income/transfer while this pass
+            # ran must not get a category written back onto it.
+            supabase_client.table("transactions").update(update).eq("id", row["id"]).eq("user_id", user_id).eq("kind", "expense").execute()
             updated += 1
         except Exception as e:
             logger.warning("Failed to update transaction %s: %s", row["id"], e)

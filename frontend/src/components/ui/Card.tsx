@@ -7,25 +7,23 @@ import { HTMLAttributes, ReactNode } from 'react';
  * sections are separated by hairline rules and whitespace (`variant="plain"`).
  * - `sheet` (default): one flat surface color + a hairline border.
  * - `plain`: no box at all — layout wrapper with a top hairline rule.
- * - `raised` (or legacy `glass`): sheet + soft neutral shadow, for things
+ * - `raised`: sheet + soft neutral shadow, for things
  *   that genuinely float (popovers, the label card).
  * `hover` only darkens the border — never a transform lift (transforms trap
  * popovers under later siblings; see DESIGN_SYSTEM.md stacking gotchas).
  */
 export default function Card({
   variant = 'sheet',
-  glass = false,
   hover = false,
   children,
   className = '',
   ...rest
 }: HTMLAttributes<HTMLDivElement> & {
   variant?: 'sheet' | 'plain' | 'raised';
-  glass?: boolean;
   hover?: boolean;
   children: ReactNode;
 }) {
-  const v = glass ? 'raised' : variant;
+  const v = variant;
   const base =
     v === 'plain'
       ? 'border-t border-edge/12'

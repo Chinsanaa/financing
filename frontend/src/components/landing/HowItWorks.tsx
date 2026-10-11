@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m, useInView } from 'framer-motion';
-import { categoryColor } from '@/components/ui/Badge';
+import { SAMPLE_COLOR } from './sampleStatement';
 
 /**
  * Sticky scroll story (layout idea from Aceternity's sticky-scroll-reveal,
@@ -15,22 +15,25 @@ function UploadSheet() {
   return (
     <div className="text-sm">
       {[
-        ['alipay_record_202609.csv', 'Alipay', 214],
-        ['wechat_bill_202609.xlsx', 'WeChat Pay', 97],
+        ['alipay_statement_sept.csv', 'Alipay', 214],
+        ['wechat_pay_bill_sept.xlsx', 'WeChat Pay', 97],
+        ['bank_statement_sept.csv', 'Bank', 38],
       ].map(([file, src, rows]) => (
         <div key={file as string} className="flex items-baseline justify-between gap-4 border-b border-edge/10 py-3">
           <span className="min-w-0 truncate">
             {file} <span className="text-muted">· {src}</span>
           </span>
-          <span className="num shrink-0 text-muted">{rows} rows</span>
+          <span className="shrink-0 text-muted">
+            <span className="num">{rows}</span> rows
+          </span>
         </div>
       ))}
       <div className="flex items-baseline justify-between border-b-2 border-ink/80 py-4">
         <span className="font-medium">One timeline</span>
-        <span className="num text-3xl">311</span>
+        <span className="num text-4xl">349</span>
       </div>
       <p className="pt-3 text-[13px] text-muted">
-        Credit-card repayments and transfers between your own accounts are left out, so nothing is counted twice.
+        Card repayments and transfers between your own accounts are kept out of spending, so nothing is counted twice.
       </p>
     </div>
   );
@@ -42,11 +45,14 @@ function TeachSheet() {
   return (
     <div className="text-sm">
       <div className="flex items-baseline justify-between border-b border-edge/10 pb-3">
-        <span className="font-display text-2xl">Keep Fitness</span>
+        <span className="min-w-0">
+          <span className="block font-display text-2xl">Keep Fitness</span>
+          <span className="block text-[12px] text-muted">Alipay · sample</span>
+        </span>
         <span className="num text-2xl">¥82.00</span>
       </div>
       <p className="py-3 text-[13px] text-muted">
-        Your model suggests <span className="text-ink">Health</span> · 61% sure
+        Your model suggests <span className="text-ink">Health</span>, but isn’t sure yet
       </p>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-edge/12 bg-edge/12 sm:grid-cols-3">
         {KEYS.map((k, i) => (
@@ -75,14 +81,14 @@ function UnderstandSheet() {
   const total = SPLIT.reduce((s, [, v]) => s + v, 0);
   return (
     <div className="text-sm">
-      <p className="text-[13px] text-muted">Spent in September</p>
+      <p className="text-[13px] text-muted">Spent in September · sample</p>
       <p className="num text-5xl leading-tight">¥{total.toLocaleString('en-US')}</p>
       {/* The chart is the headline: one bold bar, every slice named. */}
       <div className="mt-5 flex h-10 w-full gap-[2px]" role="img" aria-label="September spending by category">
         {SPLIT.map(([c, v]) => (
           <span
             key={c}
-            className={`${c === 'Other' ? '' : categoryColor(c)} h-full`}
+            className={`${SAMPLE_COLOR[c] ?? ''} h-full`}
             style={{ width: `${(v / total) * 100}%`, backgroundColor: c === 'Other' ? 'rgb(var(--edge) / 0.25)' : 'rgb(var(--cat))' }}
           />
         ))}
@@ -93,7 +99,7 @@ function UnderstandSheet() {
             <dt className="flex items-center gap-2">
               <span
                 aria-hidden="true"
-                className={`${c === 'Other' ? '' : categoryColor(c)} h-2.5 w-2.5 rounded-[2px]`}
+                className={`${SAMPLE_COLOR[c] ?? ''} h-2.5 w-2.5 rounded-[2px]`}
                 style={{ backgroundColor: c === 'Other' ? 'rgb(var(--edge) / 0.25)' : 'rgb(var(--cat))' }}
               />
               {c}
@@ -110,8 +116,8 @@ function UnderstandSheet() {
 
 const STEPS: { title: string; text: string; sheet: ReactNode }[] = [
   {
-    title: 'Upload both statements',
-    text: 'Export the month from Alipay and WeChat Pay and drop both files in. Each format is parsed and normalized into one timeline.',
+    title: 'Upload your statements',
+    text: 'Export the month from Alipay and WeChat Pay, and your bank if you like, then drop the files in. Each format is parsed on its own and merged into one timeline.',
     sheet: <UploadSheet />,
   },
   {
@@ -121,7 +127,7 @@ const STEPS: { title: string; text: string; sheet: ReactNode }[] = [
   },
   {
     title: 'Read the month',
-    text: 'Your model sorts everything else. The month reads as one statement — totals, categories, budgets — with doubtful guesses held back for review.',
+    text: 'Your model sorts everything else. The month reads as one statement, with totals, categories and budgets, and doubtful guesses held back for you to review.',
     sheet: <UnderstandSheet />,
   },
 ];
@@ -135,8 +141,15 @@ function Step({ i, active, onActive }: { i: number; active: boolean; onActive: (
   const s = STEPS[i];
   return (
     <div ref={ref} className="flex min-h-0 flex-col justify-center py-10 lg:min-h-[60vh] lg:py-0">
-      <p className={`num text-xl transition-colors duration-300 ${active ? 'text-accent-strong' : 'text-muted'}`}>{i + 1}</p>
-      <h3 className="mt-2 font-display text-3xl font-medium tracking-[-0.01em] sm:text-4xl">{s.title}</h3>
+      <p
+        aria-hidden="true"
+        className={`num text-7xl leading-none tracking-[-0.03em] transition-colors duration-300 sm:text-8xl ${
+          active ? 'text-accent-strong' : 'text-muted'
+        }`}
+      >
+        {i + 1}
+      </p>
+      <h3 className="mt-4 font-display text-3xl font-medium tracking-[-0.01em] sm:text-4xl">{s.title}</h3>
       <p className="mt-3 max-w-[46ch] text-base leading-relaxed text-muted">{s.text}</p>
       <div className="mt-8 border-t border-ink/80 pt-5 lg:hidden">{s.sheet}</div>
     </div>

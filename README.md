@@ -82,12 +82,13 @@ bottom-right onboarding guide (Upload → Categories → Label → Train) walks 
 accounts through each step, spotlighting the specific button to press next
 with a dimmed backdrop and an arrow. Plus a
 separate **Settings** page (data export, password change, legal links,
-account deletion). The UI is paper-first ("Ledger": warm paper + ink, one
-vermilion accent, Newsreader serif figures) with a quiet dark theme,
+account deletion, home currency). The UI is paper-first ("Ledger" v5:
+grey-green ledger paper + ink, one vermilion accent, Fraunces "soft" serif
+for headings and ¥ figures) with a quiet dark theme,
 skeleton loading states, and a marketing landing page at `/` for signed-out
 visitors, with `/privacy` and `/terms` legal pages linked from its footer.
 Visual language, tokens, motion rules and components are documented in
-**`docs/DESIGN_SYSTEM.md`** ("Ledger" v4: **no gradients,
+**`docs/DESIGN_SYSTEM.md`** ("Ledger" v5: **no gradients,
 solid colors only, no purple**, rolling numbers, a **⌘K / Ctrl+K command menu** to
 jump anywhere, and **keyboard labeling** — 1–9 pick a category, Enter accepts,
 S skips). Every Transactions & Model step (Upload, Categories, Label, Review,
@@ -281,7 +282,29 @@ Full tree with explanations: `REPO_STRUCTURE.md`.
 | `docs/guides/` | START_LOCAL, TEST_LOCAL, DEPLOYMENT, MIGRATION_GUIDE |
 | `CLAUDE.md` | Collaboration guidelines for AI-assisted sessions |
 
+## Built for foreigners in China (v5, 2026-10)
+
+- **Cash flow, not just spending:** income and transfers from Alipay/WeChat/bank
+  statements are imported with a type (`expense` / `income` / `transfer`).
+  Every spending number still means spending only. Red packets and AA
+  collections you receive are transfers; paying your share into a friend's
+  group collection is spending. Moves between your own accounts (top-ups,
+  repayments, Yu'e Bao) are not counted. Change any row's type in Reports.
+- **Home currency:** pick USD/EUR/GBP/… in Settings to see "¥8,000 ≈ $1,110"
+  using the ECB rate on each transaction's date (Frankfurter, cached in
+  `fx_rates`; fetched only in the background, never on page load).
+- **Painless import:** `/guide` shows how to export from Alipay, WeChat Pay and
+  a bank; generic bank CSV/XLSX is now accepted. Re-uploading an older
+  statement adds its income and fixes old rows in place (labels kept).
+- Contract: `docs/contracts/API_V5.md`. Competitor audit + weak points:
+  `docs/audits/COMPETITOR_AUDIT_2026-10.md` (verification log alongside).
+- **Deploy order:** apply migrations `20261011000000…000400` first, then the
+  backend (Render), then the frontend (Vercel).
+
 ## Known open items
+
+- Privacy/terms pages still contain placeholders the owner must fill in:
+  hosting region(s), support email, jurisdiction.
 
 - Old personal data is still recoverable from **git history** (pre-Session-19
   commits); purging requires a `git filter-repo` rewrite + force-push.

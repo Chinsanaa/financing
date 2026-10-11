@@ -71,3 +71,13 @@ def test_dismiss_subscription_excludes_it_from_next_list_call(client, patch_jwks
 
     listing = client.get("/subscriptions/", headers=_headers(make_token))
     assert listing.json()["subscriptions"] == []
+
+
+def test_income_and_transfers_are_never_subscriptions(client, patch_jwks, make_token, fake_db):
+    salary = [dict(r, kind="income", flow_subtype="salary") for r in _monthly_rows("Employer", 10000)]
+    allowance = [dict(r, kind="transfer", flow_subtype="p2p_transfer") for r in _monthly_rows("Mum", 500)]
+    fake_db.seed("transactions", salary + allowance + _monthly_rows("Netflix", 39.9))
+
+    body = client.get("/subscriptions/", headers=_headers(make_token)).json()
+
+    assert [s["merchant"] for s in body["subscriptions"]] == ["Netflix"]

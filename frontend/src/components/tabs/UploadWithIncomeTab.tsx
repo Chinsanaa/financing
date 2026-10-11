@@ -66,11 +66,13 @@ export default function UploadWithIncomeTab() {
 
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-ink mb-2">
+              <label htmlFor="monthly-income" className="block text-sm font-medium text-ink mb-2">
                 Income amount ({CURRENCY_SYMBOL})
               </label>
               <input
+                id="monthly-income"
                 type="number"
+                inputMode="decimal"
                 value={income}
                 onChange={(e) => setIncome(e.target.value)}
                 placeholder="e.g., 15000"

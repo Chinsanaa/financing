@@ -25,6 +25,7 @@ module.exports = {
         danger: 'rgb(var(--danger) / <alpha-value>)',
         success: 'rgb(var(--success) / <alpha-value>)',
         warn: 'rgb(var(--warn) / <alpha-value>)',
+        positive: 'rgb(var(--positive) / <alpha-value>)',
       },
       // Extra opacity steps used as color modifiers (border-edge/8,
       // bg-accent/12). Tailwind's default scale only has multiples of 5, so
@@ -37,7 +38,7 @@ module.exports = {
         12: '0.12',
       },
       fontFamily: {
-        // Ledger (v4): Newsreader (serif, optical sizes) for headlines and
+        // Ledger (v5): Fraunces (serif, opsz + SOFT 100) for headlines and
         // money; Schibsted Grotesk for UI and body.
         display: ['var(--font-display)', 'Georgia', 'serif'],
         sans: ['var(--font-body)', 'system-ui', 'sans-serif'],
@@ -47,8 +48,8 @@ module.exports = {
         pill: '9999px',
       },
       boxShadow: {
-        // Neutral, warm-ink tinted, offset + soft blur (never a colored halo).
-        card: '0 1px 2px rgb(27 26 23 / 0.06), 0 14px 32px -18px rgb(27 26 23 / 0.28)',
+        // Neutral, ink tinted, offset + soft spread (never a colored halo).
+        card: '0 1px 2px rgb(24 32 27 / 0.06), 0 14px 32px -18px rgb(24 32 27 / 0.28)',
       },
       keyframes: {
         'fade-up': {

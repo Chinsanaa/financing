@@ -80,7 +80,7 @@ export default function CategoryColorPicker({
       </button>
 
       {open && (
-        <div className="glass absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-card p-3 shadow-card">
+        <div className="panel absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-card p-3 shadow-card">
           <p className="mb-2 font-display text-lg">Color for {categoryName}</p>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {CATEGORY_COLORS.map((c) => {
