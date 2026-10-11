@@ -256,3 +256,53 @@ def test_bucket_with_unrecognized_value_is_ignored(client, patch_jwks, make_toke
 
     assert response.status_code == 200
     assert response.json()["total_count"] == 1
+
+
+# ── v5 `kind` filter (contract §3.7) ──────────────────────────────────────
+
+def _seed_kinds(fake_db):
+    fake_db.seed("transactions", [
+        {"id": "e1", "user_id": USER_A, "merchant": "Cafe", "description": "", "amount": 30,
+         "timestamp": "2026-06-01T00:00:00", "category_id": "cat-1", "categories": {"name": "Groceries"},
+         "label_source": "rule", "source": "alipay"},
+        {"id": "i1", "user_id": USER_A, "merchant": "Employer", "description": "", "amount": 9000,
+         "timestamp": "2026-06-02T00:00:00", "category_id": None, "categories": None,
+         "label_source": "none", "kind": "income", "flow_subtype": "salary", "source": "bank"},
+        {"id": "x1", "user_id": USER_A, "merchant": "Friend", "description": "", "amount": -50,
+         "timestamp": "2026-06-03T00:00:00", "category_id": None, "categories": None,
+         "label_source": "none", "kind": "transfer", "flow_subtype": "red_packet", "source": "wechat"},
+    ])
+
+
+def test_reports_default_kind_is_expense(client, patch_jwks, make_token, fake_db):
+    _seed_kinds(fake_db)
+    body = client.get("/dashboard/reports", headers=_headers(make_token)).json()
+    assert body["kind"] == "expense" and body["currency_home"] is None
+    assert [t["id"] for t in body["transactions"]] == ["e1"]
+    row = body["transactions"][0]
+    assert (row["kind"], row["flow_subtype"], row["source"], row["amount_home"]) == ("expense", None, "alipay", None)
+    # Unrecognized kind falls back to expense.
+    assert client.get("/dashboard/reports?kind=bogus", headers=_headers(make_token)).json()["kind"] == "expense"
+
+
+def test_reports_kind_all_and_non_expense_row_shape(client, patch_jwks, make_token, fake_db):
+    _seed_kinds(fake_db)
+    body = client.get("/dashboard/reports?kind=all", headers=_headers(make_token)).json()
+    assert body["total_count"] == 3
+    rows = {t["id"]: t for t in body["transactions"]}
+    assert rows["i1"]["category"] == "Income" and rows["x1"]["category"] == "Transfer"
+    for tid in ("i1", "x1"):
+        assert rows[tid]["category_id"] is None and rows[tid]["bucket"] is None
+        assert rows[tid]["is_split"] is False
+    assert rows["x1"]["amount"] == -50  # signed stored amount
+
+
+def test_reports_category_filters_only_match_expenses(client, patch_jwks, make_token, fake_db):
+    _seed_kinds(fake_db)
+    h = _headers(make_token)
+    assert client.get("/dashboard/reports?kind=income&uncategorized_only=true", headers=h).json()["total_count"] == 0
+    assert client.get("/dashboard/reports?kind=transfer&category_id=cat-1", headers=h).json()["total_count"] == 0
+    # kind=all + uncategorized: income/transfer rows (category NULL) are excluded.
+    assert client.get("/dashboard/reports?kind=all&uncategorized_only=true", headers=h).json()["total_count"] == 0
+    # min/max compare the signed stored amount.
+    assert client.get("/dashboard/reports?kind=transfer&max_amount=0", headers=h).json()["total_count"] == 1

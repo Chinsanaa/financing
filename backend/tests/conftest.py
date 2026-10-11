@@ -7,9 +7,11 @@ Supabase client). Dummy env vars also guarantee a real local backend/.env
 (if one exists on a dev machine) can never leak into a test run, since
 os.environ takes precedence over a .env file.
 """
+import importlib
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+import types
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -169,4 +171,102 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(transactions_module, "supabase_client", fake)
     monkeypatch.setattr(alerts_module, "supabase_client", fake)
 
+    # backend/fx.py and routes/fx.py (home-currency rates) may not exist on
+    # every branch yet; patch them when they do.
+    for module_name in ("fx", "routes.fx"):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        if hasattr(module, "supabase_client"):
+            monkeypatch.setattr(module, "supabase_client", fake)
+        if hasattr(module, "_new_client"):
+            # fx's background backfill builds its own client; keep it on the fake.
+            monkeypatch.setattr(module, "_new_client", lambda: fake)
+
     return fake
+
+
+@pytest.fixture(autouse=True)
+def fx_background(monkeypatch):
+    """Record fx background work (rate backfills) instead of spawning real
+    threads, and reset fx's in-process throttle/cache state around every
+    test — same idea as `translation_requests`. No-op if backend/fx.py is
+    absent on this branch."""
+    try:
+        import fx
+    except ImportError:
+        yield []
+        return
+    calls: list = []
+    if hasattr(fx, "_spawn"):
+        monkeypatch.setattr(fx, "_spawn", lambda *args, **kwargs: calls.append((args, kwargs)))
+    reset = getattr(fx, "_reset_state", None)
+    if reset:
+        reset()
+    yield calls
+    if reset:
+        reset()
+
+
+class FakeRateTable:
+    """In-memory stand-in for fx.RateTable (API v5 §2 lookup rules)."""
+
+    def __init__(self, rates: dict):
+        self.rates = dict(sorted(rates.items()))  # date -> rate
+
+    def strict(self, d: date):
+        best = [r for rd, r in self.rates.items() if d - timedelta(days=7) <= rd <= d]
+        return best[-1] if best else None
+
+    def lenient(self, d: date):
+        strict = self.strict(d)
+        if strict is not None:
+            return strict, False
+        if not self.rates:
+            return None, False
+        older = [r for rd, r in self.rates.items() if rd <= d]
+        return (older[-1] if older else next(iter(self.rates.values()))), True
+
+    def latest(self, on_or_before: date):
+        older = [(rd, r) for rd, r in self.rates.items() if rd <= on_or_before]
+        return older[-1] if older else (None, None)
+
+
+@pytest.fixture
+def fake_fx(monkeypatch):
+    """Install a fake `fx` module (B3's backend/fx.py interface) so dashboard
+    home-currency maths is testable without real rates or network.
+
+    Set `fake_fx.home[user_id] = "USD"` and `fake_fx.rates[date] = 0.14`.
+    `fake_fx.load_calls` records every load_rates call (one per request)."""
+    module = types.ModuleType("fx")
+    module.home = {}
+    module.rates = {}
+    module.load_calls = []
+    module.SUPPORTED = {"USD": "US Dollar", "EUR": "Euro"}
+
+    def row_date(ts):
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if ts.tzinfo is not None:
+            ts = ts.astimezone(timezone.utc)
+        return ts.date()
+
+    async def get_home_currency(user_id):
+        return module.home.get(user_id)
+
+    async def load_rates(quote, start, end):
+        module.load_calls.append((quote, start, end))
+        return FakeRateTable(module.rates)
+
+    def request_backfill_for_user(user_id, start=None):
+        return None
+
+    module.row_date = row_date
+    module.get_home_currency = get_home_currency
+    module.load_rates = load_rates
+    module.request_backfill_for_user = request_backfill_for_user
+    module.RateTable = FakeRateTable
+    monkeypatch.setitem(sys.modules, "fx", module)
+    return module

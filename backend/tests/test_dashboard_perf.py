@@ -34,9 +34,11 @@ def test_monthly_trends_bucket_and_filter(client, patch_jwks, make_token, fake_d
     # Far-future rows are always >= the cutoff, so the test doesn't age.
     body = client.get("/dashboard/trends?granularity=month&months=12", headers=_headers(make_token)).json()
 
+    # v5: total_spend_home is null without a home currency.
+    assert body["currency_home"] is None
     assert body["trends"] == [
-        {"date": "2099-01", "total_spend": 15.0},
-        {"date": "2099-02", "total_spend": 7.0},
+        {"date": "2099-01", "total_spend": 15.0, "total_spend_home": None},
+        {"date": "2099-02", "total_spend": 7.0, "total_spend_home": None},
     ]
 
 
