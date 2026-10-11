@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, m } from 'framer-motion';
 import Stamp from '@/components/ui/Stamp';
+import Badge from '@/components/ui/Badge';
 import { createClient } from '@/utils/supabase';
 import { apiClient } from '@/utils/api';
 import Button from '@/components/ui/Button';
@@ -29,7 +30,15 @@ const MAX_LOCKOUT_SECONDS = 300;
 const TRUST_POINTS = [
   { text: 'A model that is yours — trained on your own labels.' },
   { text: 'Chinese merchant text, segmented and shown in English.' },
-  { text: 'Private per account — nothing shared.' },
+  { text: 'Private per account — never sold, never used to train anyone else’s model.' },
+];
+
+// Brand-panel sample statement (static demo; translated merchants). Each
+// category is a plain swatch + name; the one stamp closes the total.
+const BRAND_ROWS = [
+  { merchant: 'Luckin Coffee', amount: '18.50', cat: 'Food', tone: 'cat-amber' },
+  { merchant: 'Didi Chuxing', amount: '32.40', cat: 'Transport', tone: 'cat-blue' },
+  { merchant: 'Hema Fresh', amount: '212.60', cat: 'Groceries', tone: 'cat-green' },
 ];
 
 type Mode = 'signin' | 'signup' | 'forgot';
@@ -193,7 +202,9 @@ export default function AuthClient() {
         Financing<span className="text-accent">.</span>
       </Link>
 
-      {/* Brand panel — a darker paper well with a short stamped statement */}
+      {/* Brand panel — a darker paper well with a short statement, closed
+          with a double rule and ONE stamp (approved stamp site #5,
+          docs/DESIGN_SYSTEM.md §5). */}
       <div className="hidden flex-col bg-surface-2 p-10 lg:flex xl:p-14 2xl:p-20">
         <Link href="/" className="font-display text-xl font-medium">
           Financing<span className="text-accent">.</span>
@@ -202,20 +213,24 @@ export default function AuthClient() {
           <h1 className="max-w-[12ch] font-display text-5xl font-normal leading-[1.02] tracking-[-0.025em] xl:text-6xl 2xl:text-7xl">
             Every yuan, accounted for.
           </h1>
-          <div className="mt-10 max-w-md border-y border-ink/80">
-            {[
-              ['Luckin Coffee', '18.50', 'Food', -3],
-              ['Didi Chuxing', '32.40', 'Transport', 2],
-              ['Hema Fresh', '212.60', 'Groceries', -1.5],
-            ].map(([merchant, amount, cat, tilt], i) => (
-              <div key={merchant as string} className="flex items-center gap-4 border-t border-edge/12 py-3 text-sm first:border-t-0">
+          <div className="mt-10 max-w-md border-t border-ink/80 text-sm">
+            {BRAND_ROWS.map(({ merchant, amount, cat, tone }) => (
+              <div key={merchant} className="flex items-center gap-4 border-b border-edge/12 py-3">
                 <span className="flex-1 font-medium">{merchant}</span>
-                <span className="num">¥{amount}</span>
                 <span className="w-28">
-                  <Stamp label={cat as string} tilt={tilt as number} delay={0.5 + i * 0.25} />
+                  <Badge tone={tone}>{cat}</Badge>
                 </span>
+                <span className="num w-16 text-right">¥{amount}</span>
               </div>
             ))}
+            {/* Closing double rule under the total, like a ledger page */}
+            <div className="flex items-center gap-4 border-b-[3px] border-double border-ink/80 py-3">
+              <span className="flex-1 text-muted">3 entries</span>
+              <span className="w-28">
+                <Stamp label="Accounted" tilt={-3} delay={0.5} />
+              </span>
+              <span className="num w-16 text-right font-medium">¥263.50</span>
+            </div>
           </div>
           <ul className="mt-8 max-w-md space-y-2 text-sm text-muted xl:text-[15px]">
             {TRUST_POINTS.map(({ text }) => (
