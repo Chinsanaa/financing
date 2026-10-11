@@ -307,13 +307,18 @@ def classify_wallet_flow(direction: str, type_text: str, merchant: str,
     the absolute amount. Rules, first match wins:
 
     1. repayment (credit card / Huabei / loan)   -> transfer/repayment, +
-    2. withdrawal (提现)                          -> transfer/withdrawal, +
-    3. money-market earnings (余额宝 收益 ...)     -> income/interest, +
-    4. money-market move (余额宝/零钱通/理财通)    -> transfer/own_account, +/-
+    2. money-market earnings (余额宝 收益 ...)     -> income/interest, +
+    3. money-market move (余额宝/零钱通/理财通)    -> transfer/own_account, +/-
+       (checked before withdrawal so "Yu'e Bao ... withdrawn" stays a move
+       between the user's own balances, not a wallet withdrawal)
+    4. withdrawal (提现)                          -> transfer/withdrawal, +
     5. wallet top-up (零钱充值, or 充值 when not
        counted as income/expense)                 -> transfer/top_up, -
     6. group collection (群收款/AA)               -> in: transfer/aa_collection, -
-                                                     out: transfer/p2p_transfer, +
+                                                     out: expense, +
+       Paying your share into a friend's group collection is your real
+       spending (user decision 2026-10-11), so it is an expense to label like
+       any purchase; receiving shares back stays a transfer.
     7. red packet (红包)                          -> transfer/red_packet, +/-
     8. transfer (转账)                            -> transfer/p2p_transfer, +/-
     9. by direction: out -> expense; in -> income/salary | interest | other;
@@ -329,17 +334,17 @@ def classify_wallet_flow(direction: str, type_text: str, merchant: str,
 
     if _REPAYMENT_RE.search(type_desc):
         return 'transfer', 'repayment', 1
-    if _WITHDRAWAL_RE.search(type_desc):
-        return 'transfer', 'withdrawal', 1
     if _MONEY_MARKET_RE.search(text):
         if _EARNINGS_RE.search(type_desc):
             return 'income', 'interest', 1
         return 'transfer', 'own_account', sign
+    if _WITHDRAWAL_RE.search(type_desc):
+        return 'transfer', 'withdrawal', 1
     if _WALLET_TOPUP_RE.search(type_text) or (direction == 'neutral' and _TOPUP_RE.search(type_desc)):
         return 'transfer', 'top_up', -1
     if _AA_RE.search(type_desc):
         if direction == 'out':
-            return 'transfer', 'p2p_transfer', 1
+            return 'expense', None, 1
         return 'transfer', 'aa_collection', -1
     is_combined_category = type_clean != type_text
     if _RED_PACKET_RE.search(type_clean) or (
@@ -601,7 +606,10 @@ def _cells(row: List[str]) -> set:
 def _is_wechat_header(cells: set) -> bool:
     # 交易时间 = transaction time, 当前状态 = current status, 交易类型 = transaction type,
     # 金额(元) = amount (CNY), 交易对方 = counterparty
-    if '交易时间' in cells and ('当前状态' in cells or ('交易类型' in cells and '金额(元)' in cells)):
+    # 交易类型 + 金额(元) alone also appear in some Chinese bank exports, so
+    # that variant additionally needs WeChat's 交易对方 (counterparty) column.
+    if '交易时间' in cells and ('当前状态' in cells or (
+            '交易类型' in cells and '金额(元)' in cells and '交易对方' in cells)):
         return True
     return 'transaction time' in cells and 'current status' in cells
 
@@ -944,7 +952,9 @@ def parse_generic_bank_csv(
     Direction, first rule that applies:
       1. a direction column (支出/借 debit, 收入/贷 credit, Debit/Credit, D/C);
       2. separate debit / credit columns;
-      3. signed amounts when the file mixes signs (negative = money out);
+      3. signed amounts when the file mixes signs: the MAJORITY sign is money
+         out (most rows on both debit-card and credit-card statements are
+         spending, but the two use opposite sign conventions);
       4. otherwise every row is money out (expense).
     """
     column_map = column_map or {}
@@ -993,13 +1003,15 @@ def parse_generic_bank_csv(
         signed = _parse_amount_series(raw[amt_col])
         nz = signed[signed.notna() & (signed != 0)]
         mixed = bool((nz < 0).any() and (nz > 0).any())
+        # Whichever sign most rows carry is "money out" (see docstring).
+        out_is_negative = bool((nz < 0).sum() >= (nz > 0).sum())
         for i, idx in enumerate(raw.index):
             a = signed[idx]
             if pd.isna(a) or a == 0:
                 continue
             d = dir_values[idx] if use_direction else None
             if d is None:
-                d = ('out' if a < 0 else 'in') if mixed else 'out'
+                d = ('out' if (a < 0) == out_is_negative else 'in') if mixed else 'out'
             directions[i] = d
             amounts[idx] = abs(a)
     else:

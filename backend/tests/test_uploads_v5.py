@@ -276,6 +276,10 @@ def test_reimport_filtered_export_skips_deletions(client, patch_jwks, make_token
     assert resp.json()["reimported"] is True
     assert resp.json()["rows_removed"] == 0
     assert "a-sbx" in {r["id"] for r in _txns(fake_db)}
+    # Deletions were skipped, so the v1 upload must NOT be marked reconciled:
+    # a later full export still gets to remove what v1 wrongly kept.
+    v1 = next(u for u in fake_db._tables["uploads"].rows if u["id"] == "up-a1")
+    assert v1["parser_version"] == 1
 
 
 def test_reimport_ignores_other_source_and_v2_uploads(client, patch_jwks, make_token, fake_db):

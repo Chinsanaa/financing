@@ -435,3 +435,41 @@ def test_filtered_export_detection(tmp_path):
     # 导出交易类型：[支出] = "export transaction type: [expense]"
     filtered.write_text(text.replace("导出交易类型：[全部]", "导出交易类型：[支出]"), encoding="utf-8")
     assert parse.detect_export_filter(str(filtered)) == "支出"
+
+
+# --- Integration follow-ups (backend review, 2026-10-11) ---------------------
+
+def test_aa_payment_out_is_spending_aa_collection_in_is_transfer():
+    # 群收款 = group collection (AA split). Paying your share is real spending
+    # (user decision); receiving shares back stays a transfer.
+    assert parse.classify_wallet_flow("out", "群收款", "Friend", "Dinner AA") == ("expense", None, 1)
+    assert parse.classify_wallet_flow("in", "群收款", "Friend", "Dinner AA") == ("transfer", "aa_collection", -1)
+
+
+def test_money_market_withdrawal_is_own_account_not_withdrawal():
+    # 余额宝 = Yu'e Bao money-market fund; 提现 = withdraw.
+    kind, subtype, _ = parse.classify_wallet_flow("neutral", "余额宝-提现", "Yu'e Bao", "")
+    assert (kind, subtype) == ("transfer", "own_account")
+    # A plain wallet withdrawal to a bank card is still a withdrawal.
+    assert parse.classify_wallet_flow("neutral", "零钱提现", "", "")[:2] == ("transfer", "withdrawal")
+
+
+def test_bank_credit_card_style_signs_use_majority_as_spending(tmp_path):
+    # Credit-card exports: charges positive, the monthly payment negative.
+    path = tmp_path / "cc.csv"
+    path.write_text(
+        "Posting Date,Merchant,Amount\n"
+        "2025-09-01,Cafe,18.00\n2025-09-02,Bookshop,45.50\n"
+        "2025-09-03,Grocer,120.00\n2025-09-20,Payment Thank You,-183.50\n",
+        encoding="utf-8")
+    rows = _rows(parse.parse_generic_bank_csv(str(path)))
+    assert [r[2] for r in rows[:3]] == ["expense", "expense", "expense"]
+    assert rows[3][2] != "expense"   # the payment is money in for this statement
+
+
+def test_bank_export_with_wechat_like_columns_is_not_wechat(tmp_path):
+    # 交易时间 transaction time, 交易类型 transaction type, 金额(元) amount (CNY) —
+    # without 当前状态 (current status) or 交易对方 (counterparty) this is a bank file.
+    path = tmp_path / "bank_like.csv"
+    path.write_text("交易时间,交易类型,金额(元),摘要\n2025-09-01 10:00:00,消费,18.00,Cafe\n", encoding="utf-8")
+    assert parse.detect_statement_source(str(path)) != "wechat"

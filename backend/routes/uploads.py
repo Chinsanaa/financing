@@ -185,10 +185,14 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
             await refresh_upload_row_count(upload_id)
 
         # Step 6 (amended): flip touched v1 uploads to parser_version 2 only
-        # when this file's window covers their whole row range.
-        await promote_covered_uploads(
-            user_id, reimport['touched_uploads'], reimport['t_min'], reimport['t_max'],
-        )
+        # when this file's window covers their whole row range — and never
+        # from a filtered export: its step-4 deletions were skipped, so rows
+        # v1 wrongly kept (e.g. closed unpaid orders) would otherwise be
+        # frozen in place forever, since v2 uploads are never re-reconciled.
+        if export_filter is None:
+            await promote_covered_uploads(
+                user_id, reimport['touched_uploads'], reimport['t_min'], reimport['t_max'],
+            )
 
         schedule_classification(request, user_id)
         schedule_fx_backfill(user_id, df_normalized['timestamp'].min())

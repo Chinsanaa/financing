@@ -90,6 +90,12 @@ pass-through money). The per-row escape hatch is
 `PATCH /transactions/{id}/kind` (§3.8), e.g. turn a large received red
 packet into `income`.
 
+**USER DECISION (2026-10-11) — paying INTO a friend's group collection
+(群收款 "group collection", AA) is an `expense`**, not a `p2p_transfer`:
+your share of a meal a friend fronted is your real spending, so it shows in
+budgets and gets a category like any purchase. Only the money-in side
+(friends paying you back) is `transfer/aa_collection`.
+
 Sign rule in one line: **for expense and transfer rows `+` = money left the
 user, `−` = money came in; income rows are always `+` (money in).** A
 negative income row (reversal) is allowed and simply reduces income.
