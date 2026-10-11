@@ -33,6 +33,9 @@ async def _detect_and_upsert(user_id: str) -> None:
         lambda: supabase_client.table("transactions")
         .select("merchant, merchant_en, amount, timestamp, category_id")
         .eq("user_id", user_id)
+        # Subscriptions are recurring spend; a monthly salary or a regular
+        # transfer to family is not a subscription.
+        .eq("kind", "expense")
     )
     detected = detect_recurring_merchants(pd.DataFrame(rows))
     if detected.empty:

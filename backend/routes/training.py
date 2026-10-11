@@ -59,6 +59,9 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
             lambda: supabase_client.table("transactions")
             .select("*, categories(name)")
             .eq("user_id", user_id)
+            # A labeled row later re-kinded to income/transfer keeps
+            # is_manually_labeled but loses its category — not training data.
+            .eq("kind", "expense")
             .eq("is_manually_labeled", True)
             .execute()
         )

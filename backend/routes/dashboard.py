@@ -12,7 +12,7 @@ from config import supabase_client
 from db import fetch_all_async, run_query
 from errors import internal_error
 from limiter import limiter
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
 from src.translate import merchant_label_stored, description_label_stored
@@ -51,6 +51,160 @@ def _months_ago_start(n: int, now: datetime = None) -> datetime:
     return datetime(total_months // 12, total_months % 12 + 1, 1)
 
 
+# ── Transaction kinds & home currency (API v5) ──────────────────────────
+# "Spend" is always kind='expense' (refunds are negative expense rows).
+# Income/transfer rows exist since parser v2; they only show up in cash
+# flow, reports (kind filter) and the export.
+KINDS = ("expense", "income", "transfer")
+KIND_LABELS = {"expense": "Expense", "income": "Income", "transfer": "Transfer"}
+# Same English labels as FLOW_SUBTYPE_LABELS in frontend/src/types/v5.ts.
+FLOW_SUBTYPE_LABELS = {
+    "refund": "Refund",
+    "red_packet": "Red packet",
+    "p2p_transfer": "Transfer to/from a person",
+    "aa_collection": "Split-bill collection",
+    "salary": "Salary",
+    "interest": "Interest",
+    "own_account": "Between own accounts",
+    "repayment": "Credit repayment",
+    "top_up": "Top-up",
+    "withdrawal": "Withdrawal",
+    "other": "Other",
+}
+FX_LOOKBACK = timedelta(days=7)  # strict lookup: rate_date in [d - 7, d]
+
+
+def _fx():
+    """backend/fx.py, imported lazily (it reads only the fx_rates cache —
+    never the network — on every GET). Returns None if the module is absent,
+    which then behaves exactly like "no home currency"."""
+    try:
+        import fx
+        return fx
+    except ImportError:
+        return None
+
+
+async def _home_currency(user_id: str) -> Optional[str]:
+    fx = _fx()
+    return await fx.get_home_currency(user_id) if fx else None
+
+
+async def _load_rates(home: Optional[str], days) -> Optional[object]:
+    """ONE fx_rates range read covering every date in `days` (plus the
+    7-day strict lookback, and up to today for rate_asof). None without a
+    home currency."""
+    if not home:
+        return None
+    today = _now_cn().date()
+    days = [d for d in days if d is not None]
+    start = (min(days) if days else today) - FX_LOOKBACK
+    end = max(max(days) if days else today, today)
+    return await _fx().load_rates(home, start, end)
+
+
+def _row_day(ts: str) -> date:
+    """Calendar date of a transaction row — ("timestamp" AT TIME ZONE 'UTC')::date."""
+    fx = _fx()
+    if fx:
+        return fx.row_date(ts)
+    return _parse_utc(ts).astimezone(timezone.utc).date()
+
+
+def _r2(value: Optional[float]) -> Optional[float]:
+    return None if value is None else round(value, 2)
+
+
+def _strict_sum(day_amounts, rates) -> Optional[float]:
+    """Σ amount × strict rate(day), unrounded. `day_amounts` yields
+    (date, amount-or-None); None amounts mean "no rows of this flow that
+    day" and need no rate. Any contributing day without a rate makes the
+    whole aggregate None — never a partial sum. Zero rows → 0."""
+    total = 0.0
+    for day, amount in day_amounts:
+        if amount is None:
+            continue
+        rate = rates.strict(day)
+        if rate is None:
+            return None
+        total += float(amount) * rate
+    return total
+
+
+def _reference_rate(rates, month_start: datetime) -> Optional[float]:
+    """Rate for undated amounts (budgets, settings income): strict lookup at
+    min(last day of the month, today)."""
+    if rates is None:
+        return None
+    _, next_month = _month_bounds(f"{month_start.year:04d}-{month_start.month:02d}")
+    ref_day = min((next_month - timedelta(days=1)).date(), _now_cn().date())
+    return rates.strict(ref_day)
+
+
+async def _daily_flows(user_id: str, start: Optional[datetime], end: Optional[datetime]) -> list:
+    """Per-day sums by flow (migration 20261011000200, daily_flows_for_user):
+    day, spend, categorized_spend, income, transfers_in, transfers_out,
+    own_account_moved. A flow is None on a day with no rows of it. Paged —
+    an all-time history can exceed PostgREST's 1,000-row cap."""
+    params = {
+        "p_user_id": user_id,
+        "p_start": start.isoformat() if start else None,
+        "p_end": end.isoformat() if end else None,
+    }
+    rows = await fetch_all_async(lambda: supabase_client.rpc("daily_flows_for_user", params))
+    for row in rows:
+        row["day"] = date.fromisoformat(str(row["day"])[:10])
+        for key in ("spend", "categorized_spend", "income", "transfers_in", "transfers_out", "own_account_moved"):
+            if row.get(key) is not None:
+                row[key] = float(row[key])
+    return rows
+
+
+def _flow_total(rows: list, key: str) -> float:
+    return sum(r[key] for r in rows if r.get(key) is not None)
+
+
+def _summary_home(home, rates, all_flows, month_flows, month_start, month_income, month_income_source) -> dict:
+    """The summary's `home` block (contract §3.3 / §2)."""
+    today = _now_cn().date()
+    rate_asof, rate = rates.latest(today)
+
+    # All-time total is LENIENT: any stored rate at or before the day (no
+    # age limit; the earliest stored rate for days before the cache), so a
+    # long history still gets a total. `approx` flags any such fallback.
+    # Null only when no rate at all is stored for the currency.
+    total_spend_home, approx = None, False
+    if rates.lenient(today)[0] is not None:
+        total_spend_home = 0.0
+        for row in all_flows:
+            if row["spend"] is None:
+                continue
+            day_rate, approx_used = rates.lenient(row["day"])
+            if day_rate is None:
+                total_spend_home, approx = None, False
+                break
+            total_spend_home += row["spend"] * day_rate
+            approx = approx or approx_used
+
+    if month_income_source == "statements":
+        month_income_home = _strict_sum(((r["day"], r["income"]) for r in month_flows), rates)
+    elif month_income_source == "settings":
+        ref_rate = _reference_rate(rates, month_start)
+        month_income_home = month_income * ref_rate if ref_rate is not None else None
+    else:
+        month_income_home = None
+
+    return {
+        "currency": home,
+        "total_spend_home": _r2(total_spend_home),
+        "month_spend_home": _r2(_strict_sum(((r["day"], r["spend"]) for r in month_flows), rates)),
+        "month_income_home": _r2(month_income_home),
+        "rate_asof": rate_asof.isoformat() if rate_asof else None,
+        "rate": rate,
+        "approx": approx,
+    }
+
+
 @router.get("/summary")
 async def get_summary(request: Request):
     """Overall summary: total transactions, labeled%, total spend."""
@@ -60,39 +214,77 @@ async def get_summary(request: Request):
     request_translation_periodic(user_id)
 
     try:
-        # Four independent queries, run concurrently (one round-trip of
-        # latency instead of four). Counts use limit(1): count="exact" gives
-        # the total in the header, so there's no need to ship up to 1,000 ids.
-        total, labeled, spend_resp, monthly_income = await asyncio.gather(
+        month_start, month_end = _month_bounds(None)
+        # Independent queries, run concurrently (one round-trip of latency
+        # instead of seven). Counts use limit(1): count="exact" gives the
+        # total in the header, so there's no need to ship up to 1,000 ids.
+        total, expense_total, labeled, spend_resp, monthly_income, home, month_flows = await asyncio.gather(
+            # Every kind: shown as "transactions imported".
             run_query(
                 lambda: supabase_client.table("transactions")
                 .select("id", count="exact").eq("user_id", user_id).limit(1).execute()
+            ),
+            # Labeling % is over expense rows only — income/transfer rows
+            # are never categorized, so they'd drag the % down forever.
+            run_query(
+                lambda: supabase_client.table("transactions")
+                .select("id", count="exact").eq("user_id", user_id).eq("kind", "expense").limit(1).execute()
             ),
             # Labeled = has a trusted category (not still pending review)
             run_query(
                 lambda: supabase_client.table("transactions")
                 .select("id", count="exact")
                 .eq("user_id", user_id)
+                .eq("kind", "expense")
                 .eq("needs_review", False)
                 .not_.is_("category_id", "null")
                 .limit(1)
                 .execute()
             ),
-            # Total spend, summed in Postgres (migration
-            # 20260811090000_transaction_sum_rpcs.sql).
+            # Total spend (expense only), summed in Postgres (migrations
+            # 20260811090000 / 20261011000200).
             run_query(lambda: supabase_client.rpc("sum_user_transactions", {"p_user_id": user_id}).execute()),
             _monthly_income(user_id),
+            _home_currency(user_id),
+            _daily_flows(user_id, month_start, month_end),
         )
         total_count = total.count if total.count is not None else len(total.data)
+        expense_count = expense_total.count if expense_total.count is not None else len(expense_total.data)
         labeled_count = labeled.count if labeled.count is not None else len(labeled.data)
         total_spend = float(spend_resp.data or 0)
+
+        month_spend = _flow_total(month_flows, "spend")
+        # Income from statements wins; the Settings figure is the fallback
+        # for users whose statements carry no income rows (all v1 users).
+        statement_income = _flow_total(month_flows, "income")
+        if statement_income != 0:
+            month_income, month_income_source = statement_income, "statements"
+        elif monthly_income > 0:
+            month_income, month_income_source = monthly_income, "settings"
+        else:
+            month_income, month_income_source = None, None
+
+        home_block = None
+        if home:
+            # total_spend_home converts every expense day, so this needs the
+            # whole history (one row per active day, not per transaction).
+            all_flows = await _daily_flows(user_id, None, None)
+            rates = await _load_rates(home, [r["day"] for r in all_flows])
+            home_block = _summary_home(
+                home, rates, all_flows, month_flows, month_start, month_income, month_income_source
+            )
 
         return {
             "total_transactions": total_count,
             "labeled_transactions": labeled_count,
-            "labeling_percentage": round(100 * labeled_count / total_count, 1) if total_count > 0 else 0,
+            "labeling_percentage": round(100 * labeled_count / expense_count, 1) if expense_count > 0 else 0,
             "total_spend": total_spend,
             "monthly_income": monthly_income,
+            "month": f"{month_start.year:04d}-{month_start.month:02d}",
+            "month_spend": round(month_spend, 2),
+            "month_income": _r2(month_income),
+            "month_income_source": month_income_source,
+            "home": home_block,
         }
     except HTTPException:
         raise
@@ -161,26 +353,109 @@ async def get_trends(request: Request, days: int = 30, granularity: str = "day",
         # Bucketed and summed in Postgres (migration
         # 20260927020000_dashboard_aggregate_rpcs.sql): ~12 rows back
         # instead of every transaction in the window, 1,000 per round trip.
-        resp = await run_query(
-            lambda: supabase_client.rpc(
-                "spend_trend_for_user",
-                {
-                    "p_user_id": user_id,
-                    "p_start": cutoff.isoformat(),
-                    "p_granularity": "month" if granularity == "month" else "day",
-                },
-            ).execute()
+        resp, home = await asyncio.gather(
+            run_query(
+                lambda: supabase_client.rpc(
+                    "spend_trend_for_user",
+                    {
+                        "p_user_id": user_id,
+                        "p_start": cutoff.isoformat(),
+                        "p_granularity": "month" if granularity == "month" else "day",
+                    },
+                ).execute()
+            ),
+            _home_currency(user_id),
         )
+
+        home_by_bucket: dict = {}
+        if home:
+            # Same rows as the trend RPC (categorized/split expense rows),
+            # per day, so each day converts at its own rate.
+            flows = await _daily_flows(user_id, cutoff, None)
+            rates = await _load_rates(home, [r["day"] for r in flows])
+            width = 7 if granularity == "month" else 10
+            days_by_bucket: dict = {}
+            for r in flows:
+                days_by_bucket.setdefault(r["day"].isoformat()[:width], []).append((r["day"], r["categorized_spend"]))
+            home_by_bucket = {b: _r2(_strict_sum(pairs, rates)) for b, pairs in days_by_bucket.items()}
+
         return {
+            "currency_home": home,
             "trends": [
-                {"date": row["bucket"], "total_spend": float(row["total"])}
+                {
+                    "date": row["bucket"],
+                    "total_spend": float(row["total"]),
+                    "total_spend_home": home_by_bucket.get(row["bucket"]) if home else None,
+                }
                 for row in (resp.data or [])
-            ]
+            ],
         }
     except HTTPException:
         raise
     except Exception as e:
         raise internal_error(e, "dashboard/trends")
+
+
+@router.get("/cashflow")
+async def get_cashflow(request: Request, months: int = 12):
+    """Monthly money in vs out (contract §3.5).
+
+    net = income − spend; transfers are shown but EXCLUDED from net (paying
+    a friend back isn't spending, a red packet isn't salary). Transfers
+    between the user's own accounts (own_account, repayment, top_up,
+    withdrawal) are neither in nor out — they're summed, absolute, into
+    `own_account_moved` for the whole window. Income comes only from
+    statements, never from the Settings figure.
+    """
+    user_id = request.state.user_id
+    months = min(max(1, months), 36)
+
+    try:
+        # Same window as trends?granularity=month: `months` calendar months
+        # ending with the current China-time month.
+        start = _months_ago_start(months - 1)
+        _, end = _month_bounds(None)
+        flows, home = await asyncio.gather(_daily_flows(user_id, start, end), _home_currency(user_id))
+        rates = await _load_rates(home, [r["day"] for r in flows]) if home else None
+
+        by_month: dict = {}
+        for r in flows:
+            by_month.setdefault(r["day"].isoformat()[:7], []).append(r)
+
+        result = []
+        for i in range(months):
+            m = _months_ago_start(months - 1 - i)
+            key = f"{m.year:04d}-{m.month:02d}"
+            rows = by_month.get(key, [])
+            spend = _flow_total(rows, "spend")
+            income = _flow_total(rows, "income")
+            spend_home = income_home = net_home = None
+            if home:
+                spend_home = _strict_sum(((r["day"], r["spend"]) for r in rows), rates)
+                income_home = _strict_sum(((r["day"], r["income"]) for r in rows), rates)
+                if spend_home is not None and income_home is not None:
+                    net_home = income_home - spend_home  # from unrounded parts
+            result.append({
+                "month": key,
+                "spend": round(spend, 2),
+                "income": round(income, 2),
+                "transfers_in": round(_flow_total(rows, "transfers_in"), 2),
+                "transfers_out": round(_flow_total(rows, "transfers_out"), 2),
+                "net": round(income - spend, 2),
+                "spend_home": _r2(spend_home),
+                "income_home": _r2(income_home),
+                "net_home": _r2(net_home),
+            })
+
+        return {
+            "currency_home": home,
+            "months": result,
+            "own_account_moved": round(_flow_total(flows, "own_account_moved"), 2),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "dashboard/cashflow")
 
 
 async def _monthly_income(user_id: str) -> float:
@@ -261,7 +536,7 @@ async def get_budget(request: Request, month: Optional[str] = None):
         # Independent reads, run concurrently. Monthly income's single source
         # of truth is profiles.monthly_income (written by PATCH
         # /settings/profile); budget_config.income is legacy, never written.
-        available_months, budget_config, cat_budget_resp, monthly_income, spending_by_cat = await asyncio.gather(
+        available_months, budget_config, cat_budget_resp, monthly_income, spending_by_cat, home = await asyncio.gather(
             _available_months(user_id),
             _budget_config(user_id),
             run_query(
@@ -272,36 +547,91 @@ async def get_budget(request: Request, month: Optional[str] = None):
             ),
             _monthly_income(user_id),
             _spend_by_category(user_id, start, end),
+            _home_currency(user_id),
         )
 
+        # Legacy display setting — unrelated to the home currency.
         budget_config_out = {
             "monthly_income": monthly_income,
             "currency": budget_config["currency"] if budget_config else "CNY",
         }
 
         if not cat_budget_resp.data:
+            zero_home = 0.0 if home else None
             return {
                 "budget_config": budget_config_out,
                 "category_budgets": [],
                 "month": resolved_month,
                 "available_months": available_months,
+                "total_budget": 0,
+                "total_spent": 0,
+                "currency_home": home,
+                "total_budget_home": zero_home,
+                "total_spent_home": zero_home,
             }
+
+        spend_home_by_cat: dict = {}
+        ref_rate = None
+        if home:
+            # Each line-item converts at its own day's rate (split items use
+            # the parent transaction's day); budgets at the month's rate.
+            daily = await fetch_all_async(
+                lambda: supabase_client.rpc(
+                    "spend_by_category_daily_for_user",
+                    {"p_user_id": user_id, "p_start": start.isoformat(), "p_end": end.isoformat()},
+                )
+            )
+            pairs_by_cat: dict = {}
+            for r in daily:
+                day = date.fromisoformat(str(r["day"])[:10])
+                pairs_by_cat.setdefault(r["category_name"], []).append((day, float(r["amount"])))
+            rates = await _load_rates(home, [d for pairs in pairs_by_cat.values() for d, _ in pairs] + [start.date()])
+            spend_home_by_cat = {name: _strict_sum(pairs, rates) for name, pairs in pairs_by_cat.items()}
+            ref_rate = _reference_rate(rates, start)
+
+        def to_home(amount: float) -> Optional[float]:
+            return amount * ref_rate if ref_rate is not None else None
 
         category_budgets = []
         for row in cat_budget_resp.data:
             cat_name = row["categories"]["name"] if row["categories"] else "Unknown"
-            category_budgets.append({
+            monthly_budget = float(row["monthly_budget"]) if row["monthly_budget"] else 0
+            item = {
                 "category": cat_name,
-                "monthly_budget": float(row["monthly_budget"]) if row["monthly_budget"] else 0,
+                "monthly_budget": monthly_budget,
                 "current_spend": float(spending_by_cat.get(cat_name, 0)),
                 "type": row["type"],
-            })
+                "monthly_budget_home": None,
+                "current_spend_home": None,
+            }
+            if home:
+                item["monthly_budget_home"] = to_home(monthly_budget)
+                item["current_spend_home"] = spend_home_by_cat.get(cat_name, 0.0)
+            category_budgets.append(item)
+
+        total_budget = sum(c["monthly_budget"] for c in category_budgets)
+        total_spent = sum(c["current_spend"] for c in category_budgets)
+        total_budget_home = total_spent_home = None
+        if home:
+            budget_homes = [c["monthly_budget_home"] for c in category_budgets]
+            spent_homes = [c["current_spend_home"] for c in category_budgets]
+            total_budget_home = None if None in budget_homes else sum(budget_homes)
+            total_spent_home = None if None in spent_homes else sum(spent_homes)
+            # Totals were summed unrounded; round every home figure once now.
+            for c in category_budgets:
+                c["monthly_budget_home"] = _r2(c["monthly_budget_home"])
+                c["current_spend_home"] = _r2(c["current_spend_home"])
 
         return {
             "budget_config": budget_config_out,
             "category_budgets": category_budgets,
             "month": resolved_month,
             "available_months": available_months,
+            "total_budget": round(total_budget, 2),
+            "total_spent": round(total_spent, 2),
+            "currency_home": home,
+            "total_budget_home": _r2(total_budget_home),
+            "total_spent_home": _r2(total_spent_home),
         }
     except HTTPException:
         raise
@@ -574,6 +904,7 @@ async def get_action(request: Request):
                 lambda: supabase_client.table("transactions")
                 .select("id", count="exact")
                 .eq("user_id", user_id)
+                .eq("kind", "expense")
                 .eq("needs_review", True)
                 .limit(1)
                 .execute()
@@ -757,9 +1088,12 @@ async def get_insights(request: Request):
             lambda: supabase_client.table("transactions")
             .select("id, merchant, merchant_en, amount, timestamp, is_split, categories(name)")
             .eq("user_id", user_id)
+            .eq("kind", "expense")
             .not_.is_("category_id", "null")
             .gte("timestamp", window_start.isoformat())
         )
+        # Splits only ever exist on expense rows (DB CHECK
+        # transactions_split_only_expense), so no kind filter is needed here.
         split_rows_raw = await fetch_all_async(
             lambda: supabase_client.table("transaction_splits")
             .select("transaction_id, amount, categories(name), transactions(timestamp)")
@@ -868,8 +1202,17 @@ async def get_reports(
     sort_by: Optional[str] = "date",
     sort_dir: Optional[str] = "desc",
     bucket: Optional[str] = None,
+    kind: Optional[str] = "expense",
 ):
     """Detailed reports: paginated transaction list.
+
+    `kind` (`expense` default | `income` | `transfer` | `all`; anything else
+    → `expense`) picks which transaction kinds are listed, so the v4
+    Reports tab (no `kind`) is unchanged. Category, bucket and
+    uncategorized filters only match expense rows: combined with
+    `income`/`transfer` they return an empty page, and with `all` they
+    restrict to expense rows. Each row carries `kind`, `flow_subtype`,
+    `source` and `amount_home` (per-row conversion, or null).
 
     Now includes uncategorized rows (so users can categorize anything from the
     table) and returns each row's `id`/`category_id` so the frontend can edit
@@ -894,15 +1237,29 @@ async def get_reports(
         sort_dir = "desc"
     if bucket not in ("Need", "Want", "Savings"):
         bucket = None
+    if kind not in KINDS + ("all",):
+        kind = "expense"
 
     try:
+        async def empty_page():
+            return {"transactions": [], "total_count": 0, "page": page, "per_page": per_page,
+                    "kind": kind, "currency_home": await _home_currency(user_id)}
+
+        expense_only_filter = uncategorized_only or bool(category_id) or bool(bucket)
+        if expense_only_filter and kind in ("income", "transfer"):
+            return await empty_page()  # non-expense rows have no category at all
+
         start = (page - 1) * per_page
         query = (
             supabase_client.table("transactions")
-            .select("id, timestamp, merchant, description, merchant_en, description_en, amount, category_id, categories(name), is_split, label_source",
+            .select("id, timestamp, merchant, description, merchant_en, description_en, amount, category_id, categories(name), is_split, label_source, kind, flow_subtype, source",
                     count="exact")
             .eq("user_id", user_id)
         )
+        if kind != "all":
+            query = query.eq("kind", kind)
+        elif expense_only_filter:
+            query = query.eq("kind", "expense")
         if uncategorized_only:
             query = query.is_("category_id", "null")
         elif category_id:
@@ -932,7 +1289,7 @@ async def get_reports(
             if not bucket_category_ids:
                 # None of this user's categories fall in the requested bucket —
                 # short-circuit rather than pass an empty list to .in_().
-                return {"transactions": [], "total_count": 0, "page": page, "per_page": per_page}
+                return await empty_page()
             query = query.in_("category_id", bucket_category_ids)
 
         if sort_by == "category":
@@ -940,13 +1297,25 @@ async def get_reports(
         else:
             query = query.order("timestamp", desc=(sort_dir != "asc"))
 
-        response = await run_query(
-            lambda: query
-            .range(start, start + per_page - 1)
-            .execute()
+        response, home = await asyncio.gather(
+            run_query(
+                lambda: query
+                .range(start, start + per_page - 1)
+                .execute()
+            ),
+            _home_currency(user_id),
         )
 
         total_count = response.count if response.count is not None else len(response.data or [])
+
+        # Per-row home amounts: one rate read covering this page's dates.
+        row_days = {t["id"]: _row_day(t["timestamp"]) for t in (response.data or []) if t.get("timestamp")}
+        rates = await _load_rates(home, list(row_days.values())) if home and row_days else None
+
+        def amount_home(txn) -> Optional[float]:
+            day = row_days.get(txn["id"])
+            rate = rates.strict(day) if rates is not None and day is not None else None
+            return round(float(txn["amount"]) * rate, 2) if rate is not None else None
 
         split_txn_ids = [t["id"] for t in (response.data or []) if t.get("is_split")]
         splits_by_txn: dict = {}
@@ -970,9 +1339,13 @@ async def get_reports(
         def build_rows():
             rows = []
             for txn in (response.data or []):
-                is_split = bool(txn.get("is_split"))
-                category_name = txn["categories"]["name"] if txn["categories"] else None
-                if is_split:
+                txn_kind = txn.get("kind") or "expense"
+                is_expense = txn_kind == "expense"
+                is_split = is_expense and bool(txn.get("is_split"))
+                category_name = txn["categories"]["name"] if txn["categories"] and is_expense else None
+                if not is_expense:
+                    category_label = KIND_LABELS[txn_kind]  # "Income" / "Transfer"
+                elif is_split:
                     n = split_counts.get(txn["id"], 0)
                     category_label = f"Split ({n})"
                 else:
@@ -984,7 +1357,7 @@ async def get_reports(
                     "description": description_label_stored(txn["description"], txn.get("description_en")),
                     "amount": float(txn["amount"]),
                     "category": category_label,
-                    "category_id": txn["category_id"],
+                    "category_id": txn["category_id"] if is_expense else None,
                     "is_split": is_split,
                     "splits": splits_by_txn.get(txn["id"], []) if is_split else None,
                     "label_source": txn["label_source"],
@@ -992,6 +1365,10 @@ async def get_reports(
                     # uncategorized row (no category at all); custom
                     # categories not in CATEGORY_BUCKET also fall back to None.
                     "bucket": None if is_split or category_name is None else CATEGORY_BUCKET.get(category_name),
+                    "kind": txn_kind,
+                    "flow_subtype": txn.get("flow_subtype"),
+                    "source": txn.get("source"),
+                    "amount_home": amount_home(txn),
                 })
             return rows
 
@@ -1005,6 +1382,8 @@ async def get_reports(
             "total_count": total_count,
             "page": page,
             "per_page": per_page,
+            "kind": kind,
+            "currency_home": home,
         }
     except HTTPException:
         raise
@@ -1017,8 +1396,12 @@ async def get_reports(
 async def export_transactions(request: Request):
     """Export all user transactions as XLSX workbook.
 
-    Columns: Date | Merchant | Description | Category | Amount | Label source
-    All text is translated to English; amounts formatted as #,##0.00
+    Every kind is exported. Columns:
+    Date | Merchant | Description | Category | Kind | Amount | Home amount |
+    Home currency | Label Source
+    All text is translated to English; Amount and Home amount are formatted
+    as #,##0.00. Category is empty for income/transfer rows; Home amount is
+    an empty cell when no rate (or no home currency) exists.
     """
     from io import BytesIO
     from fastapi.responses import StreamingResponse
@@ -1032,12 +1415,32 @@ async def export_transactions(request: Request):
         def make_query():
             return (
                 supabase_client.table("transactions")
-                .select("id, timestamp, merchant, description, merchant_en, description_en, amount, category_id, categories(name), is_split, label_source")
+                .select("id, timestamp, merchant, description, merchant_en, description_en, amount, category_id, categories(name), is_split, label_source, kind, flow_subtype")
                 .eq("user_id", user_id)
                 .order("timestamp", desc=True)
             )
 
-        all_txns = await fetch_all_async(make_query)
+        all_txns, home = await asyncio.gather(fetch_all_async(make_query), _home_currency(user_id))
+
+        row_days = {t["id"]: _row_day(t["timestamp"]) for t in all_txns if t.get("timestamp")}
+        rates = await _load_rates(home, list(row_days.values())) if home and row_days else None
+
+        def amount_home(txn):
+            day = row_days.get(txn["id"])
+            rate = rates.strict(day) if rates is not None and day is not None else None
+            return round(float(txn["amount"]) * rate, 2) if rate is not None else None
+
+        def kind_label(txn) -> str:
+            label = KIND_LABELS.get(txn.get("kind") or "expense", "Expense")
+            subtype = txn.get("flow_subtype")
+            return f"{label} ({FLOW_SUBTYPE_LABELS.get(subtype, subtype)})" if subtype else label
+
+        def category_label(txn) -> str:
+            if (txn.get("kind") or "expense") != "expense":
+                return ""
+            if txn.get("is_split"):
+                return f"Split ({split_counts.get(txn['id'], 0)})"
+            return txn["categories"]["name"] if txn["categories"] else "Uncategorized"
 
         split_counts_resp = await run_query(
             lambda: supabase_client.table("transaction_splits")
@@ -1055,7 +1458,8 @@ async def export_transactions(request: Request):
         ws.title = "Transactions"
 
         # Headers
-        headers = ["Date", "Merchant", "Description", "Category", "Amount", "Label Source"]
+        headers = ["Date", "Merchant", "Description", "Category", "Kind", "Amount",
+                   "Home amount", "Home currency", "Label Source"]
         ws.append(headers)
 
         # Format header row
@@ -1080,8 +1484,11 @@ async def export_transactions(request: Request):
                     _fmt_date(txn["timestamp"]),
                     merchant_label_stored(txn["merchant"], txn.get("merchant_en")),
                     description_label_stored(txn["description"], txn.get("description_en")),
-                    f"Split ({split_counts.get(txn['id'], 0)})" if txn.get("is_split") else (txn["categories"]["name"] if txn["categories"] else "Uncategorized"),
+                    category_label(txn),
+                    kind_label(txn),
                     float(txn["amount"]),
+                    amount_home(txn),  # None → empty cell
+                    home or "",
                     txn["label_source"] or "",
                 ]
                 for txn in all_txns
@@ -1091,18 +1498,14 @@ async def export_transactions(request: Request):
         for row in build_rows():
             ws.append(row)
 
-        # Format amount column
-        for row in ws.iter_rows(min_row=2, max_row=len(all_txns) + 1, min_col=5, max_col=5):
+        # Format the Amount (F) and Home amount (G) columns
+        for row in ws.iter_rows(min_row=2, max_row=len(all_txns) + 1, min_col=6, max_col=7):
             for cell in row:
                 cell.number_format = '#,##0.00'
 
         # Adjust column widths
-        ws.column_dimensions['A'].width = 12
-        ws.column_dimensions['B'].width = 20
-        ws.column_dimensions['C'].width = 30
-        ws.column_dimensions['D'].width = 18
-        ws.column_dimensions['E'].width = 12
-        ws.column_dimensions['F'].width = 14
+        for col, width in zip("ABCDEFGHI", (12, 20, 30, 18, 26, 12, 14, 14, 14)):
+            ws.column_dimensions[col].width = width
 
         # Write to bytes
         output = BytesIO()
@@ -1140,6 +1543,9 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 lambda: supabase_client.table("transactions")
                 .select("id, timestamp, merchant, description, merchant_en, description_en, amount, confidence, category_id, categories(name), is_split")
                 .eq("user_id", user_id)
+                # A row re-kinded to income/transfer keeps its old
+                # is_manually_labeled flag but has no category any more.
+                .eq("kind", "expense")
                 .eq("is_manually_labeled", True)
                 .order("timestamp", desc=True)  # Most recent labels first
                 .limit(50)
@@ -1156,6 +1562,7 @@ async def get_review_queue(request: Request, show_labeled: bool = False):
                 lambda: supabase_client.table("transactions")
                 .select("id, timestamp, merchant, description, merchant_en, description_en, amount, confidence, category_id, categories(name), is_split")
                 .eq("user_id", user_id)
+                .eq("kind", "expense")
                 .eq("needs_review", True)
                 .order("confidence")  # Least confident first
                 .limit(500)

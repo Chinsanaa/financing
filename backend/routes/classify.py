@@ -3,6 +3,11 @@
 Bulk classification (rules + model + LLM fallback inference on unlabeled
 rows) lives in backend/ml.py and runs automatically after uploads and
 training runs.
+
+Only expense rows can be categorized (API v5 §3.11): every row lookup here
+is scoped to kind='expense', so labeling/splitting/accepting an income or
+transfer row answers 404 "Transaction not found" — change its kind first
+(PATCH /transactions/{id}/kind).
 """
 from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -92,6 +97,7 @@ async def _apply_to_merchant_siblings(
             .select("id")
             .eq("user_id", user_id)
             .eq("merchant", merchant)
+            .eq("kind", "expense")
             .eq("needs_review", True)
             .neq("id", exclude_id)
             .execute()
@@ -132,7 +138,7 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
     """
     # Fetch the current row first so we know if it was an LLM suggestion.
     before_response = await run_query(
-        lambda: supabase_client.table("transactions").select("merchant, label_source").eq("id", transaction_id).eq("user_id", user_id).execute()
+        lambda: supabase_client.table("transactions").select("merchant, label_source").eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
     )
     if not before_response.data:
         return None
@@ -265,7 +271,7 @@ async def split_transaction(request: Request, transaction_id: str, req: SplitReq
             raise HTTPException(status_code=400, detail="Duplicate category in split")
 
         txn_resp = await run_query(
-            lambda: supabase_client.table("transactions").select("amount").eq("id", transaction_id).eq("user_id", user_id).execute()
+            lambda: supabase_client.table("transactions").select("amount").eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
         )
         if not txn_resp.data:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -328,7 +334,7 @@ async def unsplit_transaction(request: Request, transaction_id: str):
                 "category_id": None,
                 "is_split": False,
                 "needs_review": True,
-            }).eq("id", transaction_id).eq("user_id", user_id).execute()
+            }).eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -348,7 +354,7 @@ async def accept_model_suggestion(request: Request, transaction_id: str, backgro
 
     try:
         before_response = await run_query(
-            lambda: supabase_client.table("transactions").select("merchant, label_source, category_id").eq("id", transaction_id).eq("user_id", user_id).execute()
+            lambda: supabase_client.table("transactions").select("merchant, label_source, category_id").eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
         )
         if not before_response.data:
             raise HTTPException(status_code=404, detail="Transaction not found")

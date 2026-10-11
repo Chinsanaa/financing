@@ -192,6 +192,25 @@ def _ilike_matches(value: Any, pattern: str) -> bool:
     return needle in str(value).lower()
 
 
+def _with_column_defaults(table_name: str, item: dict) -> dict:
+    """Copy of `item` with the DB column defaults routes rely on filtering
+    by: transactions.kind defaults to 'expense' (migration
+    20261011000100), so rows seeded/inserted without a kind behave exactly
+    like every pre-v5 row in the real database."""
+    row = dict(item)
+    if table_name == "transactions":
+        row.setdefault("kind", "expense")
+        row.setdefault("flow_subtype", None)
+    return row
+
+
+def _is_expense(row: dict) -> bool:
+    return (row.get("kind") or "expense") == "expense"
+
+
+OWN_ACCOUNT_SUBTYPES = ("own_account", "repayment", "top_up", "withdrawal")
+
+
 class FakeTable:
     _id_counter = itertools.count(1)
 
@@ -220,7 +239,7 @@ class FakeTable:
             payload = qb._payload if isinstance(qb._payload, list) else [qb._payload]
             inserted = []
             for item in payload:
-                row = dict(item)
+                row = _with_column_defaults(self.name, item)
                 row.setdefault("id", f"{self.name}-{next(self._id_counter)}")
                 # Real Postgres tables default created_at to now() — mirror
                 # that here since some routes read it back (e.g. the
@@ -341,6 +360,11 @@ class FakeRPCCall:
         self._name = name
         self._params = params
 
+    def range(self, start: int, end: int):
+        """Paging (db.fetch_all_async) — handlers return everything at once,
+        which is always a short final page here."""
+        return self
+
     def execute(self) -> FakeResponse:
         handler = self._client.rpc_handlers.get(self._name)
         data = handler(self._params) if handler else None
@@ -355,17 +379,19 @@ class FakeSupabaseClient:
         self.storage = FakeStorage()
         self.auth = FakeAuth()
         # name -> callable(params) -> data, for supabase_client.rpc(name, params).
-        # spend_by_category_for_user gets a real default (computed from seeded
-        # rows, mirroring the SQL RPC's union-then-aggregate logic) since it
-        # backs heavily-tested budget/action endpoints — every other RPC here
-        # (sum_user_transactions, monthly_spend_by_user, get_email_for_username)
-        # has no such default and tests register per-test lambdas instead,
-        # because nothing in this suite currently exercises those endpoints
-        # heavily enough to need one.
+        # The dashboard aggregate RPCs get real defaults computed from seeded
+        # rows, mirroring the SQL functions (incl. the kind='expense' filter
+        # from migration 20261011000200). Tests may still override any of
+        # them per test; RPCs without a default (get_email_for_username)
+        # return None unless a test registers one.
         self.rpc_handlers: dict[str, Any] = {
             "spend_by_category_for_user": self._default_spend_by_category_for_user,
             "available_months_for_user": self._default_available_months_for_user,
             "spend_trend_for_user": self._default_spend_trend_for_user,
+            "sum_user_transactions": self._default_sum_user_transactions,
+            "monthly_spend_by_user": self._default_monthly_spend_by_user,
+            "daily_flows_for_user": self._default_daily_flows_for_user,
+            "spend_by_category_daily_for_user": self._default_spend_by_category_daily_for_user,
         }
 
     def table(self, name: str) -> FakeQueryBuilder:
@@ -388,49 +414,111 @@ class FakeSupabaseClient:
             ts = t.get("timestamp")
             if not ts or ts < params["p_start"]:
                 continue
-            if not (t.get("category_id") or t.get("is_split")):
+            if not _is_expense(t) or not (t.get("category_id") or t.get("is_split")):
                 continue
             totals[ts[:width]] = totals.get(ts[:width], 0) + float(t.get("amount", 0))
         return [{"bucket": b, "total": v} for b, v in sorted(totals.items())]
 
-    def _default_spend_by_category_for_user(self, params: dict) -> list:
-        user_id = params.get("p_user_id")
-        start = params.get("p_start")
-        end = params.get("p_end")
+    @staticmethod
+    def _in_window(timestamp: Optional[str], start: Optional[str], end: Optional[str]) -> bool:
+        if timestamp is None:
+            return False
+        if start and timestamp < start:
+            return False
+        if end and timestamp >= end:
+            return False
+        return True
 
-        def in_window(timestamp: Optional[str]) -> bool:
-            if timestamp is None:
-                return False
-            if start and timestamp < start:
-                return False
-            if end and timestamp >= end:
-                return False
-            return True
+    def _expense_rows(self, params: dict) -> list:
+        """The user's expense rows inside [p_start, p_end) — the filter every
+        spend SQL function applies since 20261011000200."""
+        return [
+            t for t in self._user_txns(params["p_user_id"])
+            if _is_expense(t) and self._in_window(t.get("timestamp"), params.get("p_start"), params.get("p_end"))
+        ]
 
+    def _default_sum_user_transactions(self, params: dict) -> float:
+        return sum(float(t.get("amount", 0)) for t in self._expense_rows(params))
+
+    def _default_monthly_spend_by_user(self, params: dict) -> list:
+        totals: dict[str, float] = {}
+        for t in self._expense_rows(params):
+            month = t["timestamp"][:7] + "-01"
+            totals[month] = totals.get(month, 0) + float(t.get("amount", 0))
+        return [{"month": m, "total": v} for m, v in sorted(totals.items())]
+
+    def _default_daily_flows_for_user(self, params: dict) -> list:
+        """Mirrors daily_flows_for_user: per-day sums by flow, a flow is
+        None on a day without rows of it."""
+        days: dict[str, dict] = {}
+
+        def add(day: str, key: str, value: float):
+            row = days.setdefault(day, {"day": day, "spend": None, "categorized_spend": None, "income": None,
+                                        "transfers_in": None, "transfers_out": None, "own_account_moved": None})
+            row[key] = (row[key] or 0) + value
+
+        for t in self._user_txns(params["p_user_id"]):
+            ts = t.get("timestamp")
+            if not self._in_window(ts, params.get("p_start"), params.get("p_end")):
+                continue
+            day, amount, kind = ts[:10], float(t.get("amount", 0)), t.get("kind") or "expense"
+            if kind == "expense":
+                add(day, "spend", amount)
+                if t.get("category_id") or t.get("is_split"):
+                    add(day, "categorized_spend", amount)
+            elif kind == "income":
+                add(day, "income", amount)
+            elif t.get("flow_subtype") in OWN_ACCOUNT_SUBTYPES:
+                add(day, "own_account_moved", abs(amount))
+            elif amount < 0:
+                add(day, "transfers_in", -amount)
+            elif amount > 0:
+                add(day, "transfers_out", amount)
+        return [days[d] for d in sorted(days)]
+
+    def _default_spend_by_category_daily_for_user(self, params: dict) -> list:
+        totals: dict[tuple, float] = {}
+        for cat_id, ts, amount in self._category_contributions(params):
+            key = (cat_id, ts[:10])
+            totals[key] = totals.get(key, 0) + amount
+        names = self._category_names()
+        return [
+            {"category_id": c, "category_name": names.get(c, "Unknown"), "day": d, "amount": v}
+            for (c, d), v in sorted(totals.items(), key=lambda kv: (kv[0][1], kv[0][0]))
+        ]
+
+    def _category_names(self) -> dict:
         categories = self._tables.get("categories")
-        cat_name_by_id = {c["id"]: c["name"] for c in categories.rows} if categories else {}
+        return {c["id"]: c["name"] for c in categories.rows} if categories else {}
 
-        contributions: list[tuple[str, float]] = []
-
+    def _category_contributions(self, params: dict) -> list:
+        """(category_id, parent timestamp, amount) for plain categorized
+        expense rows and split line-items of expense parents."""
+        user_id, start, end = params.get("p_user_id"), params.get("p_start"), params.get("p_end")
+        out: list = []
         transactions = self._tables.get("transactions")
-        if transactions:
-            for t in transactions.rows:
-                if t.get("user_id") != user_id or t.get("is_split") or not t.get("category_id"):
+        if not transactions:
+            return out
+        for t in transactions.rows:
+            if t.get("user_id") != user_id or t.get("is_split") or not t.get("category_id") or not _is_expense(t):
+                continue
+            if self._in_window(t.get("timestamp"), start, end):
+                out.append((t["category_id"], t["timestamp"], float(t.get("amount", 0))))
+        splits = self._tables.get("transaction_splits")
+        if splits:
+            txn_by_id = {t["id"]: t for t in transactions.rows}
+            for s in splits.rows:
+                if s.get("user_id") != user_id:
                     continue
-                if not in_window(t.get("timestamp")):
+                parent = txn_by_id.get(s.get("transaction_id"))
+                if not parent or not _is_expense(parent) or not self._in_window(parent.get("timestamp"), start, end):
                     continue
-                contributions.append((t["category_id"], float(t.get("amount", 0))))
+                out.append((s["category_id"], parent["timestamp"], float(s.get("amount", 0))))
+        return out
 
-            splits = self._tables.get("transaction_splits")
-            if splits:
-                txn_by_id = {t["id"]: t for t in transactions.rows}
-                for s in splits.rows:
-                    if s.get("user_id") != user_id:
-                        continue
-                    parent = txn_by_id.get(s.get("transaction_id"))
-                    if not parent or not in_window(parent.get("timestamp")):
-                        continue
-                    contributions.append((s["category_id"], float(s.get("amount", 0))))
+    def _default_spend_by_category_for_user(self, params: dict) -> list:
+        cat_name_by_id = self._category_names()
+        contributions = [(c, amount) for c, _, amount in self._category_contributions(params)]
 
         totals: dict[str, float] = {}
         counts: dict[str, int] = {}
@@ -454,7 +542,7 @@ class FakeSupabaseClient:
     def seed(self, table_name: str, rows: list[dict]):
         """Test helper: pre-populate a table with rows."""
         table = self._tables.setdefault(table_name, FakeTable(table_name))
-        table.rows.extend(dict(r) for r in rows)
+        table.rows.extend(_with_column_defaults(table_name, r) for r in rows)
 
     def seed_user_email(self, user_id: str, email: str):
         """Test helper: make auth.admin.get_user_by_id(user_id) resolve an email."""
