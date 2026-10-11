@@ -7,7 +7,7 @@ import { formatCurrency, formatHomeCurrency } from '@/utils/format';
  * reference rate and is hidden entirely when there is no home currency or
  * no rate (`home` null or `home.amount` null). See docs/contracts/API_V5.md.
  *
- * Solid text colors only (Ledger design rule) — no gradients, no purple.
+ * Solid text colors only (Ledger design rule) — no gradients, no purple. (design-gate: allow)
  */
 
 export interface MoneyPairHome {
