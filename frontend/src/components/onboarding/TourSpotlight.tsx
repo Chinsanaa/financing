@@ -22,7 +22,12 @@ export default function TourSpotlight({ targetId }: { targetId: string }) {
     let scrolled = false;
 
     const update = () => {
-      const el = document.querySelector(`[data-tour-id="${targetId}"]`);
+      // The section nav renders twice (desktop row / phone row) — take the
+      // copy that is actually laid out (display:none has no client rects).
+      const el =
+        Array.from(document.querySelectorAll(`[data-tour-id="${targetId}"]`)).find(
+          (n) => n.getClientRects().length > 0
+        ) || null;
       if (el && !scrolled) {
         scrolled = true;
         el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -53,7 +58,7 @@ export default function TourSpotlight({ targetId }: { targetId: string }) {
   return (
     <div className="pointer-events-none fixed inset-0 z-[60]" aria-hidden="true">
       <div
-        className="absolute rounded-xl border-2 border-accent transition-all duration-200 ease-out"
+        className="absolute rounded-md border-2 border-accent transition-[top,left,width,height] duration-200 ease-out"
         style={{
           top: rect.top - PADDING,
           left: rect.left - PADDING,

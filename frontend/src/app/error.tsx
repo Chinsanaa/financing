@@ -29,13 +29,13 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       <div className="flex gap-3">
         <button
           onClick={() => window.location.reload()}
-          className="rounded-pill bg-accent px-4 py-2 text-sm font-medium text-accent-ink"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-ink"
         >
           Reload page
         </button>
         <button
           onClick={reset}
-          className="rounded-pill border border-edge/20 px-4 py-2 text-sm text-ink"
+          className="rounded-md border border-edge/20 px-4 py-2 text-sm text-ink"
         >
           Try again
         </button>

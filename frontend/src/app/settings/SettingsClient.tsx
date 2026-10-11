@@ -218,7 +218,7 @@ export default function SettingsClient() {
     <div className="relative min-h-screen">
       <header className="sticky top-0 z-40 border-b border-edge/8 bg-bg">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
-          <h1 className="font-display text-lg font-bold tracking-tight">Settings</h1>
+          <h1 className="font-display text-lg font-medium tracking-[-0.015em]">Settings</h1>
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
@@ -228,11 +228,11 @@ export default function SettingsClient() {
       {/* stagger-in: section cards cascade in on load */}
       <div className="stagger-in relative z-[1] mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
         <Card className="p-6">
-          <SectionHeader label="Profile" title="Account" />
+          <SectionHeader title="Account" />
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
           <span
             aria-hidden="true"
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-accent font-display text-2xl font-bold text-accent-ink"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-ink font-display text-2xl text-bg"
           >
             {(profile?.username || user?.email || '?').charAt(0).toUpperCase()}
           </span>
@@ -256,7 +256,7 @@ export default function SettingsClient() {
         </Card>
 
         <Card className="p-6">
-          <SectionHeader label="Notifications" title="Notification preferences" />
+          <SectionHeader title="Notification preferences" />
           <div className="space-y-6">
             <div className="space-y-3">
               <p className="text-sm font-semibold text-ink">Budget alerts</p>
@@ -337,7 +337,7 @@ export default function SettingsClient() {
         </Card>
 
         <Card className="p-6">
-          <SectionHeader label="Data & Security" title="Export your data" />
+          <SectionHeader title="Export your data" />
           <div className="space-y-4">
             <p className="text-sm text-muted">
               Download your categorized transaction history as an Excel spreadsheet.
@@ -351,7 +351,7 @@ export default function SettingsClient() {
         </Card>
 
         <Card className="p-6">
-          <SectionHeader label="Data & Security" title="Change password" />
+          <SectionHeader title="Change password" />
           <form onSubmit={handleChangePassword} className="space-y-4">
             <PasswordInput
               label="Current password"
@@ -399,17 +399,17 @@ export default function SettingsClient() {
         </Card>
 
         <Card className="p-6">
-          <SectionHeader label="Legal" title="Policies" />
+          <SectionHeader title="Policies" />
           <div className="space-y-3">
             <Link
               href="/privacy"
-              className="flex items-center gap-2.5 text-sm font-medium text-ink transition-colors hover:text-accent-strong"
+              className="flex items-center gap-2.5 text-sm font-medium text-ink underline decoration-edge/30 underline-offset-4 transition-colors hover:decoration-accent"
             >
               <FileText className="h-4 w-4 text-muted" /> Privacy Policy
             </Link>
             <Link
               href="/terms"
-              className="flex items-center gap-2.5 text-sm font-medium text-ink transition-colors hover:text-accent-strong"
+              className="flex items-center gap-2.5 text-sm font-medium text-ink underline decoration-edge/30 underline-offset-4 transition-colors hover:decoration-accent"
             >
               <ScrollText className="h-4 w-4 text-muted" /> Terms &amp; Conditions
             </Link>
@@ -417,7 +417,7 @@ export default function SettingsClient() {
         </Card>
 
         <Card className="border-danger/25 p-6">
-          <SectionHeader label="Irreversible" title="Danger zone" />
+          <SectionHeader title="Danger zone" />
           <div className="space-y-4">
             <p className="text-sm text-muted">
               Deleting your account will permanently remove all your data, transactions, and

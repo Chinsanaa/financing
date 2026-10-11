@@ -57,14 +57,14 @@ export function parseYearMonth(ym: string): Date | null {
  *  next to a month reads as a day-of-month ("Jun 26"). */
 export function formatMonthShort(ym: string): string {
   const d = parseYearMonth(ym);
-  return d ? d.toLocaleDateString(undefined, { month: 'short' }) : ym;
+  return d ? d.toLocaleDateString('en-US', { month: 'short' }) : ym;
 }
 
 /** "2026-06" -> "June 2026" — for tooltips and month selectors, where the
  *  full year disambiguates month-only axis ticks. */
 export function formatMonthLong(ym: string): string {
   const d = parseYearMonth(ym);
-  return d ? d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : ym;
+  return d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ym;
 }
 
 /** Any timestamp -> "yyyy/mm/dd", fixed regardless of browser locale. */

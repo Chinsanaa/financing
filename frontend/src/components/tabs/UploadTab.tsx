@@ -308,7 +308,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
 
   return (
     <div className="w-full space-y-6">
-      <SectionHeader label="Transactions" title="Upload statements" />
+      <SectionHeader title="Upload statements" />
       <p className="-mt-4 text-sm text-muted">
         CSV or Excel exports from Alipay or WeChat — up to {MAX_QUEUE} files at a time. Both formats are
         detected automatically, and each file uploads one after another.
@@ -321,9 +321,9 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
         onDragOver={handleDrag}
         onDrop={handleDrop}
         data-tour-id="upload-choose-files"
-        className={`group relative overflow-hidden rounded-card p-12 text-center transition-all duration-300 ${
+        className={`group relative overflow-hidden rounded-card p-12 text-center transition-[opacity,background-color] duration-200 ${
           running ? 'pointer-events-none opacity-60' : ''
-        } ${dragActive ? 'is-active bg-accent/[0.06]' : 'bg-surface'}`}
+        } ${dragActive ? 'is-active bg-accent/[0.05]' : ''}`}
       >
         {/* Animated dashed border (marching ants) — see .dash-march */}
         <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
@@ -333,21 +333,21 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
             }`}
             x="1"
             y="1"
-            rx="15"
-            strokeWidth="2"
+            rx="9"
+            strokeWidth="1.5"
             style={{ width: 'calc(100% - 2px)', height: 'calc(100% - 2px)' }}
           />
         </svg>
         <div className="relative space-y-4">
           <m.div
-            animate={dragActive ? { scale: 1.15, y: -6, rotate: -6 } : { scale: 1, y: 0, rotate: 0 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-accent/10 text-accent-strong"
+            animate={dragActive ? { y: -4 } : { y: 0 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+            className={`mx-auto flex justify-center ${dragActive ? 'text-accent-strong' : 'text-muted'}`}
           >
-            <UploadCloud className="h-7 w-7" />
+            <UploadCloud className="h-7 w-7" aria-hidden="true" />
           </m.div>
           <div>
-            <p className="font-display text-lg font-semibold">
+            <p className="font-display text-2xl font-normal">
               {dragActive ? 'Drop to upload' : 'Drag and drop your files here'}
             </p>
             <p className="mt-1 text-sm text-muted">or choose them from your computer</p>
@@ -387,7 +387,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
       {showManualForm && (
         <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="space-y-4 p-6">
-            <SectionHeader label="Manual entry" title="Add an expense" />
+            <SectionHeader title="Add an expense" />
             <form onSubmit={handleManualSubmit} className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Date"
@@ -500,7 +500,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
 
       {/* Upload History */}
       <div className="mt-10 border-t pt-8">
-        <SectionHeader label="History" title="Recent uploads" />
+        <SectionHeader title="Recent uploads" />
         <p className="-mt-4 mb-4 text-sm text-muted">
           Manage your uploaded files and their transactions.
         </p>
@@ -508,10 +508,10 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
         {uploadsLoading ? (
           <SkeletonRows rows={3} />
         ) : uploadsData?.uploads && uploadsData.uploads.length > 0 ? (
-          <Card className="overflow-hidden">
+          <Card variant="plain" className="border-b border-edge/12">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="border-b border-edge/8 bg-surface-2/60">
+                <thead className="border-b border-edge/15">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium text-muted">File</th>
                     <th className="px-4 py-3 text-left font-medium text-muted">Type</th>
@@ -533,12 +533,12 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
                       <td className="px-4 py-3 text-center">
                         <span
                           title={upload.status === 'failed' ? upload.error_message || undefined : undefined}
-                          className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium ${
+                          className={`inline-block rounded-[4px] px-1.5 py-0.5 text-xs font-medium capitalize ${
                             upload.status === 'parsed'
-                              ? 'bg-success/15 text-success'
+                              ? 'bg-success/12 text-success'
                               : upload.status === 'failed'
-                                ? 'bg-danger/15 text-danger cursor-help'
-                                : 'bg-accent/15 text-accent-strong'
+                                ? 'bg-danger/12 text-danger cursor-help'
+                                : 'bg-edge/8 text-muted'
                           }`}
                         >
                           {upload.status}
@@ -549,7 +549,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
                           onClick={() => handleDelete(upload.id)}
                           disabled={deleting === upload.id}
                           aria-label="Delete upload"
-                          className="rounded-lg p-2 text-muted transition-colors hover:text-danger hover:bg-danger/10 disabled:opacity-50"
+                          className="rounded-md p-2 text-muted transition-colors hover:text-danger hover:bg-danger/8 disabled:opacity-50"
                           title="Delete upload and all its transactions"
                         >
                           <Trash2 className="h-4 w-4" />

@@ -3,18 +3,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, m } from 'framer-motion';
-import {
-  ChevronLeft,
-  ChevronRight,
-  FileSpreadsheet,
-  Tags,
-  ListTodo,
-  CheckCircle,
-  Check,
-  Zap,
-} from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import Card from '@/components/ui/Card';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 
 const stepLoading = () => <SkeletonRows rows={5} />;
@@ -28,32 +18,27 @@ const STEPS = [
   {
     id: 'upload',
     label: 'Upload',
-    icon: FileSpreadsheet,
-    description: 'Import your transaction files',
+    description: 'Alipay + WeChat files',
   },
   {
     id: 'categories',
     label: 'Categories',
-    icon: Tags,
-    description: 'Define your spending categories',
+    description: 'Name and color them',
   },
   {
     id: 'label',
     label: 'Label',
-    icon: ListTodo,
-    description: 'Manually label transactions',
+    description: 'Teach your merchants',
   },
   {
     id: 'review',
     label: 'Review',
-    icon: CheckCircle,
-    description: 'Review model suggestions',
+    description: 'Check the model’s guesses',
   },
   {
     id: 'train',
     label: 'Train',
-    icon: Zap,
-    description: 'Train your ML model',
+    description: 'Retrain on your labels',
   },
 ];
 
@@ -99,80 +84,40 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
     prevStepRef.current = currentStep;
   }, [currentStep]);
 
-  const currentStepData = STEPS[currentStep];
-  const CurrentIcon = currentStepData.icon;
-  const progress = currentStep / (STEPS.length - 1);
-
   return (
-    <div className="space-y-6">
-      {/* Header: current step + connected stepper */}
-      <Card className="relative overflow-hidden p-5 sm:p-6">
-        <div className="relative mb-6 flex items-center gap-3">
-          <AnimatePresence mode="wait" initial={false}>
-            <m.span
-              key={currentStepData.id}
-              initial={{ scale: 0.6, rotate: -20, opacity: 0 }}
-              animate={{ scale: 1, rotate: 0, opacity: 1 }}
-              exit={{ scale: 0.6, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 24 }}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-ink"
-            >
-              <CurrentIcon className="h-5 w-5" />
-            </m.span>
-          </AnimatePresence>
-          <div className="min-w-0">
-            <h2 className="font-display text-xl font-semibold tracking-tight">{currentStepData.label}</h2>
-            <p className="text-sm text-muted">{currentStepData.description}</p>
-          </div>
-          <span className="ml-auto shrink-0 rounded-pill bg-edge/5 px-3 py-1 text-xs font-medium tabular-nums text-muted">
-            Step {currentStep + 1} / {STEPS.length}
-          </span>
-        </div>
-
-        {/* Stepper: nodes on a rail; the lit part of the rail grows with progress */}
-        <ol className="relative flex items-start justify-between">
-          <span aria-hidden="true" className="absolute left-4 right-4 top-4 h-0.5 rounded-full bg-edge/10" />
-          <m.span
-            aria-hidden="true"
-            className="absolute left-4 top-4 h-0.5 origin-left rounded-full bg-accent"
-            style={{ right: '1rem' }}
-            initial={false}
-            animate={{ scaleX: progress }}
-            transition={{ type: 'spring', stiffness: 120, damping: 22 }}
-          />
-          {STEPS.map((step, index) => {
-            const done = index < currentStep;
-            const current = index === currentStep;
-            const Icon = step.icon;
-            return (
-              <li key={step.id} className="relative z-[1] flex flex-col items-center gap-2">
-                <button
-                  onClick={() => handleStepClick(index)}
-                  data-tour-id={`wizard-step-${step.id}`}
-                  aria-label={`Step ${index + 1}: ${step.label}`}
-                  aria-current={current ? 'step' : undefined}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
-                    done
-                      ? 'border-accent bg-accent text-accent-ink'
-                      : current
-                      ? 'scale-110 border-accent bg-surface text-accent-strong ring-4 ring-accent/15'
-                      : 'border-edge/15 bg-surface text-muted hover:border-edge/30 hover:text-ink'
-                  }`}
-                >
-                  {done ? <Check className="h-4 w-4" /> : <Icon className="h-3.5 w-3.5" />}
-                </button>
-                <span
-                  className={`hidden text-xs sm:block ${
-                    current ? 'font-semibold text-ink' : done ? 'text-ink' : 'text-muted'
-                  }`}
-                >
-                  {step.label}
+    <div className="space-y-8">
+      {/* Steps as one ruled strip: done = ink rule + check, current =
+          vermilion rule, upcoming = hairline. The step's own heading below
+          names it, so there is no second title here. */}
+      <ol className="grid grid-cols-5 gap-2 sm:gap-4">
+        {STEPS.map((step, index) => {
+          const done = index < currentStep;
+          const current = index === currentStep;
+          return (
+            <li key={step.id} className="min-w-0">
+              <button
+                onClick={() => handleStepClick(index)}
+                data-tour-id={`wizard-step-${step.id}`}
+                aria-label={`Step ${index + 1}: ${step.label}`}
+                aria-current={current ? 'step' : undefined}
+                className={`group block w-full border-t-2 pt-2.5 text-left transition-colors duration-200 ${
+                  current ? 'border-accent' : done ? 'border-ink' : 'border-edge/15 hover:border-edge/40'
+                }`}
+              >
+                <span className="flex items-baseline gap-1.5">
+                  <span className={`num text-[15px] ${current ? 'text-accent-strong' : done ? 'text-ink' : 'text-muted'}`}>
+                    {done ? <Check className="inline h-3.5 w-3.5 -translate-y-px" aria-hidden="true" /> : index + 1}
+                  </span>
+                  <span className={`truncate text-sm ${current ? 'font-medium text-ink' : done ? 'text-ink' : 'text-muted group-hover:text-ink'}`}>
+                    {step.label}
+                  </span>
                 </span>
-              </li>
-            );
-          })}
-        </ol>
-      </Card>
+                <span className="mt-0.5 hidden truncate text-[12px] text-muted lg:block">{step.description}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
 
       {/* Step Content — slides in the direction of travel */}
       <AnimatePresence mode="wait" custom={direction}>
@@ -180,8 +125,8 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
           key={currentStep}
           custom={direction}
           variants={{
-            enter: (d: number) => ({ opacity: 0, x: 24 * d, filter: 'blur(4px)' }),
-            center: { opacity: 1, x: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } },
+            enter: (d: number) => ({ opacity: 0, x: 16 * d }),
+            center: { opacity: 1, x: 0 },
             exit: (d: number) => ({ opacity: 0, x: -16 * d, transition: { duration: 0.14 } }),
           }}
           initial="enter"
@@ -200,26 +145,21 @@ export default function TransactionsModelTab({ stepId, onStepChange }: Transacti
       </AnimatePresence>
 
       {/* Navigation Buttons */}
-      <div className="flex gap-3 justify-between">
-        <Button
-          variant="outline"
-          onClick={handlePrev}
-          disabled={currentStep === 0}
-          className="gap-2"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Previous
-        </Button>
-
-        <Button
-          variant="primary"
-          onClick={handleNext}
-          disabled={currentStep === STEPS.length - 1}
-          className="gap-2"
-        >
-          Next: {STEPS[Math.min(currentStep + 1, STEPS.length - 1)].label}
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+      <div className="flex items-center justify-between gap-3 border-t border-edge/15 pt-5">
+        {currentStep > 0 ? (
+          <Button variant="ghost" onClick={handlePrev}>
+            <ChevronLeft className="h-4 w-4" />
+            {STEPS[currentStep - 1].label}
+          </Button>
+        ) : (
+          <span />
+        )}
+        {currentStep < STEPS.length - 1 && (
+          <Button variant="outline" onClick={handleNext}>
+            Next: {STEPS[currentStep + 1].label}
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );

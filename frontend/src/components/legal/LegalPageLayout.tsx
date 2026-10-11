@@ -13,10 +13,10 @@ export default function LegalPageLayout({
 }) {
   return (
     <div className="min-h-screen">
-      <header className="glass sticky top-0 z-40 border-b border-edge/8">
+      <header className="sticky top-0 z-40 border-b border-edge/15 bg-bg">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
-          <Link href="/" className="font-display text-lg font-bold tracking-tight">
-            Financing<span className="text-accent-strong">.</span>
+          <Link href="/" className="font-display text-lg font-medium tracking-[-0.015em]">
+            Financing<span className="text-accent">.</span>
           </Link>
           <Link href="/">
             <Button variant="ghost" size="sm">
@@ -27,11 +27,10 @@ export default function LegalPageLayout({
       </header>
 
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 xl:px-10">
-        <p className="section-label mb-2">Legal</p>
-        <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
+        <h1 className="font-display text-3xl font-medium tracking-[-0.015em] sm:text-4xl">{title}</h1>
         <p className="mt-2 text-sm text-muted">Last updated: {lastUpdated}</p>
 
-        <div className="mt-10 space-y-8 text-sm leading-relaxed text-muted">
+        <div className="mt-10 max-w-[68ch] space-y-8 text-[15px] leading-relaxed text-muted">
           {children}
         </div>
       </div>
@@ -42,7 +41,7 @@ export default function LegalPageLayout({
 export function LegalSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="font-display text-lg font-semibold tracking-tight text-ink">{title}</h2>
+      <h2 className="font-display text-lg font-medium tracking-[-0.015em] text-ink">{title}</h2>
       <div className="mt-3 space-y-3">{children}</div>
     </section>
   );

@@ -5,7 +5,7 @@ import { m } from 'framer-motion';
 
 export type Step = { id: string; title: string };
 
-/** Horizontal progress stepper: filled check for done, accent ring for current. */
+/** Horizontal progress stepper: ink check for done, vermilion outline for current. */
 export default function Stepper({
   steps,
   completed,
@@ -24,21 +24,21 @@ export default function Stepper({
           <li key={step.id} className="flex items-center flex-1 last:flex-none">
             <div className="flex flex-col items-center gap-1.5">
               <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
+                className={`num flex h-7 w-7 items-center justify-center rounded-full border text-[13px] transition-colors ${
                   done
-                    ? 'bg-accent border-accent text-accent-ink'
+                    ? 'bg-ink border-ink text-bg'
                     : current
-                    ? 'border-accent text-accent-strong ring-4 ring-accent/15'
-                    : 'border-edge/20 text-muted'
+                    ? 'border-accent border-[1.5px] text-accent-strong'
+                    : 'border-edge/25 text-muted'
                 }`}
               >
                 {done ? (
                   <m.span
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                    transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
                   >
-                    <Check className="h-4 w-4" />
+                    <Check className="h-3.5 w-3.5" />
                   </m.span>
                 ) : (
                   i + 1
@@ -53,9 +53,9 @@ export default function Stepper({
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className="mx-2 mb-5 h-px flex-1 overflow-hidden rounded bg-edge/15">
+              <div className="mx-2 mb-5 h-px flex-1 overflow-hidden bg-edge/15">
                 <div
-                  className={`h-full bg-accent transition-all duration-500 ${
+                  className={`h-full bg-ink transition-[width] duration-500 ease-out ${
                     done ? 'w-full' : 'w-0'
                   }`}
                 />

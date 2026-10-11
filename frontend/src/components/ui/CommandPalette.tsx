@@ -108,25 +108,26 @@ export default function CommandPalette({
       {open && (
         <div className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-[12vh]">
           <m.div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-ink/25 dark:bg-black/50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.1 }}
             onClick={() => onOpenChange(false)}
           />
           <m.div
             role="dialog"
             aria-modal="true"
             aria-label="Command menu"
-            className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-edge/10 bg-surface shadow-card"
-            initial={{ opacity: 0, scale: 0.96, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -4, transition: { duration: 0.12 } }}
-            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            className="relative w-full max-w-lg overflow-hidden rounded-card border border-edge/15 bg-surface shadow-card"
+            // Keyboard-summoned, used many times a day: appear immediately.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.08 } }}
+            transition={{ duration: 0.1 }}
             onKeyDown={onKeyDown}
           >
-            <div className="flex items-center gap-3 border-b border-edge/8 px-4">
+            <div className="flex items-center gap-3 border-b border-edge/12 px-4">
               <Search className="h-4 w-4 shrink-0 text-muted" />
               <input
                 ref={inputRef}
@@ -161,18 +162,13 @@ export default function CommandPalette({
                       aria-selected={active}
                       onMouseMove={() => setIndex(i)}
                       onClick={() => runAt(i)}
-                      className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                      className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${
                         active ? 'text-ink' : 'text-muted'
                       }`}
                     >
-                      {active && (
-                        <m.span
-                          layoutId="command-active"
-                          className="absolute inset-0 rounded-lg bg-accent/10 ring-1 ring-accent/25"
-                          transition={{ type: 'spring', stiffness: 600, damping: 45 }}
-                        />
-                      )}
-                      <Icon className={`relative h-4 w-4 ${active ? 'text-accent-strong' : ''}`} />
+                      {/* Arrow keys move this — no glide, it must keep up with the key. */}
+                      {active && <span className="absolute inset-0 rounded-md bg-edge/[0.07]" />}
+                      <Icon className={`relative h-4 w-4 ${active ? 'text-ink' : ''}`} />
                       <span className="relative flex-1">{cmd.label}</span>
                       {active && <CornerDownLeft className="relative h-3.5 w-3.5 text-muted" />}
                     </button>
@@ -181,7 +177,7 @@ export default function CommandPalette({
               })}
             </div>
 
-            <div className="flex items-center gap-4 border-t border-edge/8 px-4 py-2.5 text-[11px] text-muted">
+            <div className="flex items-center gap-4 border-t border-edge/12 px-4 py-2.5 text-[11px] text-muted">
               <span className="flex items-center gap-1.5"><span className="kbd">↑</span><span className="kbd">↓</span> navigate</span>
               <span className="flex items-center gap-1.5"><span className="kbd">Enter</span> open</span>
               <span className="ml-auto flex items-center gap-1.5"><span className="kbd">⌘</span><span className="kbd">K</span> toggle</span>

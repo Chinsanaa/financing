@@ -9,6 +9,7 @@ import { advanceTour } from '@/utils/tour';
 import { Alert } from '@/components/ui-feedback';
 import Card, { SectionHeader } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
+import Segmented from '@/components/ui/Segmented';
 import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
@@ -104,37 +105,28 @@ export default function ReviewTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <SectionHeader label="Transactions" title={title} />
-          <p className="-mt-4 text-sm text-muted">
+      <SectionHeader
+        title={title}
+        description={
+          <>
             {description}
             {data && <span className="ml-1 tabular-nums">{data.count} items.</span>}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowLabeled(false)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              !isShowingLabeled
-                ? 'bg-accent/20 text-accent-strong'
-                : 'bg-surface-2 text-muted hover:bg-surface-3'
-            }`}
-          >
-            Model Suggestions
-          </button>
-          <button
-            onClick={() => setShowLabeled(true)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              isShowingLabeled
-                ? 'bg-accent/20 text-accent-strong'
-                : 'bg-surface-2 text-muted hover:bg-surface-3'
-            }`}
-          >
-            My Labels
-          </button>
-        </div>
-      </div>
+          </>
+        }
+        action={
+          <Segmented
+            label="Show"
+            layoutId="review-mode"
+            size="sm"
+            value={isShowingLabeled ? 'mine' : 'model'}
+            onChange={(v) => setShowLabeled(v === 'mine')}
+            options={[
+              { value: 'model', label: 'Model suggestions' },
+              { value: 'mine', label: 'My labels' },
+            ]}
+          />
+        }
+      />
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -176,7 +168,7 @@ export default function ReviewTab() {
                       exit={{ opacity: 0, x: -32 }}
                       transition={{ duration: 0.2 }}
                       className={`transition-colors hover:bg-edge/5 ${
-                        selectedTxn === tx.id ? 'bg-accent/5' : ''
+                        selectedTxn === tx.id ? 'bg-edge/[0.05]' : ''
                       }`}
                     >
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-muted">
@@ -186,7 +178,7 @@ export default function ReviewTab() {
                       <td className="max-w-xs truncate px-4 py-3 text-xs text-muted">
                         {tx.description}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium tabular-nums">
+                      <td className="num px-4 py-3 text-right text-[15px]">
                         {formatCurrency(tx.amount)}
                       </td>
                       <td className="px-4 py-3">
@@ -199,7 +191,7 @@ export default function ReviewTab() {
                             <span className="text-xs text-muted">Uncategorized</span>
                           )
                         ) : tx.suggested_category ? (
-                          <Badge tone={toneFor(tx.suggested_category)}>
+                          <Badge tone={toneFor(tx.suggested_category)} guess>
                             {tx.suggested_category}
                           </Badge>
                         ) : (
@@ -250,7 +242,7 @@ export default function ReviewTab() {
                                 }
                               }}
                               disabled={labeling === tx.id}
-                              className="block w-full rounded-lg border border-edge/10 bg-surface-2 px-2 py-1.5 text-xs text-ink outline-none focus:border-accent/60"
+                              className="block w-full rounded-md border border-edge/20 bg-surface px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
                             >
                               <option value="">Change category</option>
                               {categories.map((cat) => (
@@ -263,7 +255,7 @@ export default function ReviewTab() {
                         ) : (
                           <button
                             onClick={() => setSelectedTxn(tx.id)}
-                            className="text-xs font-medium text-accent-strong transition-colors hover:underline"
+                            className="text-xs font-medium text-ink underline decoration-edge/30 underline-offset-4 transition-colors hover:decoration-accent"
                           >
                             Review
                           </button>

@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { m, useReducedMotion } from 'framer-motion';
 import { BrainCircuit, Play } from 'lucide-react';
 import { toast } from 'sonner';
-import { celebrate } from '@/utils/celebrate';
 import RollingNumber from '@/components/ui/RollingNumber';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
@@ -11,7 +11,8 @@ import { advanceTour } from '@/utils/tour';
 import { formatDateTime } from '@/utils/format';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
-import Card, { SectionHeader } from '@/components/ui/Card';
+import { SectionHeader } from '@/components/ui/Card';
+import Stamp from '@/components/ui/Stamp';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
@@ -33,6 +34,9 @@ export default function TrainingTab() {
   const [training, setTraining] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  // The run that just finished in this session gets the stamp.
+  const [justTrained, setJustTrained] = useState<string | null>(null);
+  const reduce = useReducedMotion();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const runs = data?.training_runs || [];
@@ -55,7 +59,7 @@ export default function TrainingTab() {
       setTraining(true);
       const res = await api.training.retrain();
       const modelRunId: string = res.data.model_run_id;
-      setMessage('Training started! Results appear below when it finishes.');
+      setMessage('Training started. Results appear below when it finishes.');
       await reload(true);
       invalidate('/training');
       advanceTour('train'); // last tour step — the tour ends here
@@ -86,8 +90,8 @@ export default function TrainingTab() {
             invalidate('/dashboard'); // fresh model reclassified transactions
             if (run.status === 'succeeded') {
               setMessage('Training finished — your transactions have been re-classified.');
-              // A real milestone: celebrate it (no-op under reduced motion).
-              celebrate();
+              // A real milestone: the run gets stamped (replaces confetti).
+              setJustTrained(run.id);
               toast.success('Your model is trained', {
                 description:
                   run.cv_accuracy != null
@@ -109,53 +113,51 @@ export default function TrainingTab() {
   };
 
   const statusTone = (status: string) =>
-    status === 'succeeded' ? 'success' : status === 'failed' ? 'danger' : 'accent';
+    status === 'succeeded' ? 'success' : status === 'failed' ? 'danger' : 'neutral';
 
   return (
     <div className="w-full space-y-6">
-      <SectionHeader label="Model" title="Training" />
-      <p className="-mt-4 text-sm text-muted">
-        Trains a fresh classifier on your labeled transactions, then re-classifies everything else.
-      </p>
+      <SectionHeader
+        title="Training"
+        description="Trains a fresh classifier on your labeled transactions, then re-classifies everything else."
+      />
 
       {(error || loadError) && <Alert kind="error">{error || loadError}</Alert>}
       {message && <Alert kind="success">{message}</Alert>}
 
-      {/* Launch panel: while a run is live the brain "thinks" (pulsing rings) */}
-      <Card className="relative flex flex-col items-center gap-5 overflow-hidden p-8 text-center sm:flex-row sm:text-left">
-        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
-          {training && (
-            <>
-              <span className="absolute inset-0 rounded-2xl bg-accent/25 animate-ping-soft" />
-              <span className="absolute inset-0 rounded-2xl bg-accent/15 animate-ping-soft [animation-delay:1.2s]" />
-            </>
-          )}
-          <span
-            className={`relative flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-accent/10 text-accent-strong ${
-              training ? 'animate-pulse' : ''
-            }`}
-          >
-            <BrainCircuit className="h-8 w-8" />
-          </span>
+      {/* Launch: words + one action. While a run is live, a thin rule is
+          drawn across — honest "working" without a fake percentage. */}
+      <div className="border-y border-edge/15 py-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-display text-2xl">
+              {training ? 'Learning your spending patterns…' : 'Ready when you are'}
+            </p>
+            <p className="mt-1 max-w-[56ch] text-sm text-muted">
+              {training
+                ? 'This usually takes under a minute. You can leave this page — it keeps running.'
+                : 'The more transactions you label, the better it gets.'}
+            </p>
+          </div>
+          <Button onClick={handleRetrain} loading={training} size="lg" data-tour-id="train-start">
+            {!training && <Play className="h-4 w-4" />}
+            {training ? 'Training' : 'Start training'}
+          </Button>
         </div>
-        <div className="flex-1">
-          <p className="font-display text-lg font-semibold">
-            {training ? 'Learning your spending patterns…' : 'Ready when you are'}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            {training
-              ? 'This usually takes under a minute. You can leave this page — it keeps running.'
-              : 'The more transactions you label, the smarter it gets.'}
-          </p>
-        </div>
-        <Button onClick={handleRetrain} loading={training} size="lg" data-tour-id="train-start">
-          {!training && <Play className="h-4 w-4" />}
-          {training ? 'Training' : 'Start training'}
-        </Button>
-      </Card>
+        {training && (
+          <div className="mt-5 h-px overflow-hidden bg-edge/12" role="progressbar" aria-label="Training in progress">
+            <m.div
+              className="h-full w-full origin-left bg-ink"
+              initial={{ scaleX: 0 }}
+              animate={reduce ? { scaleX: 0.5 } : { scaleX: [0, 1], opacity: [1, 1, 0] }}
+              transition={reduce ? undefined : { duration: 1.6, ease: [0.22, 1, 0.36, 1], repeat: Infinity }}
+            />
+          </div>
+        )}
+      </div>
 
-      <div className="space-y-3">
-        <p className="section-label">Training history</p>
+      <div>
+        <h3 className="mb-3 font-display text-2xl">History</h3>
 
         {loading ? (
           <SkeletonRows rows={4} />
@@ -166,52 +168,46 @@ export default function TrainingTab() {
             description="Label some transactions first, then start your first training run."
           />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {runs.map((run, i) => (
-            <Card key={run.id} hover={i === 0} className="space-y-3 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">Run {run.id.slice(0, 8)}</p>
-                  <p className="text-xs text-muted">
-                    {formatDateTime(run.created_at)}
-                  </p>
-                </div>
-                <Badge tone={statusTone(run.status)}>
-                  {(run.status === 'queued' || run.status === 'running') && (
-                    <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-glow-pulse rounded-full bg-current" />
-                  )}
-                  {run.status}
-                </Badge>
-              </div>
-
-              {run.cv_accuracy != null && (
-                <div className="grid grid-cols-3 gap-2 rounded-lg bg-surface-2 p-3 text-sm">
-                  <div>
-                    <p className="section-label mb-0.5">CV accuracy</p>
-                    <p className="font-display text-lg font-semibold">
-                      <RollingNumber value={run.cv_accuracy * 100} decimals={1} suffix="%" />
-                    </p>
-                  </div>
-                  <div>
-                    <p className="section-label mb-0.5">F1-macro</p>
-                    <p className="font-display text-lg font-semibold">
+          <div className="overflow-x-auto border-t border-ink/80">
+            <table className="w-full text-sm">
+              <thead className="border-b border-edge/15 text-left text-[12px] text-muted">
+                <tr>
+                  <th className="py-2.5 pr-4 font-normal">Run</th>
+                  <th className="py-2.5 pr-4 font-normal">Status</th>
+                  <th className="py-2.5 pr-4 text-right font-normal">CV accuracy</th>
+                  <th className="py-2.5 pr-4 text-right font-normal">F1 (macro)</th>
+                  <th className="py-2.5 text-right font-normal">Labels used</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((run, i) => (
+                  <tr key={run.id} className="border-b border-edge/10 align-middle">
+                    <td className="py-3 pr-4">
+                      <span className={i === 0 ? 'font-medium' : ''}>{formatDateTime(run.created_at)}</span>
+                      {run.error_message && <span className="mt-0.5 block text-xs text-danger">{run.error_message}</span>}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {justTrained === run.id ? (
+                        <Stamp label="Trained" tilt={-2} />
+                      ) : (
+                        <Badge tone={statusTone(run.status)}>
+                          {run.status === 'queued' || run.status === 'running' ? `${run.status}…` : run.status}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="num py-3 pr-4 text-right text-[15px]">
+                      {run.cv_accuracy != null ? <RollingNumber value={run.cv_accuracy * 100} decimals={1} suffix="%" /> : '—'}
+                    </td>
+                    <td className="num py-3 pr-4 text-right text-[15px]">
                       {run.f1_macro != null ? <RollingNumber value={run.f1_macro} decimals={3} /> : '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="section-label mb-0.5">Samples</p>
-                    <p className="font-display text-lg font-semibold">
+                    </td>
+                    <td className="num py-3 text-right text-[15px]">
                       {run.n_labeled_samples != null ? <RollingNumber value={run.n_labeled_samples} /> : '—'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {run.error_message && (
-                <p className="text-xs text-danger">{run.error_message}</p>
-              )}
-            </Card>
-          ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

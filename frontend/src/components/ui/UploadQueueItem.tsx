@@ -17,8 +17,8 @@ export interface QueuedFile {
 
 const STATUS_CONFIG: Record<QueueStatus, { tone: 'neutral' | 'accent' | 'success' | 'danger'; label: string }> = {
   pending: { tone: 'neutral', label: 'Queued' },
-  uploading: { tone: 'accent', label: 'Uploading' },
-  processing: { tone: 'accent', label: 'Processing' },
+  uploading: { tone: 'neutral', label: 'Uploading' },
+  processing: { tone: 'neutral', label: 'Processing' },
   done: { tone: 'success', label: 'Imported' },
   duplicate: { tone: 'neutral', label: 'Skipped' },
   error: { tone: 'danger', label: 'Failed' },
@@ -39,10 +39,8 @@ export default function UploadQueueItem({
   const removable = item.status !== 'uploading' && item.status !== 'processing';
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-edge/8 bg-surface px-4 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/12 text-accent-strong">
-        <FileSpreadsheet className="h-4 w-4" />
-      </span>
+    <div className="flex items-center gap-3 border-b border-edge/12 py-3">
+      <FileSpreadsheet className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-medium">{item.file.name}</p>
@@ -80,7 +78,7 @@ export default function UploadQueueItem({
         onClick={() => onRemove(item.id)}
         disabled={disabled || !removable}
         aria-label="Remove file"
-        className="shrink-0 rounded-pill p-1.5 text-muted transition-colors hover:text-danger hover:bg-danger/10 disabled:opacity-30 disabled:pointer-events-none"
+        className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:text-danger hover:bg-danger/10 disabled:opacity-30 disabled:pointer-events-none"
       >
         <X className="h-4 w-4" />
       </button>
