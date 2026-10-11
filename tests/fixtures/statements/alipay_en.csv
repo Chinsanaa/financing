@@ -1,0 +1,16 @@
+Alipay transaction details (fabricated test data)
+Export Transaction Type: [All]
+Transaction Time,Transaction Category,Transaction Counterparty,Counterparty Account,Product Description,Type,Amount,Payment Method,Transaction Status,Transaction Order Number,Merchant Order Number,Remarks
+2025-09-01 08:00:00,Food & Dining,McDonalds,mcd***@example.com,Big Mac meal,Expense,38.00,Huabei,Transaction Successful,2025090122001000000101,E0001,
+2025-09-02 12:00:00,Daily Goods,Shop A,shopa***@example.com,Storage box,Expense,100.00,Debit card,Transaction Successful,2025090222001000000102,E0002,
+2025-09-03 09:00:00,Refund,Shop A,shopa***@example.com,Refund-Storage box,Not counted,30.00,Debit card,Refund Successful,2025090222001000000102_R1,E0002,
+2025-09-04 10:00:00,Clothing,Uniqlo,uq***@example.com,Shirt,Expense,129.00,Huabei,Transaction Closed,2025090422001000000104,E0004,
+2025-09-05 11:00:00,Refund,Uniqlo,uq***@example.com,Refund-Shirt,Not counted,129.00,Huabei,Refund Successful,2025090422001000000104_R1,E0004,
+2025-09-06 13:00:00,Food & Dining,Starbucks,sbx***@example.com,Latte,Expense,32.00,,Transaction Closed,2025090622001000000106,E0006,
+2025-09-07 09:00:00,Credit & Loans,CMB,,Credit card repayment,Not counted,500.00,Balance,Repayment Successful,2025090722001000000107,,
+2025-09-09 00:30:00,Investment,Yu'e Bao,,Yu'e Bao earnings,Income,1.23,Yu'e Bao,Transaction Successful,2025090922001000000109,,
+2025-09-10 10:00:00,Investment,Yu'e Bao,,Yu'e Bao transfer in,Not counted,1000.00,Debit card,Transaction Successful,2025091022001000000110,,
+2025-09-15 10:00:00,Transfers & Red Packets,Zhang San,zhang***@example.com,Transfer,Expense,88.00,Balance,Transaction Successful,2025091522001000000115,,
+2025-09-17 10:00:00,Transfers & Red Packets,Wang Wu,wang***@example.com,Red packet,Income,20.00,Balance,Transaction Successful,2025091722001000000117,,
+2025-09-19 10:00:00,Other,Example Tech Ltd,,September salary,Income,15000.00,Balance,Transaction Successful,2025091922001000000119,,
+2025-09-21 10:00:00,Transport,DiDi,,Ride,Expense,23.50,Huabei,Waiting for payment,2025092122001000000121,,
