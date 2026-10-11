@@ -135,31 +135,27 @@ p {
   font-variation-settings: 'SOFT' 100, 'WONK' 0;
 }
 
-/* Ledger numerals for tables and columns: the BODY face, tabular + lining,
-   so columns of money line up. Verified in the built font files (v5): the
-   Fraunces web subset has NO tnum/lnum GSUB features (its default figures
-   are lining but proportional), while Schibsted Grotesk has tnum and ¥.
-   See docs/design/palette-validation-2026-10.txt. */
-.num {
-  font-family: var(--font-body), system-ui, sans-serif;
-  font-variant-numeric: tabular-nums lining-nums;
-}
-
-/* Display figures: Fraunces (SOFT 100) for big single numbers — hero month
-   total, StatTile/fact figures — where proportional digits are fine and the
-   serif ¥ carries the page. Never for aligned columns (use .num). */
+/* Ledger numerals (v5 decision: looks over strict column alignment).
+   All money is set in Fraunces SOFT 100 — the serif ¥ and figures are part
+   of the product's character. The Fraunces web subset has NO tnum/lnum
+   (verified in the built files): its default figures are already lining
+   but PROPORTIONAL, so amount columns align at their right edge only, not
+   digit-by-digit. Deliberately NOT the body face's tabular figures — its
+   tnum also widens "." and "," to a full figure ("¥12 , 480").
+   `.num-display` is an alias so call sites can use either name. */
+.num,
 .num-display {
   font-family: var(--font-display), Georgia, serif;
   font-variation-settings: 'SOFT' 100, 'WONK' 0;
-  font-variant-numeric: lining-nums;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-/* Solid lifted panel (legacy name kept for call sites — never translucent). */
-.glass { /* design-gate: allow */
+/* Solid lifted panel for popovers: one flat surface color + a hairline.
+   Never translucent, never blurred. */
+.panel {
   background-color: rgb(var(--surface));
   border: 1px solid rgb(var(--edge) / 0.12);
 }

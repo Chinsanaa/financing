@@ -241,16 +241,16 @@ b387097da7407747-s.woff2 / 287637279c44650d-s.woff2  Fraunces latin-ext /
    tnum -> all digits 1300 units (yen 1276); lnum absent but default digits
    are already lining.
 
-Decision (documented in globals.css + DESIGN_SYSTEM.md v5):
-   .num          = body face (Schibsted Grotesk), font-variant-numeric:
-                   tabular-nums lining-nums -> money columns align.
-   .num-display  = Fraunces, 'SOFT' 100, 'WONK' 0, lining-nums -> big single
-                   figures (hero month total, StatTile / fact figures), where
-                   proportional digits are fine and the serif yen carries the
-                   page.
+Decision (integration lead / user, v5 — looks over strict column alignment):
+   .num and .num-display (aliases) = Fraunces, 'SOFT' 100, 'WONK' 0. Default
+   Fraunces figures are lining and proportional; there is no tnum to switch on,
+   and nothing relies on font-feature-settings for figure alignment.
+   Right-aligned amount columns align at the right edge only — accepted.
+   Rejected: Schibsted Grotesk tnum for money. Its tnum lookup also maps
+   period/comma/colon to 1300-unit tabular glyphs (period 574 -> 1300,
+   comma 543 -> 1300), which rendered "¥12 , 480" / "¥18 . 50" — checked in
+   screenshots and not acceptable for the hero figures.
    .font-display = font-variation-settings 'SOFT' 100, 'WONK' 0 (opsz auto).
-   Call sites that set big hero / StatTile figures with `.num` should move to
-   `.num-display` (files owned by other agents).
 
 ==============================================================================
 5. BRAND MARKS (contrast, for information — logos are exempt from WCAG 1.4.11)

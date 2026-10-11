@@ -168,7 +168,7 @@ export default function NotificationBell({
           exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.12 } }}
           transition={{ type: 'spring', bounce: 0, duration: 0.24 }}
           style={{ transformOrigin: 'top right' }}
-          className="glass absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-card p-3 shadow-card"
+          className="panel absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-card p-3 shadow-card"
         >
           <p className="mb-2 px-1 font-display text-lg">Notifications</p>
 

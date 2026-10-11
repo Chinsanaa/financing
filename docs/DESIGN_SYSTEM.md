@@ -114,12 +114,15 @@ keep them in sync.
 **Type.** `font-display` = **Fraunces** (variable: `opsz` 9–144 automatic,
 `SOFT` set to **100** for rounded, friendlier terminals, `WONK` 0), loaded
 with `next/font/google` (`axes: ['opsz','SOFT','WONK']`). `font-sans` =
-**Schibsted Grotesk**. Figures, verified in the built font files:
-the Fraunces web subset has **no `tnum`/`lnum`** (lining but proportional
-digits) while Schibsted Grotesk has `tnum`; both contain ¥ (U+00A5). So:
-- `.num` — money in tables/columns: body face, `tabular-nums lining-nums`.
-- `.num-display` — big single figures (hero month total, StatTile/fact
-  figures): Fraunces SOFT 100. Never for aligned columns.
+**Schibsted Grotesk**. **Figures (v5 decision — looks over strict column
+alignment):** all money and counts use `.num` (alias `.num-display`) =
+Fraunces SOFT 100, WONK 0. Verified in the built font files: the Fraunces
+web subset has **no `tnum`/`lnum`** — its default figures are lining but
+proportional — and it contains ¥ (U+00A5). Right-aligned amount columns
+therefore line up at the right edge, not digit-by-digit; that is accepted.
+Do not use Schibsted's tabular figures for money (its `tnum` also widens
+`.`/`,` to a full figure width: "¥12 , 480"), and do not rely on
+`font-feature-settings` for Fraunces figure alignment.
 Serif headings at `font-normal`/`font-medium`, roman (no italic display),
 sentence case. Scale: caption 13px, body 14–15px, section title 24px, page
 title 28px, fact figure 32px, month figure 72–96px. (impeccable lists
@@ -180,8 +183,8 @@ Rules (apple-design + review-animations):
 | `.dash-march` | dashed drop-zone border; marches only under `.is-active` |
 | `.skeleton` | solid block, opacity pulse |
 | `.kbd` | keyboard hint chip |
-| `.num` | tabular lining figures (body face) for columns of money |
-| `.num-display` | Fraunces SOFT figures for big single numbers |
+| `.num` / `.num-display` | money and counts: Fraunces SOFT 100, lining, proportional (aliases) |
+| `.panel` | solid lifted popover surface + hairline (was the legacy `.glass`) |
 | `.section-label` | quiet 13px caption for a chart/column — **not** an eyebrow |
 | `.cat-<key>` | sets `--cat` for swatches/bars |
 
@@ -203,7 +206,7 @@ override the caller's.
 
 | Component | Notes |
 |---|---|
-| `Card` | `variant="sheet"` (default), `"plain"` (no box, top hairline), `"raised"` (floats). `hover` only darkens the border. `SectionHeader` = serif title + description + action (no label/icon). |
+| `Card` | `variant="sheet"` (default), `"plain"` (no box, top hairline), `"raised"` (floats; the legacy boolean prop was removed in v5). `hover` only darkens the border. `SectionHeader` = serif title + description + action (no label/icon). |
 | `StatTile` + `FactRow` + `DeltaChip` | a "fact" (caption, serif figure, footer) — put facts in a `FactRow` (hairline-divided), never in four cards. |
 | `Badge` | category: square swatch + ink name; `guess` → outlined swatch. Status tones: `accent`, `success`, `danger`, `warn`, `neutral` (squared label). |
 | `Stamp` | the signature: vermilion seal — see **Stamp** below. |
