@@ -69,7 +69,8 @@ export default function StatTile({
   className = '',
 }: {
   label: string;
-  value: number;
+  /** `null` = unknown: shows "—" instead of a figure. */
+  value: number | null;
   currency?: boolean;
   decimals?: number;
   suffix?: string;
@@ -85,7 +86,14 @@ export default function StatTile({
     <div className={`flex min-w-0 flex-col py-1 ${className}`}>
       <p className="text-[13px] text-muted">{label}</p>
       <p className={`num mt-1 text-[2rem] font-normal leading-none tracking-[-0.01em] ${toneClass}`}>
-        <RollingNumber value={value} currency={currency} decimals={decimals} suffix={suffix} />
+        {value === null ? (
+          <span className="text-muted">
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">Not available</span>
+          </span>
+        ) : (
+          <RollingNumber value={value} currency={currency} decimals={decimals} suffix={suffix} />
+        )}
       </p>
       <HomeLine home={home} className="mt-1.5 text-sm" />
       {footer && <div className="mt-2 text-xs text-muted">{footer}</div>}

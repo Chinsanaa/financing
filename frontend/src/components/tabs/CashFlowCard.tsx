@@ -3,6 +3,7 @@
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '@/utils/api';
 import { useApi } from '@/utils/useApi';
+import { useIsDark } from '@/utils/theme';
 import StatTile, { FactRow } from '@/components/ui/StatTile';
 import Skeleton from '@/components/ui/Skeleton';
 import { formatCurrencyWhole, formatMonthLong, formatMonthShort, formatHomeCurrency } from '@/utils/format';
@@ -25,7 +26,9 @@ import type { CashflowMonth, CashflowResponse, SummaryResponse } from '@/types/v
 
 const INCOME_FILL = 'rgb(var(--positive))';
 const SPEND_FILL = 'rgb(var(--ink))';
-const SPEND_OPACITY = 0.45;
+// Theme-aware: 0.55 in light reaches ~3.6:1 against the paper, 0.45 in dark
+// already clears 3:1; never above 0.55 so spend stays quieter than income.
+const spendOpacity = (dark: boolean) => (dark ? 0.45 : 0.55);
 // Bars are drawn without an entrance animation: Recharts replays it from zero
 // whenever the container resizes, which read as the chart blinking out.
 
@@ -39,7 +42,7 @@ function signed(v: number): string {
   return `${v > 0 ? '+' : ''}${formatCurrencyWhole(v)}`;
 }
 
-function FlowTooltip({ active, payload, label }: any) {
+function FlowTooltip({ active, payload, label, spendAlpha }: any) {
   if (!active || !payload?.length) return null;
   const row: CashflowMonth = payload[0].payload;
   return (
@@ -52,7 +55,7 @@ function FlowTooltip({ active, payload, label }: any) {
         </dt>
         <dd className="num text-right text-ink">{formatCurrencyWhole(row.income)}</dd>
         <dt className="flex items-center gap-1.5 text-muted">
-          <span className="h-2 w-2 rounded-[2px]" style={{ backgroundColor: SPEND_FILL, opacity: SPEND_OPACITY }} aria-hidden="true" />
+          <span className="h-2 w-2 rounded-[2px]" style={{ backgroundColor: SPEND_FILL, opacity: spendAlpha }} aria-hidden="true" />
           Out
         </dt>
         <dd className="num text-right text-ink">{formatCurrencyWhole(row.spend)}</dd>
@@ -63,7 +66,7 @@ function FlowTooltip({ active, payload, label }: any) {
   );
 }
 
-function Legend({ income }: { income: boolean }) {
+function Legend({ income, spendAlpha }: { income: boolean; spendAlpha: number }) {
   return (
     <p className="flex items-center gap-4 text-[13px] text-muted">
       {income && (
@@ -75,7 +78,7 @@ function Legend({ income }: { income: boolean }) {
       <span className="flex items-center gap-1.5">
         <span
           className="h-2.5 w-2.5 rounded-[2px]"
-          style={{ backgroundColor: SPEND_FILL, opacity: SPEND_OPACITY }}
+          style={{ backgroundColor: SPEND_FILL, opacity: spendAlpha }}
           aria-hidden="true"
         />
         Money out
@@ -92,6 +95,7 @@ export default function CashFlowCard({
   onNavigate?: (tab: string) => void;
 }) {
   const q = useApi<CashflowResponse>(api.paths.cashflow(12));
+  const spendAlpha = spendOpacity(useIsDark());
   const months = q.data?.months || [];
   const current = months.length > 0 ? months[months.length - 1] : null;
   const homeCurrency = summary?.home?.currency ?? q.data?.currency_home ?? null;
@@ -123,7 +127,7 @@ export default function CashFlowCard({
         <h2 id="cashflow-title" className="font-display text-2xl font-normal">
           Cash flow <span className="text-muted">· {monthName}</span>
         </h2>
-        {anyActivity && <Legend income={anyStatementIncome} />}
+        {anyActivity && <Legend income={anyStatementIncome} spendAlpha={spendAlpha} />}
       </div>
 
       <div className="space-y-6">
@@ -131,7 +135,7 @@ export default function CashFlowCard({
         <FactRow>
           <StatTile
             label="Money in"
-            value={moneyIn ?? 0}
+            value={moneyIn}
             currency
             tone={moneyIn !== null && moneyIn > 0 ? 'positive' : undefined}
             home={moneyIn !== null ? home(moneyInHome) : null}
@@ -164,7 +168,7 @@ export default function CashFlowCard({
           />
           {net !== null ? (
             <StatTile
-                label="Net"
+              label="Net"
               value={net}
               currency
               tone={net < 0 ? 'danger' : net > 0 ? 'positive' : undefined}
@@ -227,7 +231,7 @@ export default function CashFlowCard({
                       tickCount={4}
                       tickFormatter={compactYuan}
                     />
-                    <Tooltip content={<FlowTooltip />} cursor={{ fill: 'rgb(var(--edge) / 0.06)' }} />
+                    <Tooltip content={<FlowTooltip spendAlpha={spendAlpha} />} cursor={{ fill: 'rgb(var(--edge) / 0.06)' }} />
                     {anyStatementIncome && (
                       <Bar dataKey="income" name="Money in" fill={INCOME_FILL} radius={[2, 2, 0, 0]} isAnimationActive={false} />
                     )}
@@ -235,7 +239,7 @@ export default function CashFlowCard({
                       dataKey="spend"
                       name="Money out"
                       fill={SPEND_FILL}
-                      fillOpacity={SPEND_OPACITY}
+                      fillOpacity={spendAlpha}
                       radius={[2, 2, 0, 0]}
                       isAnimationActive={false}
                     />

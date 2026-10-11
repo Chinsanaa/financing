@@ -138,11 +138,7 @@ export default function StatsTab({
       ? { amount: amount ?? null, currency: homeCurrency, rate: homeInfo?.rate, rateDate: homeInfo?.rate_asof, approx }
       : null;
 
-  // Income this month (v5): statements first, Settings second, else nothing.
-  const incomeMonth = summary?.month ?? latest?.date ?? null;
-  const hasV5Income = summary?.month !== undefined;
-  const monthIncome = hasV5Income ? summary?.month_income ?? null : summary && summary.monthly_income > 0 ? summary.monthly_income : null;
-  const incomeSource = hasV5Income ? summary?.month_income_source ?? null : monthIncome !== null ? 'settings' : null;
+  // Income lives in the Cash flow section ("Money in"), not in the fact row.
 
   // Under-budget rule: the closed month's budgeted
   // spend (total_spent) ≤ its total budget, the budget is > 0, and the month has
@@ -243,19 +239,6 @@ export default function StatsTab({
       {/* ── Facts: one ruled row, not four boxes ─────────────────── */}
       {summary && (
         <FactRow>
-          <StatTile
-            label={`Income in ${incomeMonth ? formatMonthShort(incomeMonth) : 'the month'}`}
-            value={monthIncome ?? 0}
-            currency
-            home={monthIncome !== null ? homeOf(homeInfo?.month_income_home) : null}
-            footer={
-              incomeSource === 'statements'
-                ? 'From your statements'
-                : incomeSource === 'settings'
-                ? 'From your settings'
-                : 'None recorded yet'
-            }
-          />
           <StatTile label="Transactions" value={summary.total_transactions} footer="Imported so far" />
           <StatTile
             label="Labeled"
