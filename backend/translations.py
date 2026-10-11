@@ -54,6 +54,14 @@ MAX_CONSECUTIVE_FAILURES = 5
 
 LOG_EVERY = 50
 
+# The read endpoints that request a pass (Reports, Review, Export) can go
+# unvisited for weeks — after the 2026-09-29 fix no pass ran for 12 days
+# because only the Overview was opened. The Overview's summary call asks too,
+# throttled to once per user per window (a pass with nothing missing is one
+# cheap indexed query).
+PERIODIC_CHECK_SECONDS = 30 * 60
+_last_periodic: Dict[str, float] = {}
+
 
 def _new_client() -> Client:
     """A Supabase client owned by one worker thread.
@@ -245,6 +253,18 @@ def translate_user_transactions(
         user_id, progress["written"], progress["total"],
     )
     return progress["written"]
+
+
+def request_translation_periodic(user_id: str) -> None:
+    """Overview hook: request a pass at most once per PERIODIC_CHECK_SECONDS
+    per user. Never raises, never blocks."""
+    now = time.monotonic()
+    with _lock:
+        last = _last_periodic.get(user_id)
+        if last is not None and now - last < PERIODIC_CHECK_SECONDS:
+            return
+        _last_periodic[user_id] = now
+    request_translation(user_id)
 
 
 def request_translation_if_missing(user_id: str, rows: Iterable[dict]) -> None:

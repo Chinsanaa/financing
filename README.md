@@ -207,7 +207,8 @@ translated once per distinct string in the background (`backend/translations.py`
 and stored in `transactions.merchant_en`/`description_en`; pages never call
 Google Translate. The worker uses its own DB client, gives each Google call
 10 s, stops a pass after 5 failures in a row, and is replaced if it makes no
-progress for 10 min. Render logs show `Translation pass start/done`.
+progress for 10 min. Render logs show `Translation pass start/done` Passes start after uploads, on
+Reports/Review/Export, and from the Overview (at most every 30 min per user).
 
 **Training memory:** the server trains with the lightweight LSA encoder, not
 Model2Vec (`MODEL2VEC_ENABLED=0`, set in `backend/config.py`). Model2Vec needs

@@ -322,3 +322,35 @@ def test_worker_runs_pass_on_its_own_client(fake_db, fake_google, monkeypatch):
     assert _rows(fake_db)["t1"]["merchant_en"] == "Downstairs noodle shop"
     assert USER_A not in translations._running_users  # finished cleanly
     translations._generation.clear()
+
+
+# --- Overview trigger (2026-10-11: no pass ran for 12 days because only the
+# Overview was opened, and it never asked for one) ---
+
+
+def test_overview_summary_requests_a_pass_throttled(
+    client, patch_jwks, make_token, fake_db, translation_requests, monkeypatch
+):
+    import time
+
+    clock = [1000.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+
+    assert client.get("/dashboard/summary", headers=_headers(make_token)).status_code == 200
+    assert translation_requests == [USER_A]           # first load asks
+
+    clock[0] += 60
+    client.get("/dashboard/summary", headers=_headers(make_token))
+    assert translation_requests == [USER_A]           # within 30 min: no repeat
+
+    clock[0] += translations.PERIODIC_CHECK_SECONDS
+    client.get("/dashboard/summary", headers=_headers(make_token))
+    assert translation_requests == [USER_A, USER_A]   # window passed: asks again
+
+
+def test_overview_throttle_is_per_user(
+    client, patch_jwks, make_token, fake_db, translation_requests
+):
+    client.get("/dashboard/summary", headers=_headers(make_token, sub=USER_A))
+    client.get("/dashboard/summary", headers=_headers(make_token, sub=USER_B))
+    assert translation_requests == [USER_A, USER_B]
