@@ -97,10 +97,12 @@ export default function CashFlowTeaser() {
 
       <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
         <div
-          className="h-7 shrink-0 rounded-[2px] border-[1.5px] border-dashed border-edge/40"
+          className="flex h-7 shrink-0 items-center justify-center rounded-[2px] border-[1.5px] border-dashed border-edge/40 text-[15px] text-muted"
           style={{ width: pct(S.ownAccount) }}
           aria-hidden="true"
-        />
+        >
+          ⇄
+        </div>
         <p className="text-[13px] text-muted">
           <span className="num text-ink">{yuan(S.ownAccount)}</span> moved between your own accounts (card repayment,
           wallet top-up) · <span className="text-ink">not counted</span>

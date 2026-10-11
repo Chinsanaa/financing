@@ -18,7 +18,15 @@ const TERMS: { term: string; body: React.ReactNode }[] = [
   },
   {
     term: 'What leaves the app',
-    body: 'Merchant names we don’t already have an English name for are sent to Google Translate, once per name, and the translation is stored. There are no ads, and no third-party analytics or advertising trackers.',
+    body: (
+      <>
+        Two outside services see some merchant text. Google Translate: merchant names we don’t already have an English
+        name for, once per name; the translation is stored. Groq (AI suggestions for merchants rules and your model can’t
+        sort — merchant/description text and your category names, sent in one batched request, only when that feature
+        is enabled on the server; you review every suggestion). There are no ads, and no third-party analytics or
+        advertising trackers.
+      </>
+    ),
   },
   {
     term: 'How to delete it',
@@ -31,7 +39,7 @@ const TERMS: { term: string; body: React.ReactNode }[] = [
   },
   {
     term: 'How it’s paid for',
-    body: 'It’s free, and there is no paid plan today. It runs on free hosting tiers, which is why the first page after a quiet spell can take about 30 seconds to wake up. It started as its maker’s own monthly tool.',
+    body: 'It’s free, and there is no paid plan today. It runs on free hosting tiers, which is why the first page after a quiet spell can take about 30 seconds to wake up.',
   },
 ];
 
