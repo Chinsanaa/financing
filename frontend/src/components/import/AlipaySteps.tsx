@@ -55,7 +55,7 @@ const STEPS: GuideStep[] = [
     screen: (
       <PhoneFrame label="Purpose choice with For personal reconciliation selected">
         <NavBar title="Purpose" back />
-        <Choice y={54} label="Personal reconciliation" selected highlight />
+        <Choice y={54} label="For personal reconciliation" selected highlight />
         <Choice y={78} label="Proof (PDF)" />
         <ScreenButton y={176} label="Next" primary />
       </PhoneFrame>

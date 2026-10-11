@@ -64,14 +64,14 @@ const STEPS: GuideStep[] = [
   {
     title: (
       <>
-        Choose <Ui>For Personal Reconciliation</Ui>.
+        Choose <Ui>For personal reconciliation</Ui>.
       </>
     ),
     body: 'This sends a spreadsheet. The "proof" option sends a PDF, which we cannot read.',
     screen: (
-      <PhoneFrame label="Purpose choice with For Personal Reconciliation selected">
+      <PhoneFrame label="Purpose choice with For personal reconciliation selected">
         <NavBar title="Download" back />
-        <Choice y={54} label="Personal reconciliation" selected highlight />
+        <Choice y={54} label="For personal reconciliation" selected highlight />
         <Choice y={78} label="Use as proof (PDF)" />
         <ScreenButton y={176} label="Next" primary />
       </PhoneFrame>

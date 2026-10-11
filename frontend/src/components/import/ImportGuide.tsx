@@ -42,8 +42,7 @@ export default function ImportGuide() {
           </h1>
           <p className="mt-4 max-w-[58ch] text-[17px] leading-relaxed text-muted">
             Getting the statement out of the app is the hard part when the menus aren&apos;t in your language. Here is
-            each export step by step, using the apps&apos; English interface. Menu names move between app versions, so
-            each step also says what else a button may be called.
+            each export step by step, using the apps&apos; English interface. Where labels differ between versions, the step says so.
           </p>
 
           <div className="mt-8 overflow-x-auto">
@@ -80,8 +79,9 @@ export default function ImportGuide() {
         </div>
 
         <p className="mt-6 max-w-[64ch] text-[13px] leading-relaxed text-muted">
-          Steps checked against the apps&apos; current export flows in October 2026. If a button has moved, look for
-          the same words in the menu at the top right of your bills or transactions page.
+          Based on published walkthroughs, not official documentation, as of October 2026. Menu labels may vary by
+          app version and region. If a button has moved, look for the same words in the menu at the top right of
+          your bills or transactions page.
         </p>
       </main>
 

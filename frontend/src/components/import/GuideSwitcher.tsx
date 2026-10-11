@@ -10,24 +10,37 @@ const ITEMS = [
 
 /**
  * Sticky in-page switcher for /guide. Plain anchor links (work without JS);
- * after hydration an IntersectionObserver marks the section in view with
+ * after hydration a rAF-throttled scroll check marks the section in view with
  * aria-current and the vermilion rule (the nav convention, see TabBar).
  */
 export default function GuideSwitcher() {
   const [active, setActive] = useState<string>('alipay');
 
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
-    const els = ITEMS.map((i) => document.getElementById(i.id)).filter(Boolean) as HTMLElement[];
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActive(visible[0].target.id);
-      },
-      { rootMargin: '-30% 0px -60% 0px' }
-    );
-    els.forEach((el) => obs.observe(el));
-    return () => obs.disconnect();
+    // Active = the last section whose top has passed 35% of the viewport
+    // (deterministic for anchor jumps, unlike intersection ratios).
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const line = window.innerHeight * 0.35;
+      let current: string = ITEMS[0].id;
+      for (const i of ITEMS) {
+        const el = document.getElementById(i.id);
+        if (el && el.getBoundingClientRect().top <= line) current = i.id;
+      }
+      setActive(current);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, []);
 
   return (

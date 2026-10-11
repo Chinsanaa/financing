@@ -226,7 +226,7 @@ export function Choice({ y, label, selected = false, highlight = false }: { y: n
       <rect x="12" y={y} width="96" height="18" rx="3" className="fill-surface" />
       <circle cx="20" cy={y + 9} r="3.2" className="fill-none stroke-ink/50" strokeWidth="0.9" />
       {selected && <circle cx="20" cy={y + 9} r="1.7" className="fill-ink" />}
-      <text x="27" y={y + 11.4} fontSize="6.5" fontWeight={selected ? 600 : 400} className="fill-ink">
+      <text x="27" y={y + 11.4} fontSize="5.8" fontWeight={selected ? 600 : 400} className="fill-ink">
         {label}
       </text>
       {highlight && <Highlight x={10} y={y - 2} w={100} h={22} />}
