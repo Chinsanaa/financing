@@ -473,3 +473,23 @@ def test_bank_export_with_wechat_like_columns_is_not_wechat(tmp_path):
     path = tmp_path / "bank_like.csv"
     path.write_text("交易时间,交易类型,金额(元),摘要\n2025-09-01 10:00:00,消费,18.00,Cafe\n", encoding="utf-8")
     assert parse.detect_statement_source(str(path)) != "wechat"
+
+
+def test_bank_mostly_incoming_account_is_not_flipped(tmp_path):
+    # More money in than out, debit convention (negative = out): the salary
+    # anchor (positive) decides, so the majority rule doesn't flip the file.
+    path = tmp_path / "savings.csv"
+    path.write_text(
+        "Date,Description,Amount\n"
+        "2025-09-01,Salary September,8000.00\n2025-09-05,Refund Taobao,30.00\n"
+        "2025-09-07,Refund Meituan,12.00\n2025-09-10,Cafe,-18.00\n",
+        encoding="utf-8")
+    rows = _rows(parse.parse_generic_bank_csv(str(path)))
+    assert rows[0][2] == "income" and rows[3][2] == "expense"
+
+
+def test_bank_sign_tie_uses_debit_convention(tmp_path):
+    path = tmp_path / "tie.csv"
+    path.write_text("Date,Description,Amount\n2025-09-01,Cafe,-18.00\n2025-09-02,Friend,50.00\n", encoding="utf-8")
+    rows = _rows(parse.parse_generic_bank_csv(str(path)))
+    assert rows[0][2] == "expense" and rows[1][2] != "expense"

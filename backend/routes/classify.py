@@ -307,6 +307,11 @@ async def split_transaction(request: Request, transaction_id: str, req: SplitReq
             }).eq("id", transaction_id).eq("user_id", user_id).eq("kind", "expense").execute()
         )
         if not response.data:
+            # The row stopped being an expense between the read and this
+            # write (PATCH kind): drop the split rows just inserted.
+            await run_query(
+                lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
+            )
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         background_tasks.add_task(check_budget_alerts, user_id)

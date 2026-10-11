@@ -70,6 +70,8 @@ _OUTFLOW_FROM_FUND_RE = re.compile(r'转出|transfer out|withdrawn', re.IGNORECA
 _AA_RE = re.compile(r'群收款|aa收款|aa制|group collection|split bill', re.IGNORECASE)  # 群收款 = group collection, AA收款 = split-bill collection, AA制 = going Dutch
 _RED_PACKET_RE = re.compile(r'红包|red packet|red envelope|hongbao', re.IGNORECASE)  # 红包 = red packet
 _TRANSFER_RE = re.compile(r'转账|transfer', re.IGNORECASE)                          # 转账 = transfer (to/from a person)
+# A credit-card statement's "payment received" line: money IN to the card.
+_CARD_PAYMENT_RECEIVED_RE = re.compile(r'payment\s+(thank\s*you|received)|还款入账', re.IGNORECASE)  # 还款入账 = repayment credited
 _SALARY_RE = re.compile(r'工资|薪资|薪酬|薪金|代发|奖金|salary|payroll|wage', re.IGNORECASE)  # 工资 = wages, 薪资/薪酬/薪金 = salary, 代发 = payroll disbursement, 奖金 = bonus
 # Alipay's combined category 转账红包 ("transfers & red packets") must not by
 # itself make every row a red packet - the description decides.
@@ -1003,8 +1005,18 @@ def parse_generic_bank_csv(
         signed = _parse_amount_series(raw[amt_col])
         nz = signed[signed.notna() & (signed != 0)]
         mixed = bool((nz < 0).any() and (nz > 0).any())
-        # Whichever sign most rows carry is "money out" (see docstring).
-        out_is_negative = bool((nz < 0).sum() >= (nz > 0).sum())
+        # Which sign means "money out"? Rows that are unmistakably money IN
+        # (salary, interest, a card payment received) anchor it first; only
+        # without anchors does the majority sign decide (see docstring). This
+        # keeps an account that mostly receives money from being flipped.
+        anchor_text = (merchant + ' ' + description + ' ' + type_text)
+        anchor_in = anchor_text.str.contains(_SALARY_RE) | anchor_text.str.contains(_EARNINGS_RE) | \
+            anchor_text.str.contains(_CARD_PAYMENT_RECEIVED_RE)
+        anchors = signed[anchor_in & signed.notna() & (signed != 0)]
+        if len(anchors) and ((anchors > 0).all() or (anchors < 0).all()):
+            out_is_negative = bool((anchors > 0).all())
+        else:
+            out_is_negative = bool((nz < 0).sum() >= (nz > 0).sum())
         for i, idx in enumerate(raw.index):
             a = signed[idx]
             if pd.isna(a) or a == 0:
