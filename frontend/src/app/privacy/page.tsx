@@ -102,6 +102,13 @@ export default function PrivacyPolicyPage() {
             (frankfurter.dev). These requests contain only currency codes and date ranges; no
             personal or transaction data is sent. Rates are stored and shared across accounts.
           </li>
+          <li>
+            <strong className="text-ink">Groq (AI suggestions):</strong> for transactions that
+            neither rules nor your own model can sort, the merchant and description text and
+            your category names may be sent in one batched request per sorting pass to
+            Groq&rsquo;s inference API. The result is only a suggestion you review; nothing is
+            applied automatically. Used only when the feature is enabled on the server.
+          </li>
         </ul>
       </LegalSection>
 

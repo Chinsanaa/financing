@@ -63,6 +63,7 @@ export default function NotFound() {
           </Link>
           <Link
             href="/guide"
+            prefetch={false}
             className="text-sm text-ink underline decoration-edge/30 underline-offset-4 hover:decoration-accent"
           >
             Read the import guide
