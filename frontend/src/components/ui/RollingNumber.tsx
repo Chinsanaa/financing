@@ -47,8 +47,8 @@ export default function RollingNumber({
         format={{ minimumFractionDigits: decimals, maximumFractionDigits: decimals }}
         prefix={`${sign}${prefix}${currency ? CURRENCY_SYMBOL : ''}`}
         suffix={suffix}
-        transformTiming={{ duration: 900, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
-        spinTiming={{ duration: 900, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
+        transformTiming={{ duration: 650, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
+        spinTiming={{ duration: 650, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
       />
     </span>
   );

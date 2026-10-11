@@ -7,9 +7,9 @@ import { SkeletonRows } from '@/components/ui/Skeleton';
 /** Shared UI atoms used across the dashboard tabs, themed via design tokens. */
 
 const ALERT_STYLES: Record<string, { classes: string; Icon: typeof Info }> = {
-  error: { classes: 'border-danger/25 bg-danger/10 text-danger', Icon: AlertCircle },
-  success: { classes: 'border-success/25 bg-success/10 text-success', Icon: CheckCircle2 },
-  info: { classes: 'border-cyan/25 bg-cyan/10 text-cyan', Icon: Info },
+  error: { classes: 'border-danger/25 bg-danger/[0.06] text-danger', Icon: AlertCircle },
+  success: { classes: 'border-success/25 bg-success/[0.06] text-success', Icon: CheckCircle2 },
+  info: { classes: 'border-edge/15 bg-surface text-ink', Icon: Info },
 };
 
 export function Alert({
@@ -25,7 +25,7 @@ export function Alert({
     <div
       role={kind === 'error' ? 'alert' : 'status'}
       aria-live={kind === 'error' ? 'assertive' : 'polite'}
-      className={`flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm animate-fade-up ${classes}`}
+      className={`flex items-start gap-2.5 rounded-md border px-4 py-3 text-sm animate-fade-up ${classes}`}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
       <div>{children}</div>
@@ -40,9 +40,9 @@ export function Loading({ label }: { label?: string }) {
 
 export function ProgressBar({
   percent,
-  color = 'bg-accent',
+  color = 'bg-ink',
   fillColor,
-  height = 'h-2',
+  height = 'h-1.5',
   marker,
   label,
 }: {
@@ -63,29 +63,24 @@ export function ProgressBar({
   const pct = Math.min(Math.max(Number.isFinite(percent) ? percent : 0, 0), 100);
   return (
     <div
-      className={`relative w-full rounded-full bg-edge/10 ${height}`}
+      className={`relative w-full rounded-[1px] bg-edge/10 ${height}`}
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
       aria-label={label}
     >
-      <div className={`h-full overflow-hidden rounded-full`}>
-        {/* .progress-fill: grows in from 0, glides on change, one light sweep */}
+      <div className="h-full overflow-hidden rounded-[1px]">
+        {/* .progress-fill: grows in from 0, glides on change. Solid fill, no glow. */}
         <div
-          className={`progress-fill ${fillColor ? '' : color} h-full rounded-full`}
-          style={{
-            width: `${pct}%`,
-            ...(fillColor
-              ? { backgroundColor: fillColor, boxShadow: `0 0 12px -2px ${fillColor}` }
-              : {}),
-          }}
+          className={`progress-fill ${fillColor ? '' : color} h-full`}
+          style={{ width: `${pct}%`, ...(fillColor ? { backgroundColor: fillColor } : {}) }}
         />
       </div>
       {marker !== undefined && (
         <span
           aria-hidden="true"
-          className="absolute -top-1 -bottom-1 w-0.5 -translate-x-1/2 rounded-full bg-ink/60"
+          className="absolute -top-1 -bottom-1 w-px -translate-x-1/2 bg-ink"
           style={{ left: `${Math.min(Math.max(marker, 0), 100)}%` }}
         />
       )}

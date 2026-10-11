@@ -2,21 +2,25 @@
 
 import { useEffect, useState } from 'react';
 
-/** Flip light/dark (class on <html>) and persist the choice. */
-export function toggleTheme() {
-  const next = !document.documentElement.classList.contains('dark');
-  document.documentElement.classList.toggle('dark', next);
+/** Apply light/dark (class on <html>) and persist the choice. */
+export function setTheme(theme: 'light' | 'dark') {
+  document.documentElement.classList.toggle('dark', theme === 'dark');
   try {
-    localStorage.setItem('theme', next ? 'dark' : 'light');
+    localStorage.setItem('theme', theme);
   } catch {
     /* storage unavailable — theme still applies for this page view */
   }
 }
 
-/** Live `isDark`, updated no matter who toggles the theme (button, ⌘K). */
+/** Flip light/dark (⌘K command). */
+export function toggleTheme() {
+  setTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
+}
+
+/** Live `isDark`, updated no matter who changes the theme (menu, ⌘K). */
 export function useIsDark() {
-  // Initial value must match the server render; real theme read after mount.
-  const [dark, setDark] = useState(true);
+  // Initial value must match the server render (light); real theme read after mount.
+  const [dark, setDark] = useState(false);
   useEffect(() => {
     const root = document.documentElement;
     const sync = () => setDark(root.classList.contains('dark'));

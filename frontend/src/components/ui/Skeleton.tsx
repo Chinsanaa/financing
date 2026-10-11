@@ -1,4 +1,4 @@
-/** Shimmering placeholder blocks shown while data loads. */
+/** Placeholder blocks shown while data loads (solid, opacity pulse). */
 
 export default function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`skeleton ${className}`} aria-hidden="true" />;
@@ -16,7 +16,7 @@ export function SkeletonText({ lines = 3, className = '' }: { lines?: number; cl
 
 export function SkeletonCard({ className = '' }: { className?: string }) {
   return (
-    <div className={`rounded-card bg-surface border border-edge/8 p-5 ${className}`} aria-hidden="true">
+    <div className={`rounded-card border border-edge/10 p-5 ${className}`} aria-hidden="true">
       <div className="skeleton h-3.5 w-24 mb-3" />
       <div className="skeleton h-8 w-32 mb-2" />
       <div className="skeleton h-3 w-full" />
@@ -36,7 +36,7 @@ export function SkeletonRows({ rows = 5, className = '' }: { rows?: number; clas
 
 export function SkeletonChart({ className = '' }: { className?: string }) {
   return (
-    <div className={`rounded-card bg-surface border border-edge/8 p-5 ${className}`} aria-hidden="true">
+    <div className={`rounded-card border border-edge/10 p-5 ${className}`} aria-hidden="true">
       <div className="skeleton h-3.5 w-40 mb-4" />
       <div className="skeleton h-56 w-full" />
     </div>

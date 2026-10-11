@@ -102,21 +102,21 @@ export default function OnboardingTour({
           exit={{ opacity: 0, y: 12 }}
           // z-[70]: above the spotlight's dim layer (z-[60]) so the guide
           // itself is never darkened.
-          className="fixed bottom-6 right-6 z-[70] w-80 rounded-xl border border-edge/10 bg-surface p-4 shadow-card"
+          className="fixed bottom-6 right-6 z-[70] w-80 rounded-card border border-edge/15 bg-surface p-4 shadow-card"
           role="dialog"
           aria-label="Getting started"
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="section-label mb-0.5">Getting started</p>
-              <p className="text-sm font-semibold">
+              <p className="font-display text-xl leading-tight">Getting started</p>
+              <p className="text-[13px] text-muted">
                 Step {stepIndex + 1} of {TOUR_STEPS.length}
               </p>
             </div>
             <button
               onClick={skipTour}
               aria-label="Skip tour"
-              className="rounded-pill p-1.5 text-muted transition-colors hover:bg-edge/8 hover:text-ink"
+              className="rounded-md p-1.5 text-muted transition-colors hover:bg-edge/8 hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>
@@ -127,13 +127,13 @@ export default function OnboardingTour({
               const done = i < stepIndex;
               const current = i === stepIndex;
               return (
-                <li key={s} className={`flex items-center gap-2.5 rounded-lg px-2 py-1 ${current ? 'bg-accent/10' : ''}`}>
+                <li key={s} className={`flex items-center gap-2.5 rounded-md px-2 py-1 ${current ? 'bg-edge/[0.06]' : ''}`}>
                   <span
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
                       done
-                        ? 'bg-accent text-accent-ink'
+                        ? 'bg-ink text-bg'
                         : current
-                        ? 'border border-accent-strong text-accent-strong'
+                        ? 'border-[1.5px] border-accent text-accent-strong'
                         : 'border border-edge/20 text-muted'
                     }`}
                   >
@@ -161,14 +161,14 @@ export default function OnboardingTour({
             {!onStepTab ? (
               <button
                 onClick={() => onNavigate(info.tab)}
-                className="inline-flex items-center gap-1 rounded-pill bg-accent px-3 py-1.5 text-xs font-semibold text-accent-ink"
+                className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink active:scale-[0.97]"
               >
                 Take me there <ArrowRight className="h-3 w-3" />
               </button>
             ) : step === 'categories' ? (
               <button
                 onClick={() => advanceTour('categories')}
-                className="inline-flex items-center gap-1 rounded-pill bg-accent px-3 py-1.5 text-xs font-semibold text-accent-ink"
+                className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink active:scale-[0.97]"
               >
                 Looks good, next <ArrowRight className="h-3 w-3" />
               </button>

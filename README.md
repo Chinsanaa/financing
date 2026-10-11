@@ -82,12 +82,13 @@ bottom-right onboarding guide (Upload → Categories → Label → Train) walks 
 accounts through each step, spotlighting the specific button to press next
 with a dimmed backdrop and an arrow. Plus a
 separate **Settings** page (data export, password change, legal links,
-account deletion). The UI is a dark-first design with a light theme toggle,
+account deletion). The UI is paper-first ("Ledger": warm paper + ink, one
+vermilion accent, Newsreader serif figures) with a quiet dark theme,
 skeleton loading states, and a marketing landing page at `/` for signed-out
 visitors, with `/privacy` and `/terms` legal pages linked from its footer.
 Visual language, tokens, motion rules and components are documented in
-**`docs/DESIGN_SYSTEM.md`** ("Flat Lime" v3: **no gradients, solid colors
-only, no purple**, rolling numbers, a **⌘K / Ctrl+K command menu** to
+**`docs/DESIGN_SYSTEM.md`** ("Ledger" v4: **no gradients,
+solid colors only, no purple**, rolling numbers, a **⌘K / Ctrl+K command menu** to
 jump anywhere, and **keyboard labeling** — 1–9 pick a category, Enter accepts,
 S skips). Every Transactions & Model step (Upload, Categories, Label, Review,
 Train) uses the full content width with multi-column layouts on wide screens.
@@ -216,6 +217,10 @@ Set `MODEL2VEC_ENABLED=1` only on an instance with ≥2 GB.
 **Onboarding tour:** shown once per account right after sign-up; progress is stored on the account (`profiles.tour_step`) and each step advances only when the user does it (or taps Skip).
 
 **Design rule:** NO gradients, ONLY solid colors, no purple — see `docs/DESIGN_SYSTEM.md`.
+Design skills (impeccable, taste-skill, apple-design, review-animations,
+web-design-guidelines) live in `.claude/skills/`; `PRODUCT.md` holds the
+product brief they read. UI screenshots: `frontend/scripts/ui-snapshots.cjs`
+(every page/tab × light/dark × desktop/phone against a mocked API).
 
 **Frontend data cache:** `useApi` dedupes concurrent GETs and mirrors responses
 to sessionStorage (per-tab; cleared on sign-out/401) so reloads render instantly.

@@ -64,6 +64,10 @@ scrub is the main one needing a user decision).
 
 ## Next Suggested Step
 
+Current (Session 74, 2026-10-09): "Ledger" redesign done (PR #64) — see the
+Session 74 entry. Next: user reviews the preview; decide whether to keep the
+warm-paper background (impeccable flags cream as an AI-reflex surface).
+
 Current (Session 69, 2026-09-27): full visual redesign ("Aurora Lime" v2 —
 see `docs/DESIGN_SYSTEM.md`). Next: user clicks through the deployed preview
 (especially ⌘K, label keyboard shortcuts, light theme) and reports anything
@@ -4680,3 +4684,136 @@ locally), `tsc` clean.
 **Open:** 4 old `model_runs` rows stay "running" in the DB (the UI already
 flags them stale). After deploy, press Start training once and confirm the
 run reaches "succeeded" with no `server_failed` event.
+
+### Session 74 (2026-10-09) — "Ledger" redesign (design system v4), staged
+
+**Ask:** pick the best components/animations from motion.dev, Bklit, Kokonut,
+GSAP, Lenis, React Bits, 21st.dev, Aceternity, anime.js, Magic UI, godly,
+transitions.dev, animos, deck.gallery; find design skills with Vercel's
+`find-skills` (impeccable, taste, apple design); critique the UI; make it not
+look AI-generated.
+
+**Decided with user (AskUserQuestion):** new identity **"Ledger"** (warm
+paper light theme first, ink text, ONE seal-vermilion accent, Newsreader
+serif figures + Schibsted Grotesk UI, hairline rules instead of cards);
+commit the skills to `.claude/skills/`; keep Recharts and borrow Bklit's ideas
+(Bklit needs shadcn + Tailwind v4 and uses gradients); staged rollout with
+screenshots after each stage. Landing claims mechanism only — no invented
+numbers/testimonials. Audience confirmed: English speakers in China.
+
+**Critique (why):** template landing (eyebrow pill, word-blur headline, tilt
+mockup, 01/02/03 cards, icon bento, CTA card); Space Grotesk + Inter on
+neon-on-black; 42 `<Card>`s; 38 uppercase eyebrows + fake "live" dots;
+decorative loops; blur entrances (break THE RULE); 5 bordered icon buttons in
+the header. Also found hidden rule breaks: ProgressBar + CategoriesTab
+colored **glows**, NumberFlow's **linear-gradient digit masks** (shadow DOM).
+
+**Stage 0:** skills installed (impeccable, design-taste-frontend,
+redesign-existing-projects, apple-design, review-animations,
+web-design-guidelines); `PRODUCT.md` (impeccable product brief);
+`frontend/scripts/ui-snapshots.cjs` harness (76 shots, mocked API).
+Impeccable's direction roll was skipped (user pinned Ledger) but its
+challengers donated three raises: chart-as-headline (Du Bois), state by
+line form — **outlined = model guess, solid = confirmed** (emission rail),
+"you stopped here" flag (cutting bench).
+
+**Stage 1 (foundations):** new tokens (light paper `244 241 234`, dark night
+ledger `21 20 17`, vermilion `194 55 27`), contrast-checked (all text ≥4.5:1);
+category palette re-tuned (same 12 keys → no migration) with a constrained
+OKLCH search + dataviz validator — **all checks PASS in both themes** (old
+palette had a CVD fail); one value per theme for swatch + chart (`--chart-cat-*`
+removed). Fonts → Newsreader (opsz) + Schibsted Grotesk; default theme light.
+Primitives: Badge = swatch + ink name (`guess` = outlined), Button (squared,
+press feedback, `link` variant), Card (`sheet`/`plain`/`raised`, no hover
+lift), SectionHeader (no eyebrow/dot/icon chip), StatTile → "fact" +
+`FactRow`, Tabs (text nav, vermilion rule, critically damped spring, no blur),
+EmptyState (no float/ping), new `Stamp` (the one bouncing spring), inputs,
+switch, stepper, ⌘K, toaster, ring restyled; browser surfaces themed
+(selection, caret, scrollbars, focus ring).
+
+**Stage 2 (landing + auth):** landing rebuilt as a ledger page — serif
+headline "Every yuan, accounted for.", a sample statement whose categories
+get **stamped** row by row (solid = you, dashed outline = model guess; "Stamp
+again" replays), a sticky-scroll "Three steps, once a month" story
+(Upload → Teach → Read the month; sheets turn on the right, inline on
+phones), capabilities as ruled definition rows, a plain closing line.
+Lenis smooth scroll (`lenis@1.3.26`) on the landing only. Deleted
+`HeroChart`/`DemoStrip` (tilt card, floating chips, marquee, bento, step
+cards). Auth: brand panel = darker paper well with three stamped rows (no
+self-drawing line chart), form on the page (no glass card), underline
+mode tabs; PasswordInput now reuses Input's `FIELD_CLASSES`. Public pages
+lost their eyebrows; serif headings use medium weight repo-wide. `/` First
+Load JS 132 → 129 kB.
+
+**Stage 3 (shell + Overview):** one-row header (wordmark · text nav with a
+vermilion rule · quiet ⌘K field · bell · new `AccountMenu` with Settings,
+Light/Dark choice and Sign out) — replaces 5 bordered icon buttons +
+sun/moon `ThemeToggle` (deleted; `utils/theme.ts` gains `setTheme`). Phones
+get the nav as a second row; `TourSpotlight` now targets the *visible*
+copy of a duplicated `data-tour-id`. Bell dropdown grows from the bell
+(critically damped). Overview: big serif month figure + ▲/▼ vs prior
+month (greeting eyebrow dropped); `FactRow` (income · left over · labeled
+% with bar · all-time total) replaces 4 KPI cards incl. the duplicated
+"Labeled"/"Labeling complete"; monthly **bars** (discrete months; past =
+faint ink, latest = vermilion, dashed average line) replace the smoothed
+area; "Where it went" = one bold stacked bar + ranked ledger rows (donut
+dropped; top 5 + "Everything else"), hover-synced. Month names pinned to
+`en-US` (closes the Session 69 open item: a Chinese-locale browser showed
+Chinese month names). Dashboard skeleton mirrors the new layout.
+
+**Stage 4 (every other tab):** wizard shell = one ruled 5-step strip
+(no icon tile / step pill / duplicate title / blur slide; no dead "Next" on
+the last step). Upload: plain drop zone, uploads table on rules, status
+"processed" no longer vermilion (red read as an error). Categories: ruled
+list (banned 4px colored rails + glow removed). Review: suggestions use the
+outlined *guess* badge; new `Segmented` control (also in AccountMenu)
+replaced a toggle that used `bg-surface-3` — a token that never existed
+(silent no-CSS bug). **Label:** raised paper slip; **drag right to accept,
+left to set aside** with Apple-style momentum projection (velocity ×
+0.099); each slip owns its motion value; a solid **Stamp** lands before the
+slip flies off; "N set aside · bring them back" (cutting-bench raise).
+Training: words + a ruled working line instead of pulsing brain/rings;
+history is a table; success **stamps** the run ("Trained") — confetti +
+`canvas-confetti` removed. Budget: "Close" → "Near limit", ledger figures.
+50/30/20: donut → one income-wide bar with 50/80 ticks (recharts dropped
+from that chunk). Savings: ring → goal bar with a goal tick; comparison
+card folded into the fact row; `ProgressRing` deleted. Subscriptions,
+Insights, Action plan: ruled lists/tables (monogram + icon tiles, colored
+rails removed; status word leads each row). Reports: ink pagination,
+export as outline, ledger figures. Tour, spotlight, split modal, upload
+queue, settings restyled. Dead CSS removed (ping/float/glow-pulse).
+Harness fixes: Reports crashed in screenshots because the mock lacked
+`/dashboard/reports` (not an app bug); `/settings/profile` mock now wraps
+`{profile}`. THE RULE grep: only comments. 76 shots, 0 page errors.
+
+**Stage 5 (audits):** impeccable's *rendered* detector (static `.tsx` scans
+find nothing, even on the old code — scan URLs via a `--no-sandbox` Chromium
+wrapper) flagged: italic serif hero (AI-startup cliché → now roman), privacy
+line length (→ 68ch), placeholder contrast 3.7:1 (→ full `muted`), and the
+**cream page background** — left as is because the user chose warm paper;
+raised with the user as an open question. review-animations: ⌘K no longer
+animates, keyboard labeling skips the stamp (advances in ~40ms), no ease-in
+exits, `.progress-fill` uses `scaleX` not `width`, shorter tab-switch motion,
+drop-zone ants only while dragging, hover gated (`hoverOnlyWhenSupported`).
+web-design-guidelines: no `transition-all`, `…` + no "!" in messages,
+`theme-color`, `touch-action`, no text selection while dragging. Found and
+fixed a **hydration error (#418) under reduced motion** (components branched
+on `useReducedMotion()` during SSR; pre-existing pattern in the old
+WordReveal) → `MotionConfig reducedMotion="user"` globally. `FIELD_CLASSES`
+no longer carries width/py (Tailwind order made callers' `w-32`/`py-1.5`
+lose). Interaction checks (Playwright): ⌘K → "sav" → Enter navigates; Tab
+shows a 2px focus outline; key `2` labels + advances; a right fling sends
+`accept`; new-user Overview renders; reduced motion: no movement, no
+errors. `docs/DESIGN_SYSTEM.md` rewritten as v4; CLAUDE.md gains the
+"rule beats skills" line.
+
+**Not verified:** against real backend data or on real devices (mocked API
++ headless Chromium only); Safari/Firefox untested; the drag gesture was
+tested with a mouse, not touch.
+
+**Open (user decision):** keep the warm-paper background (`244 241 234`) or
+move to a less "default tasteful" paper (e.g. a cooler ledger grey-green)?
+impeccable flags warm cream as an AI-reflex surface.
+
+**Next:** user reviews the Vercel preview of PR #64 (light + dark, phone);
+decide the paper question; then merge.

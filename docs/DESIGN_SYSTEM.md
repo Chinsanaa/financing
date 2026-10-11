@@ -1,4 +1,4 @@
-# Design System — "Flat Lime" (v3)
+# Design System — "Ledger" (v4)
 
 The visual language of the Financing frontend. **Read this before adding UI.**
 Everything is token-driven, so light and dark stay in sync automatically.
@@ -6,122 +6,166 @@ Everything is token-driven, so light and dark stay in sync automatically.
 - Source of truth for tokens and effects: `frontend/src/app/globals.css` +
   `frontend/tailwind.config.js`
 - Components: `frontend/src/components/ui/`
-- v2 (Session 69, 2026-09-27) kept the v1 identity (dark-first, electric lime,
-  Space Grotesk) and layered on depth, motion and a few signature moments.
-- **v3 (2026-09-27, user decision): flat.** Removed every gradient, glow, blur,
-  aurora, grain, grid and the orbiting card border, removed purple from the
-  whole UI (incl. the category palette), and removed the "F" logo square.
+- Product brief for design skills: `PRODUCT.md` (repo root)
+- Design skills (installed with Vercel's `npx skills`, committed in
+  `.claude/skills/`): **impeccable**, **design-taste-frontend**,
+  **redesign-existing-projects**, **apple-design**, **review-animations**,
+  **web-design-guidelines**. If a skill contradicts THE RULE (taste-skill
+  recommends grain, noise and gradients), THE RULE wins.
+- History: v1/v2 dark + electric lime + Space Grotesk; v3 (2026-09-27) flat;
+  **v4 (2026-10-09, user decision): "Ledger"** — warm paper + ink, one
+  seal-vermilion accent, serif figures, hairline rules instead of cards.
 
 > ## THE RULE: NO gradients. ONLY solid colors.
 > - No `linear-/radial-/conic-gradient` anywhere — backgrounds, text, borders,
 >   masks, SVG `<linearGradient>` chart fills (use a solid fill + `fillOpacity`).
-> - No glows or blur effects (`shadow-glow`, colored `drop-shadow`,
->   `blur-3xl` blobs, `backdrop-blur`, translucent "glass").
-> - **No purple** (violet / indigo / fuchsia / purple) — not as an accent, not
->   in charts, not in the category palette.
-> - One flat page background (`bg`); cards are one flat `surface` color + a
->   hairline border.
-> - Check before shipping: `grep -rnEi "gradient|violet|indigo|fuchsia|purple|backdrop-blur|shadow-glow" frontend/src`
+>   This includes third-party internals: NumberFlow's digit-fade masks are
+>   zeroed in `globals.css` (`--number-flow-mask-*: 0`).
+> - No glows or blur effects (`shadow-glow`, colored `drop-shadow` or
+>   zero-offset colored `box-shadow`, `blur()` filters — also in entrances —
+>   `backdrop-blur`, translucent "glass").
+> - **No purple** (violet / indigo / fuchsia / purple / plum) — not as an accent,
+>   not in charts, not in the category palette.
+> - One flat page background (`bg`); surfaces are one flat color + a hairline.
+> - Check before shipping: `grep -rnEi "gradient|violet|indigo|fuchsia|purple|backdrop-blur|shadow-glow|blur\(" frontend/src`
 >   should only hit comments.
 
 ---
 
 ## 1. Principles
 
-1. **Dark is the flagship; light is a tasteful inversion.** Design both at once —
-   never hardcode a hex/`white`/`black` in a component. Use tokens.
-2. **Motion explains, it doesn't decorate.** Every animation answers "what just
-   changed?" (a number rolled because the month changed, a card flew right
-   because you labeled it). Repeated-work screens (Label, Reports) stay calm.
-3. **Solid colors only — no gradients, glows or purple** (see THE RULE above).
-   Confetti stays rationed to real milestones.
-4. **Color is never the only signal.** Status colors always come with a word
-   or icon ("Over", ▲/▼, a meter + a number).
-5. **Reduced motion is respected everywhere** — a global rule in `globals.css`
-   collapses animations (and zeroes stagger delays); NumberFlow, ProgressRing,
-   WordReveal and `celebrate()` also check it themselves.
+1. **Paper first.** Light (warm paper + ink) is the flagship; dark is a quiet
+   "night ledger". Never hardcode a hex/`white`/`black` in a component.
+2. **Rules, not boxes.** Sections are separated by hairline rules and
+   whitespace. A card exists only when something genuinely floats (popovers,
+   the label slip, modals). No card grids of icon + heading + text.
+3. **One accent, rationed.** Vermilion marks the primary action on a screen,
+   the active nav item, "this month", and the stamp. Everything else is ink.
+4. **The chart is the headline.** Numbers are set large in the serif; one
+   bold bar beats a donut; every slice is named in ink beside its color.
+5. **Color is never the only signal.** Status always carries a word
+   ("Over budget", "Near limit") or ▲/▼. A model's *guess* is drawn as an
+   **outline**, a confirmed value **solid** — state by line form, not hue.
+6. **Motion explains, then gets out of the way** (see §3). Keyboard and
+   high-frequency actions never wait on an animation.
+7. **No eyebrows.** No uppercase kicker above a heading, no fake "live" dots,
+   no icon chips in tinted squares, no 01/02/03 unless sequence is real.
 
 ---
 
 ## 2. Tokens
 
-Colors are space-separated RGB channels so Tailwind can apply alpha:
-`bg-accent/12`, `border-edge/8`.
+Colors are space-separated RGB channels so Tailwind can apply alpha
+(`bg-accent/10`, `border-edge/12`). Opacity steps 3/6/8/12 are added in
+`tailwind.config.js` (Tailwind's default scale is multiples of 5 — without
+them `border-edge/8` silently generates **no CSS**). Never apply an opacity
+modifier to an arbitrary `var()` color; make a token. Never invent a token
+name (`bg-surface-3` generated nothing for months).
 
-| Token | Use | Dark | Light |
+| Token | Use | Light | Dark |
 |---|---|---|---|
-| `bg` | page background | `10 10 15` | `250 250 248` |
-| `surface` / `surface-2` | cards / insets, inputs | `19 19 24` / `27 27 35` | white / `241 241 243` |
-| `ink` / `muted` | primary / secondary text | near-white / gray | near-black / gray |
-| `edge` | borders & hairlines — **always at low alpha** (`/8`, `/10`, `/15`) | white | near-black |
-| `accent` | electric lime fills | `200 255 61` | `132 204 22` |
-| `accent-strong` | lime **text** (contrast-safe on light) | = accent | `77 124 15` |
-| `accent-ink` | text on an accent fill | near-black | near-black |
-| `cyan` | info | | |
-| `success`, `danger` | good / bad status | | |
-| `warn` | "approaching" amber status (added v2) | `217 119 6` | `180 83 9` |
-| `--cat-*` / `--chart-cat-*` | 12 user-selectable category colors (badge text / chart fills): lime, blue, cyan, pink, amber, sky, emerald, rose, green, teal, orange, olive — **no purple** | see `categoryColors.ts` | |
+| `bg` | page (paper) | `244 241 234` | `21 20 17` |
+| `surface` | lifted paper: popovers, inputs, label slip | `251 250 246` | `29 27 24` |
+| `surface-2` | inset well (auth brand panel) | `235 231 222` | `38 36 31` |
+| `ink` / `muted` | text (muted 5.3:1 on paper) | `27 26 23` / `104 99 90` | `237 233 224` / `163 157 145` |
+| `edge` | hairlines — always low alpha (`/10`–`/25`); `ink/80` for heavy section rules | ink | ink |
+| `accent` | seal vermilion fills | `194 55 27` | `226 86 56` |
+| `accent-strong` | vermilion **text** | `176 48 26` | `234 106 78` |
+| `accent-ink` | text on a vermilion fill (≥5:1) | paper | near-black |
+| `danger` | crimson, always with a word | `155 28 49` | `240 122 134` |
+| `success` / `warn` / `cyan` (info) | ink green / ochre / slate blue | | |
+| `--cat-*` | 12 category colors (keys stored in DB) | see `categoryColors.ts` | |
 
-**Opacity steps.** Tailwind's default scale is multiples of 5; v2 adds
-`3, 6, 8, 12` (`tailwind.config.js → theme.extend.opacity`). Before that,
-`border-edge/8` and `bg-accent/12` silently generated **no CSS** and every card
-border fell back to Tailwind's default light gray. If you need another step,
-add it there — and never use an opacity modifier on an arbitrary `var()` color
-(`bg-[color:var(--x)]/10` generates nothing in Tailwind 3); make a token instead.
+All text tokens were contrast-checked (≥4.5:1 on bg, surface and wells).
 
-**Type.** `font-display` = Space Grotesk (headings, numbers), `font-sans` = Inter
-(body). Numbers use `tabular-nums`. Scale: section label 11px uppercase tracked
-(`.section-label`), body 14px, card title 18px, page title 24–28px, KPI 30px,
-hero figure 48–60px.
+**Category palette.** Same 12 keys (`lime, blue, cyan, pink, amber, sky,
+emerald, rose, green, teal, orange, olive` — changing keys needs a migration,
+changing values doesn't). Values found by a constrained OKLCH search and
+validated with the dataviz validator in stored order, on page *and* card
+surfaces: lightness, chroma, CVD separation, normal-vision floor and 3:1
+contrast **all PASS in both themes**. Display labels follow the real color
+(lime → "Moss", amber → "Ochre", orange → "Rust"). "pink" is held to rose
+hues (OKLCH 354–4°) so it never reads as purple. One value per theme serves
+swatches, bars and chart fills; the name is always printed in ink beside it.
 
-**Radius.** `rounded-card` (16px) for surfaces, `rounded-pill` for buttons /
-chips / tabs, `rounded-lg`/`xl` for inner elements and icon chips.
+**Type.** `font-display` = **Newsreader** (variable, optical size axis —
+big figures get the fine display cut, table cells the sturdy text cut),
+`font-sans` = **Schibsted Grotesk**. Money and counts use `.num` (serif,
+lining, tabular). Serif headings at `font-normal`/`font-medium`, roman (no
+italic display — flagged by impeccable as the AI-startup hero cliché),
+sentence case. Scale: caption 13px, body 14–15px, section title 24px,
+page title 28px, fact figure 32px, month figure 72–96px.
 
-**Elevation.** Flat surface + hairline border by default; `shadow-card` (a
-neutral, non-colored shadow) for lifted/hovered/floating things. No glows.
+**Radius.** `rounded-card` 10px for floating surfaces, `rounded-md` for
+controls, `rounded-[2px]` swatches, `rounded-[3px]` stamps, `rounded-pill`
+only for kbd/number chips.
+
+**Elevation.** Flat by default; `shadow-card` (warm-ink, offset + soft blur,
+never colored) only on floating things.
+
+**Browser surfaces** are themed: `::selection`, `caret-color`, scrollbars,
+`:focus-visible` (2px vermilion outline), `color-scheme`, `theme-color`
+meta, `touch-action: manipulation`.
 
 ---
 
-## 3. Motion tokens
+## 3. Motion
 
 | Token | Value | Use |
 |---|---|---|
-| `--ease-out` | `cubic-bezier(0.22, 1, 0.36, 1)` | entrances (expo-out) |
-| `--ease-in` | `cubic-bezier(0.55, 0, 1, 0.45)` | exits |
+| `--ease-out` | `cubic-bezier(0.22, 1, 0.36, 1)` | entrances **and** exits (no ease-in on UI) |
 | `--dur-fast` | 150ms | hovers, presses |
-| `--dur-base` | 240ms | state changes |
-| `--dur-slow` | 480ms | entrances, charts |
-| spring (framer) | `stiffness 500, damping 40` | tab indicators, shared-layout pills |
+| `--dur-base` | 240ms | state changes, dropdowns |
+| `--dur-slow` | 280ms | section entrances |
+| spring (framer) | `{ type: 'spring', bounce: 0, duration: 0.25–0.35 }` | indicators, menus — critically damped, arrives and stops |
+| stamp spring | `bounce: 0.25, duration: 0.42` | **the only bounce**: a stamp is a physical impact |
 
-Exits are faster than entrances (~60%). Stagger step: 55ms.
+Rules (apple-design + review-animations):
+- Press feedback on pointer-down: `active:scale-[0.97]`, 75ms.
+- Dropdowns grow from their trigger (`transformOrigin: top right`), from
+  `scale(0.97)`, never `scale(0)`; exits faster than entrances.
+- **No animation on keyboard / high-frequency actions:** ⌘K opens with a
+  100ms fade and its selection doesn't glide; labeling with 1–9/Enter skips
+  the stamp and advances immediately (~40ms).
+- Animate `transform`/`opacity` only (`.progress-fill` grows with `scaleX`).
+- No ambient loops: the drop zone's ants march only while a file is over it;
+  the only loop is training's "working" rule while a run is live.
+- Hover styles only on real pointers (`future.hoverOnlyWhenSupported`).
+- **Reduced motion is global:** `MotionConfig reducedMotion="user"` in
+  `MotionProvider` drops transform animations (opacity still fades); CSS
+  collapses keyframes. **Never branch on `useReducedMotion()` while
+  rendering server-rendered markup** — it causes hydration errors (#418).
+  (Client-only tabs may use it in handlers.)
+- Drag: the label slip follows the pointer 1:1, rubber-bands, and decides on
+  release from the **projected** position (`offset + velocity × 0.099`), so a
+  flick counts like a long drag. Each slip owns its own motion value.
 
 ---
 
 ## 4. Effects (CSS classes in `globals.css`)
 
-| Class | What it does | Where |
-|---|---|---|
-| `.stagger-in` | direct children rise in 55ms apart | automatic on every tab's top-level sections (`.tab-panel`), tables, settings |
-| `.progress-fill` | bar grows from 0, glides on change | `ProgressBar`, custom mini-bars |
-| `.dash-march` | marching-ants SVG border; fast while `.is-active` | upload drop zone |
-| `.animate-float`, `.animate-ping-soft` | idle float / radiating ring | empty states, live dots |
-| `.skeleton` | solid placeholder block whose opacity pulses | `Skeleton*` |
-| `.kbd` | keyboard-hint chip | ⌘K, label shortcuts |
+| Class | What it does |
+|---|---|
+| `.tab-panel` / `.stagger-in` | sections rise 8px in, 40ms apart (280ms) |
+| `.progress-fill` | bar grows from 0 (`scaleX`), glides on change |
+| `.dash-march` | dashed drop-zone border; marches only under `.is-active` |
+| `.skeleton` | solid block, opacity pulse |
+| `.kbd` | keyboard hint chip |
+| `.num` | serif tabular lining figures |
+| `.section-label` | quiet 13px caption for a chart/column — **not** an eyebrow |
+| `.cat-<key>` | sets `--cat` for swatches/bars |
 
-Removed in v3 (do not re-add): `.aurora`, `.grain`, `.spotlight`,
-`.glow-border`, `.text-shine`, `.btn-sheen`, `.bg-grid`, `shadow-glow`, the
-progress-bar light sweep and the gradient skeleton shimmer.
+Removed in v4 (do not re-add): `.animate-ping-soft`, `.animate-float`,
+`glow-pulse`, `shimmer`, blur in `rise-in`, colored glows on bars/rails, the
+NumberFlow gradient masks. v3 removals still stand (`.aurora`, `.grain`,
+`.spotlight`, `.glow-border`, `.text-shine`, `.btn-sheen`, `.bg-grid`).
 
-**Stacking-context gotchas (learned the hard way):**
-- Hover lifts use `transform`, which traps absolutely-positioned popovers
-  (e.g. the category color picker) under later siblings. Don't use `hover` on
-  cards that contain popovers.
-- A non-`none` `filter` or `transform` left on a wrapper makes it the
-  containing block for `position: fixed` children (modals). `TabPanel` ends its
-  blur with `transitionEnd: { filter: 'none' }` for this reason; CSS entrances
-  use `animation-fill-mode: backwards`, never `both`.
-- `overflow: hidden` clips at the padding box, so ring effects sit at
-  `inset: 0`, not `-1px`.
+**Stacking-context gotchas:** a transform/filter left on a wrapper traps
+`position: fixed` children and popovers — rows that host the color picker
+use no transform/overflow; `TabPanel` ends at identity transform.
+`FIELD_CLASSES` carries **no width or vertical padding** — Tailwind emits
+`w-full`/`py-2.5` after `w-32`/`py-1.5`, so a value there would silently
+override the caller's.
 
 ---
 
@@ -129,41 +173,36 @@ progress-bar light sweep and the gradient skeleton shimmer.
 
 | Component | Notes |
 |---|---|
-| `Card` | always solid. `glass` (solid surface + border), `hover` (lift). `SectionHeader` = eyebrow with live dot + title + optional `description`, `icon`, `action`. |
-| `StatTile` + `DeltaChip` | KPI tile: label, icon chip, big `RollingNumber`, footer. `tone` colors the number only. `DeltaChip pct goodWhenDown` for ▲/▼ % chips. |
-| `RollingNumber` | odometer digits (`@number-flow/react`); rolls up the first time it scrolls into view and on every change. `currency` = whole yuan, sign before ¥. |
-| `ProgressBar` (`ui-feedback.tsx`) | `fillColor`, `height`, `marker` (target tick, e.g. 50/30/20), `label` (a11y). |
-| `ProgressRing` | SVG gauge that springs to `percent`; children render in the middle. |
-| `Button` | `primary` (solid lime), `outline`, `ghost`, `danger`; `sm/md/lg`; `loading`. |
-| `TabBar` / `PillTabs` / `TabPanel` | TabBar: hover pill glides between tabs + solid active underline. PillTabs: shared-layout pill, optional icons. TabPanel: blur-rise + section stagger. |
-| `CommandPalette` | ⌘K / Ctrl+K launcher. Commands are declared in `DashboardClient`. |
-| `EmptyState` | floating icon with ping ring; always say what will appear and how. |
-| `MonthSelect` | pill month picker (Budget, 50/30/20). |
-| `Toaster` | sonner host, follows our class theme. `toast.success()` for completed actions; errors stay inline (`<Alert kind="error">`) next to what failed. |
-| `ThemeToggle` | sun/moon swap animation; `utils/theme.ts` exposes `toggleTheme()` + `useIsDark()` (stays in sync with ⌘K). |
-| `Skeleton*` | pulsing solid placeholders that mirror the real layout (avoid layout shift). |
+| `Card` | `variant="sheet"` (default), `"plain"` (no box, top hairline), `"raised"` (floats). `hover` only darkens the border. `SectionHeader` = serif title + description + action (no label/icon). |
+| `StatTile` + `FactRow` + `DeltaChip` | a "fact" (caption, serif figure, footer) — put facts in a `FactRow` (hairline-divided), never in four cards. |
+| `Badge` | category: square swatch + ink name; `guess` → outlined swatch. Status tones: `accent`, `success`, `danger`, `warn`, `neutral` (squared label). |
+| `Stamp` | the signature: vermilion seal, `solid` (confirmed) / `outline` (dashed, model guess), lands tilted with the one bouncy spring. Landing hero, auth panel, label accept, training success (replaced confetti). |
+| `Button` | `primary` (vermilion — one per screen), `outline`, `ghost`, `danger` (outlined), `link`; `sm/md/lg`; `loading`. |
+| `Segmented` | 2–4 way choice with a sliding ink block (Review mode, theme). |
+| `TabBar` / `PillTabs` / `TabPanel` | text nav with a vermilion 2px rule / secondary nav with an ink 1px rule / panel fade-rise. |
+| `AccountMenu` | name, Settings, Light/Dark, Sign out (replaced 5 icon buttons + sun/moon toggle). |
+| `NotificationBell` | borderless bell, vermilion count, dropdown grows from the bell. |
+| `CommandPalette` | ⌘K / Ctrl+K; instant. |
+| `EmptyState` | dashed-rule note: what will appear and how. No floating icon. |
+| `Input` (`FIELD_CLASSES`), `Switch` (ink when on), `MonthSelect`, `Stepper`, `Toaster`, `Tooltip`, `Skeleton*`, `RollingNumber` (650ms) | |
 
-Utilities: `utils/celebrate.ts`
-(confetti — **milestones only**, currently a successful training run),
-`utils/theme.ts`.
+Deleted in v4: `ThemeToggle`, `ProgressRing`, `utils/celebrate.ts`
+(+ `canvas-confetti`), landing `HeroChart`/`DemoStrip`.
 
 ---
 
-## 6. Signature moments (where the "wow" lives)
+## 6. Screens
 
-| Screen | Moment |
+| Screen | Shape |
 |---|---|
-| Landing | word-by-word headline with a solid lime "goes."; hero mockup tilts toward the cursor with floating "auto-categorized" chips; merchant marquee (pauses on hover); bento features; CTA card |
-| Auth | solid card; brand-panel spending line draws itself in over a flat tint |
-| Dashboard shell | flat background; "Financing." wordmark (no logo square); ⌘K palette; tab bar; restored Planning sub-tabs |
-| Overview | greeting + last month's spend rolling in with ▲/▼ vs the prior month; solid-tint area chart; donut ↔ legend hover sync with center label |
-| Wizard | connected stepper whose rail fills with progress; step content slides in the direction of travel |
-| Upload | marching-ants drop zone that speeds up + tints on drag-over |
-| Label | stacked-deck card that flies off when labeled; **keyboard: 1–9 pick a category, Enter accepts, S skips** |
-| Training | "thinking" pulse while a run is live; confetti + toast on success; metrics roll in |
-| Budget / Savings | KPI tiles (income, budgeted, spent, left); savings-goal ring gauge |
-| 50/30/20 | donut center shows % of income; target ticks on each bucket bar |
-| Subscriptions / Insights / Action | monogram cards; current-vs-average bars; severity rails and an "All clear" state |
+| Landing | serif headline "Every yuan, accounted for." → a sample statement whose categories get **stamped** (solid = you, dashed = model) with "Stamp again" → sticky-scroll "Three steps, once a month" (sheets turn on the right; inline on phones) → capability rows (`dl`) → plain close. Lenis smooth scroll here only. Claims = mechanism only. |
+| Auth | darker paper well with three stamped rows; form on the page; underline mode tabs. |
+| Shell | one-row header: wordmark · text nav · quiet ⌘K field · bell · account. Phones: nav as a second row. |
+| Overview | month figure + ▲/▼ · `FactRow` · twelve monthly bars (latest vermilion, dashed average) · "Where it went" stacked bar + ranked rows. |
+| Wizard | one ruled 5-step strip (done = ink + check, current = vermilion). |
+| Label | raised paper slip; drag right = accept, left = set aside; 1–9/Enter/S; stamp on click/drag accept; "N set aside · bring them back". |
+| Review / Reports / Training / Subscriptions / Insights / Action | ruled tables and lists; status words lead; guesses outlined. |
+| Budget / 50/30/20 / Savings | `FactRow` + ruled bars; 50/30/20 = one income-wide bar with 50/80 ticks; savings = goal bar with a goal tick. |
 
 ---
 
@@ -171,29 +210,43 @@ Utilities: `utils/celebrate.ts`
 
 | Library | Why | Notes |
 |---|---|---|
-| `framer-motion` (existing) | layout animations, springs, presence | lazy-loaded via `LazyMotion` (`MotionProvider`) — always import `m`, never `motion` |
-| `@number-flow/react` | accessible rolling digits | |
-| `sonner` | toasts | mounted once in the root layout |
-| `canvas-confetti` | milestone celebration | dynamic import — not in any bundle until it fires |
-| `recharts` (existing) | charts | per-tab code split |
+| `framer-motion` | springs, drag, presence, layout | `LazyMotion` + `MotionConfig reducedMotion="user"`; import `m`, never `motion` |
+| `lenis` 1.3.26 | landing smooth scroll | landing only; off under reduced motion |
+| `@number-flow/react` | rolling digits | gradient masks zeroed |
+| `sonner` | toasts | |
+| `recharts` | Overview bars | per-tab code split; donut charts removed |
 
-Measured `next build` First Load JS, before → after v2: `/` 130 → 136 kB,
-`/auth` 205 → 206 kB, `/dashboard` 207 → 211 kB, `/settings` 188 kB (flat).
+Picked from the user's list and rejected on purpose: GSAP / anime.js (a
+second engine for what framer does), Aceternity / Magic UI / React Bits
+effects (beams, spotlights, aurora, blur-fade — THE RULE), Bklit charts
+(need shadcn + Tailwind v4, gradient fills — its ideas were rebuilt on
+Recharts: crosshair-free bars, dashed average). Borrowed: sticky-scroll
+layout (Aceternity), animated list stamping (Magic UI), dropdown/segment
+transitions (transitions.dev), drag physics (apple-design).
 
-Patterns were inspired by the copy-paste libraries Skiper UI and Vengeance UI
-(animated numbers, staggered grids, marquees; the spotlight and glow-border
-effects were removed in v3). We re-implemented them against our tokens instead of copying their
-source — most Skiper components are paid, and our versions stay theme-aware.
+First Load JS (v3 → v4): `/` 132 → 129 kB, `/auth` 206 → 205 kB,
+`/dashboard` 211 → 211 kB, `/settings` 188 → 187 kB.
 
 ---
 
 ## 8. Verifying UI changes
 
-`npx tsc --noEmit` and `next build` don't catch visual bugs (the missing
-opacity classes above passed both for months). For the logged-in dashboard,
-build with mock env vars (`NEXT_PUBLIC_SUPABASE_URL=https://mockproj.supabase.co`,
-`NEXT_PUBLIC_API_URL=http://localhost:9999`), set a fake
-`sb-mockproj-auth-token` cookie, and serve mock JSON for every endpoint with
-Playwright's `context.route()` — then screenshot each `?tab=` in both themes
-and at 390px width. Scroll the page before full-page shots, or
-`whileInView` / roll-up content won't have triggered.
+`tsc`/`next build` don't catch visual bugs. Use the harness:
+
+```bash
+cd frontend
+NEXT_PUBLIC_SUPABASE_URL=https://mockproj.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=mock \
+NEXT_PUBLIC_API_URL=http://localhost:9999 npx next build && npx next start -p 3100 &
+node scripts/ui-snapshots.cjs ../shots            # every page/tab × light/dark × 1440/390
+node scripts/ui-snapshots.cjs ../shots overview   # filter by name
+```
+
+It forges an `sb-mockproj-auth-token` cookie and mocks every endpoint; when
+a tab shows the error boundary, check the mock shape first (e.g.
+`/dashboard/reports`, `{ profile }`). Restart `next start` after every build
+— a running server keeps serving its in-memory static pages. Then:
+
+- impeccable's rendered detector: `IMPECCABLE_BROWSER=<chromium --no-sandbox wrapper> .claude/skills/impeccable/scripts/impeccable detect --viewport 390x844 http://localhost:3100/`
+  (static file scans of `.tsx` find nothing — scan URLs).
+- Emulate `prefers-reduced-motion` and watch for hydration errors (#418).
+- The rule grep at the top of this file.

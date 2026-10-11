@@ -10,7 +10,7 @@ import { Toaster as Sonner } from 'sonner';
  * next to the thing that failed (<Alert kind="error">).
  */
 export default function Toaster() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>('light');
   useEffect(() => {
     const root = document.documentElement;
     const sync = () => setTheme(root.classList.contains('dark') ? 'dark' : 'light');
@@ -26,7 +26,7 @@ export default function Toaster() {
       closeButton
       toastOptions={{
         classNames: {
-          toast: '!rounded-card !border-edge/10 !bg-surface !text-ink !shadow-card !font-sans',
+          toast: '!rounded-card !border-edge/15 !bg-surface !text-ink !shadow-card !font-sans',
           description: '!text-muted',
           success: '[&_[data-icon]]:!text-success',
           error: '[&_[data-icon]]:!text-danger',

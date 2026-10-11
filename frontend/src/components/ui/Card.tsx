@@ -1,36 +1,38 @@
 'use client';
 
 import { HTMLAttributes, ReactNode } from 'react';
-import { LucideIcon } from 'lucide-react';
 
 /**
- * Base surface — always a solid color (design rule: no gradients/glows).
- * Variants (combine freely):
- * - `glass`  solid surface + border (name kept for existing call sites)
- * - `hover`  lifts slightly on hover
+ * Ledger surfaces. Cards are the exception, not the page structure: most
+ * sections are separated by hairline rules and whitespace (`variant="plain"`).
+ * - `sheet` (default): one flat surface color + a hairline border.
+ * - `plain`: no box at all — layout wrapper with a top hairline rule.
+ * - `raised` (or legacy `glass`): sheet + soft neutral shadow, for things
+ *   that genuinely float (popovers, the label card).
+ * `hover` only darkens the border — never a transform lift (transforms trap
+ * popovers under later siblings; see DESIGN_SYSTEM.md stacking gotchas).
  */
 export default function Card({
+  variant = 'sheet',
   glass = false,
   hover = false,
   children,
   className = '',
   ...rest
 }: HTMLAttributes<HTMLDivElement> & {
+  variant?: 'sheet' | 'plain' | 'raised';
   glass?: boolean;
   hover?: boolean;
   children: ReactNode;
 }) {
+  const v = glass ? 'raised' : variant;
+  const base =
+    v === 'plain'
+      ? 'border-t border-edge/12'
+      : `rounded-card bg-surface border border-edge/10 ${v === 'raised' ? 'shadow-card' : ''}`;
   return (
     <div
-      className={`rounded-card ${
-        glass
-          ? 'glass'
-          : 'bg-surface border border-edge/8 shadow-[inset_0_1px_0_0_rgb(var(--edge)/0.04)]'
-      } ${
-        hover
-          ? 'transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-card'
-          : ''
-      } ${className}`}
+      className={`${base} ${hover && v !== 'plain' ? 'transition-colors duration-150 hover:border-edge/25' : ''} ${className}`}
       {...rest}
     >
       {children}
@@ -39,43 +41,24 @@ export default function Card({
 }
 
 /**
- * Page/section heading: eyebrow label with a live accent dot, display
- * title, optional one-line description and right-aligned action.
+ * Section heading: a serif title that carries its own weight, an optional
+ * one-line description and a right-aligned action. No eyebrow, no dot, no
+ * icon chip (impeccable craft floor).
  */
 export function SectionHeader({
-  label,
   title,
   description,
-  icon: Icon,
   action,
 }: {
-  label?: string;
   title: string;
   description?: ReactNode;
-  icon?: LucideIcon;
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        {label && (
-          <p className="section-label mb-2 flex items-center gap-2">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inset-0 rounded-full bg-accent animate-ping-soft" />
-              <span className="relative h-1.5 w-1.5 rounded-full bg-accent" />
-            </span>
-            {label}
-          </p>
-        )}
-        <h2 className="flex items-center gap-2.5 font-display text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
-          {Icon && (
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
-              <Icon className="h-[18px] w-[18px]" />
-            </span>
-          )}
-          {title}
-        </h2>
-        {description && <p className="mt-1.5 max-w-2xl text-sm text-muted">{description}</p>}
+        <h2 className="font-display text-[1.75rem] font-medium leading-tight tracking-[-0.01em]">{title}</h2>
+        {description && <p className="mt-1.5 max-w-[60ch] text-sm text-muted">{description}</p>}
       </div>
       {action}
     </div>

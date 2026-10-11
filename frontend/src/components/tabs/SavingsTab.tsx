@@ -1,15 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowDown, ArrowUp, Banknote, PiggyBank, Receipt, Target, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/utils/api';
 import { useApi } from '@/utils/useApi';
-import { Alert } from '@/components/ui-feedback';
+import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
-import Card, { SectionHeader } from '@/components/ui/Card';
-import StatTile from '@/components/ui/StatTile';
-import ProgressRing from '@/components/ui/ProgressRing';
+import { SectionHeader } from '@/components/ui/Card';
+import { FIELD_CLASSES } from '@/components/ui/Input';
+import StatTile, { FactRow } from '@/components/ui/StatTile';
 import RollingNumber from '@/components/ui/RollingNumber';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole } from '@/utils/format';
@@ -65,24 +65,30 @@ export default function SavingsTab() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader label="Planning" title="Savings and anomalies" />
+      <SectionHeader title="Savings" description="What this month is on pace to leave over, against the goal you set." />
 
       {error && <Alert kind="error">{error}</Alert>}
 
       {savings && (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <StatTile label="Income" value={savings.income} currency icon={Banknote} footer="Monthly, from your settings" />
-            <StatTile label="Spend this month" value={savings.current_spend} currency icon={Receipt} footer="So far" />
+          <FactRow>
+            <StatTile label="Income" value={savings.income} currency footer="Monthly, from your settings" />
+            <StatTile label="Spent this month" value={savings.current_spend} currency footer="So far" />
             <StatTile
               label="Projected savings"
               value={savings.projected_savings}
               currency
-              icon={PiggyBank}
               tone={savings.projected_savings > 0 ? 'success' : 'danger'}
               footer={savings.projected_savings > 0 ? 'Income minus spend' : 'Spending exceeds income'}
             />
-          </div>
+            <StatTile
+              label="vs 3-month average"
+              value={Math.abs(savings.current_spend - savings.average_monthly_spend)}
+              currency
+              tone={savings.current_spend > savings.average_monthly_spend ? 'danger' : 'success'}
+              footer={`${savings.current_spend > savings.average_monthly_spend ? '▲ more' : '▼ less'} than ${formatCurrencyWhole(savings.average_monthly_spend)}`}
+            />
+          </FactRow>
 
           {/* Savings goal: ring gauge + editable goal */}
           {(() => {
@@ -90,25 +96,31 @@ export default function SavingsTab() {
             const pct = goal > 0 ? (savings.projected_savings / goal) * 100 : 0;
             const hit = goal > 0 && savings.projected_savings >= goal;
             return (
-              <Card className="p-6">
-                <p className="section-label mb-5">Savings goal</p>
-                <div className="flex flex-col items-center gap-8 sm:flex-row">
-                  <ProgressRing
-                    percent={pct}
-                    label="Progress toward monthly savings goal"
-                    color={hit ? 'rgb(var(--success))' : 'rgb(var(--accent))'}
-                  >
-                    <p className="font-display text-3xl font-bold">
-                      <RollingNumber value={Math.max(0, Math.round(pct))} suffix="%" />
-                    </p>
-                    <p className="text-xs text-muted">of goal</p>
-                  </ProgressRing>
-
-                  <div className="w-full flex-1 space-y-4">
+              <section className="border-t border-ink/80 pt-4">
+                <h3 className="mb-5 font-display text-2xl">Savings goal</h3>
+                <div className="space-y-5">
+                  {goal > 0 && (
+                    // Projected savings against the goal (tick). Past the goal
+                    // the bar fills and the overshoot is written, not drawn.
+                    <div>
+                      <div className="mb-2 flex items-baseline justify-between text-sm">
+                        <span className="text-muted">Projected</span>
+                        <span className="num text-[15px]">
+                          <RollingNumber value={Math.max(0, Math.round(pct))} suffix="%" /> <span className="text-muted">of goal</span>
+                        </span>
+                      </div>
+                      <ProgressBar
+                        percent={pct}
+                        height="h-2.5"
+                        color={hit ? 'bg-success' : 'bg-ink'}
+                        marker={100}
+                        label="Progress toward monthly savings goal"
+                      />
+                    </div>
+                  )}
+                  <div className="w-full space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="flex items-center gap-2 text-sm text-muted">
-                        <Target className="h-4 w-4" /> Monthly goal
-                      </p>
+                      <p className="text-sm text-muted">Monthly goal</p>
                       {editingGoal ? (
                         <div className="flex items-center gap-2">
                           <input
@@ -119,7 +131,7 @@ export default function SavingsTab() {
                             placeholder="e.g. 3000"
                             autoFocus
                             aria-label="Monthly savings goal"
-                            className="w-32 rounded-pill border border-edge/20 bg-surface px-3 py-1.5 text-sm text-ink placeholder-muted focus:border-accent-strong/50 focus:outline-none focus:ring-2 focus:ring-accent/20"
+                            className={`${FIELD_CLASSES} w-32 py-1.5`}
                           />
                           <Button onClick={handleSaveGoal} loading={savingGoal} size="sm">
                             Save
@@ -138,7 +150,7 @@ export default function SavingsTab() {
                             setGoalInput(goal > 0 ? String(goal) : '');
                             setEditingGoal(true);
                           }}
-                          className="font-display text-2xl font-bold tabular-nums underline decoration-edge/30 decoration-dotted underline-offset-8 transition-colors hover:text-accent-strong hover:decoration-accent"
+                          className="num text-2xl underline decoration-edge/30 decoration-dotted underline-offset-8 transition-colors hover:decoration-accent"
                           title="Edit monthly savings goal"
                         >
                           {goal > 0 ? formatCurrencyWhole(goal) : 'Set a goal'}
@@ -147,13 +159,7 @@ export default function SavingsTab() {
                     </div>
                     {goalError && <Alert kind="error">{goalError}</Alert>}
                     <div
-                      className={`rounded-lg border px-4 py-3 text-sm ${
-                        goal <= 0
-                          ? 'border-edge/10 bg-edge/5 text-muted'
-                          : hit
-                          ? 'border-success/25 bg-success/10 text-success'
-                          : 'border-accent/25 bg-accent/5 text-ink'
-                      }`}
+                      className={`text-sm ${goal <= 0 ? 'text-muted' : hit ? 'text-success' : 'text-ink'}`}
                     >
                       {goal <= 0
                         ? 'Set a monthly goal to see your progress here.'
@@ -163,45 +169,12 @@ export default function SavingsTab() {
                     </div>
                   </div>
                 </div>
-              </Card>
+              </section>
             );
           })()}
 
-          <Card className="p-6">
-            <p className="section-label mb-4">Spending comparison</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="mb-1 text-sm text-muted">3-month average</p>
-                <p className="font-display text-2xl font-bold tabular-nums">
-                  {formatCurrencyWhole(savings.average_monthly_spend)}
-                </p>
-              </div>
-              <div>
-                <p className="mb-1 text-sm text-muted">This month vs average</p>
-                <p
-                  className={`flex items-center gap-1 font-display text-2xl font-bold tabular-nums ${
-                    savings.current_spend > savings.average_monthly_spend
-                      ? 'text-danger'
-                      : 'text-success'
-                  }`}
-                >
-                  {savings.current_spend > savings.average_monthly_spend ? (
-                    <>
-                      <ArrowUp className="h-5 w-5" />
-                      {formatCurrencyWhole(savings.current_spend - savings.average_monthly_spend)}
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDown className="h-5 w-5" />
-                      {formatCurrencyWhole(savings.average_monthly_spend - savings.current_spend)}
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-
             {savings.is_anomaly && (
-              <div className="mt-5 flex items-start gap-2.5 rounded-lg border border-danger/25 bg-danger/10 px-4 py-3">
+              <div className="flex items-start gap-2.5 rounded-md border border-danger/25 bg-danger/[0.06] px-4 py-3">
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
                 <div>
                   <p className="text-sm font-medium text-danger">Spending anomaly detected</p>
@@ -211,7 +184,6 @@ export default function SavingsTab() {
                 </div>
               </div>
             )}
-          </Card>
         </>
       )}
     </div>

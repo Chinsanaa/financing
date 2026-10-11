@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Brain, CheckCircle2, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
+import { AnimatePresence, m } from 'framer-motion';
+import { Bell, Brain, CheckCircle2, Info, Trash2, TriangleAlert } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
 import { formatCurrencyWhole, formatNumber } from '@/utils/format';
@@ -30,8 +31,8 @@ function NotificationRow({ n }: { n: Notification }) {
 
   if (n.type === 'welcome') {
     return (
-      <li className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">
-        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" />
+      <li className="flex items-start gap-2.5 rounded-md p-2 hover:bg-edge/[0.05]">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
         <p className="min-w-0 flex-1 text-sm text-muted">{n.payload.message}</p>
         {dot}
       </li>
@@ -39,7 +40,7 @@ function NotificationRow({ n }: { n: Notification }) {
   }
   if (n.type === 'training_complete') {
     return (
-      <li className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">
+      <li className="flex items-start gap-2.5 rounded-md p-2 hover:bg-edge/[0.05]">
         <Brain className="mt-0.5 h-4 w-4 shrink-0 text-success" />
         <div className="min-w-0 flex-1">
           <p className="text-sm text-muted">Your model finished training.</p>
@@ -53,7 +54,7 @@ function NotificationRow({ n }: { n: Notification }) {
   }
   if (n.type === 'over_budget') {
     return (
-      <li className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">
+      <li className="flex items-start gap-2.5 rounded-md p-2 hover:bg-edge/[0.05]">
         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">Over budget: {n.payload.category}</p>
@@ -65,7 +66,7 @@ function NotificationRow({ n }: { n: Notification }) {
   }
   if (n.type === 'approaching_budget') {
     return (
-      <li className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-surface-2">
+      <li className="flex items-start gap-2.5 rounded-md p-2 hover:bg-edge/[0.05]">
         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">Approaching budget: {n.payload.category}</p>
@@ -147,22 +148,32 @@ export default function NotificationBell({
         onClick={toggleOpen}
         aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'No unread notifications'}
         aria-expanded={open}
-        className="relative flex h-11 w-11 items-center justify-center rounded-pill border border-edge/10 text-muted transition-colors hover:text-ink hover:border-edge/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="relative flex h-10 w-10 items-center justify-center rounded-md text-muted transition-colors hover:bg-edge/6 hover:text-ink active:scale-[0.96]"
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold leading-none text-white">
+          <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-ink">
             {unreadCount}
           </span>
         )}
       </button>
 
+      <AnimatePresence>
       {open && (
-        <div className="glass absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl p-3 shadow-card">
-          <p className="section-label mb-2 px-1">Notifications</p>
+        // Grows out of the bell (origin top-right) and settles without
+        // overshoot; exits faster than it enters.
+        <m.div
+          initial={{ opacity: 0, scale: 0.97, y: -4 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.12 } }}
+          transition={{ type: 'spring', bounce: 0, duration: 0.24 }}
+          style={{ transformOrigin: 'top right' }}
+          className="glass absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-card p-3 shadow-card"
+        >
+          <p className="mb-2 px-1 font-display text-lg">Notifications</p>
 
           {notifications.length === 0 ? (
-            <div className="flex items-start gap-2.5 rounded-lg p-2.5">
+            <div className="flex items-start gap-2.5 rounded-md p-2.5">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
               <p className="text-sm text-muted">Nothing to flag right now.</p>
             </div>
@@ -175,14 +186,15 @@ export default function NotificationBell({
               </ul>
               <button
                 onClick={clearAll}
-                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-edge/10 px-2 py-1.5 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-edge/15 px-2 py-1.5 text-xs text-muted transition-colors hover:bg-edge/[0.05] hover:text-ink"
               >
                 <Trash2 className="h-3 w-3" /> Clear notifications
               </button>
             </>
           )}
-        </div>
+        </m.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

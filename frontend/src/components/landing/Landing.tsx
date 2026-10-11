@@ -2,393 +2,159 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { m, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion';
-import {
-  ArrowRight,
-  BrainCircuit,
-  FileSpreadsheet,
-  Languages,
-  LineChart,
-  ShieldCheck,
-  Tags,
-  Upload,
-  Wallet,
-} from 'lucide-react';
+import { m, type MotionProps } from 'framer-motion';
+import { ArrowRight } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import Card from '@/components/ui/Card';
-import { Reveal, Stagger, StaggerItem } from '@/components/ui/motion';
-import HeroChart from './HeroChart';
-import Badge, { categoryColor } from '@/components/ui/Badge';
-import DemoStrip from './DemoStrip';
+import StatementSheet from './StatementSheet';
+import HowItWorks from './HowItWorks';
+import SmoothScroll from './SmoothScroll';
 
+/** What it does, as ledger rows — no icon tiles, no bento. Every line is a
+ *  capability the product actually has (PRODUCT.md: mechanism only). */
 const FEATURES = [
-  {
-    icon: FileSpreadsheet,
-    title: 'Alipay + WeChat imports',
-    text: 'Drop in raw CSV exports. Both formats are parsed and normalized into one clean timeline.',
-  },
-  {
-    icon: BrainCircuit,
-    title: 'A model that is yours',
-    text: 'Train a personal classifier on your own labels. It learns your merchants, not someone else’s.',
-  },
-  {
-    icon: Languages,
-    title: 'Bilingual by design',
-    text: 'Mixed Chinese and English descriptions are segmented and understood correctly.',
-  },
-  {
-    icon: Tags,
-    title: 'Categories you control',
-    text: 'Start from a sensible set, rename and reshape it as your spending evolves.',
-  },
-  {
-    icon: LineChart,
-    title: 'Reports that explain',
-    text: 'Trends, category splits, budgets and savings goals — clear charts, no spreadsheet digging.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Private per user',
-    text: 'Your transactions, labels and model are isolated to your account. Nothing is shared.',
-  },
+  ['Both formats, one timeline', 'Alipay CSV and WeChat Pay Excel exports are parsed separately, then normalized into one schema.'],
+  ['Chinese merchant text, understood', 'Descriptions are segmented with jieba before your model reads them, and shown to you in English.'],
+  ['A model that is yours', 'It is trained only on your labels, so it learns your merchants — not someone else’s.'],
+  ['Honest about doubt', 'Guesses below your model’s measured confidence wait in a review queue instead of being applied silently.'],
+  ['Planning, not just charts', 'Category budgets, a 50/30/20 split, a savings goal and detected subscriptions, with alerts as you near a limit.'],
+  ['Private per account', 'Your transactions, labels and model are isolated to your account. Nothing is shared.'],
 ];
 
-const STEPS = [
-  {
-    icon: Upload,
-    step: '01',
-    title: 'Upload',
-    text: 'Export statements from Alipay or WeChat and drop the files in.',
-  },
-  {
-    icon: Tags,
-    step: '02',
-    title: 'Teach',
-    text: 'Label a handful of transactions. A few minutes is enough to start.',
-  },
-  {
-    icon: Wallet,
-    step: '03',
-    title: 'Understand',
-    text: 'The model categorizes everything else. Watch your spending come into focus.',
-  },
-];
-
-/** Merchants for the marquee — the kind of rows real statements are full of. */
-const MARQUEE = [
-  { merchant: 'Luckin Coffee', category: 'Food' },
-  { merchant: 'Didi Chuxing', category: 'Transport' },
-  { merchant: 'Taobao', category: 'Shopping' },
-  { merchant: 'Meituan', category: 'Food' },
-  { merchant: 'Shanghai Metro', category: 'Transport' },
-  { merchant: 'JD.com', category: 'Shopping' },
-  { merchant: 'Hema Fresh', category: 'Groceries' },
-  { merchant: 'Ctrip', category: 'Travel' },
-  { merchant: 'Bilibili', category: 'Fun' },
-  { merchant: 'Watsons', category: 'Health' },
-];
-
-/** Headline that reveals word by word: each word rises out of a blur. */
-function WordReveal({ text, className = '', delay = 0 }: { text: string; className?: string; delay?: number }) {
-  const reduce = useReducedMotion();
-  return (
-    <>
-      {text.split(' ').map((word, i) => (
-        <m.span
-          key={i}
-          className={`inline-block ${className}`}
-          initial={reduce ? false : { opacity: 0, y: '0.4em', filter: 'blur(10px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: delay + i * 0.08 }}
-        >
-          {word}&nbsp;
-        </m.span>
-      ))}
-    </>
-  );
-}
-
-/** Wraps the hero mockup: tilts in 3D toward the pointer, springs back on leave. */
-function TiltCard({ children }: { children: React.ReactNode }) {
-  const reduce = useReducedMotion();
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const rotateY = useSpring(useTransform(x, [-0.5, 0.5], [-10, 10]), { stiffness: 200, damping: 20 });
-  const rotateX = useSpring(useTransform(y, [-0.5, 0.5], [8, -8]), { stiffness: 200, damping: 20 });
-  return (
-    <div style={{ perspective: 1200 }}>
-      <m.div
-        style={reduce ? undefined : { rotateX, rotateY, transformStyle: 'preserve-3d' }}
-        onPointerMove={(e) => {
-          if (e.pointerType !== 'mouse') return;
-          const r = e.currentTarget.getBoundingClientRect();
-          x.set((e.clientX - r.left) / r.width - 0.5);
-          y.set((e.clientY - r.top) / r.height - 0.5);
-        }}
-        onPointerLeave={() => {
-          x.set(0);
-          y.set(0);
-        }}
-        className="relative"
-      >
-        {children}
-      </m.div>
-    </div>
-  );
-}
+const WRAP = 'mx-auto max-w-6xl px-4 sm:px-6 lg:px-8';
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
 export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // One authored entrance: the headline settles, then the stamps take over.
+  // (Reduced motion is handled globally by MotionConfig — never branch here.)
+  const rise = (delay: number): MotionProps => ({
+    initial: { opacity: 0, y: 14 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.6, ease: EASE_OUT, delay },
+  });
+
   return (
-    <div className="relative overflow-x-clip">
-      {/* Navbar */}
+    <div className="overflow-x-clip">
+      <SmoothScroll />
+
       <header
-        className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-          scrolled ? 'glass py-2.5' : 'bg-transparent py-4'
+        className={`fixed inset-x-0 top-0 z-50 bg-bg transition-[border-color] duration-200 border-b ${
+          scrolled ? 'border-edge/15' : 'border-transparent'
         }`}
       >
-        <div className="mx-auto flex max-w-7xl 2xl:max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="group flex items-center gap-2 font-display text-lg font-bold tracking-tight">
-            <span>
-              Financing<span className="text-accent-strong">.</span>
-            </span>
+        <div className={`${WRAP} flex h-16 items-center justify-between`}>
+          <Link href="/" className="font-display text-xl font-medium tracking-[-0.01em]">
+            Financing<span className="text-accent">.</span>
           </Link>
-          <nav className="hidden items-center gap-6 text-sm text-muted sm:flex">
-            <a href="#how" className="transition-colors hover:text-ink">How it works</a>
-            <a href="#features" className="transition-colors hover:text-ink">Features</a>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Link href="/auth">
-              <Button variant="ghost" size="sm">Sign in</Button>
+          <nav className="flex items-center gap-1 sm:gap-5">
+            <a href="#how" className="hidden text-sm text-muted transition-colors hover:text-ink sm:inline">
+              How it works
+            </a>
+            <Link href="/auth" className="px-2 text-sm text-ink underline-offset-4 hover:underline">
+              Sign in
             </Link>
             <Link href="/auth?mode=signup">
-              <Button size="sm">
-                Get started <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
+              <Button size="sm">Start free</Button>
             </Link>
-          </div>
+          </nav>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative z-[1] pt-36 pb-20 sm:pt-44">
-        <div className="relative mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
-          <div className="grid items-center gap-14 lg:grid-cols-[1.1fr,1fr]">
-            <div>
-              <Reveal>
-                <span className="mb-6 inline-flex items-center gap-2 rounded-pill border border-edge/10 bg-surface/60 px-3 py-1.5 text-xs font-medium text-muted">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inset-0 rounded-full bg-accent animate-ping-soft" />
-                    <span className="relative h-2 w-2 rounded-full bg-accent" />
-                  </span>
-                  Alipay + WeChat Pay · CSV & Excel
-                </span>
-              </Reveal>
-              <h1 className="font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-                <WordReveal text="Know where" />
-                <br />
-                <WordReveal text="every yuan" delay={0.16} />
-                <m.span
-                  className="relative inline-block whitespace-nowrap"
-                  initial={{ opacity: 0, y: '0.4em', filter: 'blur(10px)' }}
-                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                  transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.36 }}
-                >
-                  <span className="text-accent-strong">goes.</span>
-                  <m.span
-                    className="absolute inset-x-0 -bottom-1 h-1 origin-left rounded-full bg-accent"
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.9 }}
-                  />
-                </m.span>
-              </h1>
-              <Reveal delay={0.35}>
-                <p className="mt-6 max-w-md text-lg text-muted">
-                  Upload your Alipay and WeChat statements, teach a model your categories once,
-                  and let it sort everything after that.
-                </p>
-              </Reveal>
-              <Reveal delay={0.45}>
-                <div className="mt-8 flex flex-wrap items-center gap-3">
-                  <Link href="/auth?mode=signup">
-                    <Button size="lg">
-                      Start free <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                  <a href="#how">
-                    <Button variant="outline" size="lg">See how it works</Button>
-                  </a>
-                </div>
-              </Reveal>
-            </div>
-
-            <Reveal delay={0.2}>
-              <TiltCard>
-                <HeroChart />
-                {/* Floating "just categorized" chips orbit the mockup */}
-                <m.div
-                  aria-hidden="true"
-                  className="glass absolute -left-8 bottom-20 hidden items-center gap-2 rounded-xl px-3 py-2 text-xs shadow-card sm:flex"
-                  style={{ transform: 'translateZ(40px)' }}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0, y: [0, -6, 0] }}
-                  transition={{ opacity: { delay: 1.4 }, x: { delay: 1.4 }, y: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
-                >
-                  <span className="font-medium">Luckin Coffee</span>
-                  <ArrowRight className="h-3 w-3 text-muted" />
-                  <Badge tone={categoryColor('Food')}>Food</Badge>
-                </m.div>
-                <m.div
-                  aria-hidden="true"
-                  className="glass absolute -right-4 -bottom-5 hidden items-center gap-2 rounded-xl px-3 py-2 text-xs shadow-card sm:flex"
-                  style={{ transform: 'translateZ(60px)' }}
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0, y: [0, 6, 0] }}
-                  transition={{ opacity: { delay: 1.7 }, x: { delay: 1.7 }, y: { duration: 6, repeat: Infinity, ease: 'easeInOut' } }}
-                >
-                  <BrainCircuit className="h-3.5 w-3.5 text-accent-strong" />
-                  <span className="font-medium">Auto-categorized</span>
-                  <span className="text-muted">just now</span>
-                </m.div>
-              </TiltCard>
-            </Reveal>
-          </div>
-        </div>
-      </section>
-
-      {/* Merchant marquee — edges fade out via mask */}
-      <section className="relative z-[1] border-y border-edge/8 bg-surface py-5" aria-label="Example merchants">
-        <div className="group/marquee flex overflow-hidden">
-          <div className="flex shrink-0 animate-marquee gap-3 pr-3 group-hover/marquee:[animation-play-state:paused]">
-            {[...MARQUEE, ...MARQUEE].map((row, i) => (
-              <span
-                key={i}
-                className="flex shrink-0 items-center gap-2 rounded-pill border border-edge/10 bg-surface px-3 py-1.5 text-sm"
-                aria-hidden={i >= MARQUEE.length}
-              >
-                <span className="text-muted">{row.merchant}</span>
-                <ArrowRight className="h-3 w-3 text-muted" />
-                <Badge tone={categoryColor(row.category)}>{row.category}</Badge>
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how" className="relative z-[1] py-24">
-        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
-          <Reveal>
-            <p className="section-label mb-2">How it works</p>
-            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
-              Three steps. No spreadsheets.
-            </h2>
-          </Reveal>
-          <Stagger className="mt-12 grid gap-5 md:grid-cols-3">
-            {STEPS.map(({ icon: Icon, step, title, text }) => (
-              <StaggerItem key={step}>
-                <Card hover className="group h-full p-6">
-                  <div className="mb-5 flex items-center justify-between">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="font-display text-4xl font-bold text-edge/10 transition-colors duration-300 group-hover:text-accent/40">{step}</span>
-                  </div>
-                  <h3 className="font-display text-lg font-semibold">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted">{text}</p>
-                </Card>
-              </StaggerItem>
-            ))}
-          </Stagger>
-        </div>
-      </section>
-
-      {/* Live demo strip */}
-      <section className="relative z-[1] py-10">
-        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
-          <Reveal>
-            <DemoStrip />
-          </Reveal>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section id="features" className="relative z-[1] py-24">
-        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
-          <Reveal>
-            <p className="section-label mb-2">Features</p>
-            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
-              Built for messy, real statements.
-            </h2>
-          </Reveal>
-          <Stagger className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Bento: 3 double-width tiles + 3 single = 9 cells = three full rows
-                (wide/single, single/wide, wide/single) on the 3-col layout. */}
-            {FEATURES.map(({ icon: Icon, title, text }, i) => {
-              const wide = i === 0 || i === 3 || i === 4;
-              return (
-                <StaggerItem key={title} className={wide ? 'lg:col-span-2' : ''}>
-                  <Card glass hover className="group relative h-full overflow-hidden p-6">
-                    <span className="relative mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/12 text-accent-strong transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <h3 className={`relative font-display font-semibold ${wide ? 'text-xl' : 'text-base'}`}>{title}</h3>
-                    <p className={`relative mt-1.5 leading-relaxed text-muted ${wide ? 'max-w-md text-base' : 'text-sm'}`}>{text}</p>
-                  </Card>
-                </StaggerItem>
-              );
-            })}
-          </Stagger>
-        </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="relative z-[1] py-24">
-        <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
-          <Reveal>
-            <Card glass className="relative overflow-hidden px-8 py-16 text-center">
-              <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">
-                Your money, <span className="text-accent-strong">decoded.</span>
-              </h2>
-              <p className="mx-auto mt-4 max-w-md text-muted">
-                Five minutes from CSV export to your first categorized month.
+      <main>
+        {/* ── Hero: the headline, then the statement itself ── */}
+        <section className={`${WRAP} pt-28 sm:pt-36`}>
+          <div className="grid gap-8 lg:grid-cols-[1.4fr,1fr] lg:items-end">
+            <m.h1
+              {...rise(0)}
+              className="font-display text-[3.25rem] font-normal leading-[0.98] tracking-[-0.025em] sm:text-7xl lg:text-[6rem]"
+            >
+              Every yuan, accounted for.
+            </m.h1>
+            <m.div {...rise(0.12)} className="lg:pb-3">
+              <p className="max-w-[42ch] text-[17px] leading-relaxed text-muted">
+                Upload your Alipay and WeChat Pay statements, label a few merchants once, and a model trained on
+                your own labels sorts the rest.
               </p>
-              <div className="mt-8">
+              <div className="mt-6 flex flex-wrap items-center gap-5">
                 <Link href="/auth?mode=signup">
                   <Button size="lg">
-                    Create your account <ArrowRight className="h-4 w-4" />
+                    Start free <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
+                <a href="#how" className="text-sm text-ink underline decoration-edge/30 underline-offset-4 hover:decoration-accent">
+                  See how it works
+                </a>
               </div>
-            </Card>
-          </Reveal>
-        </div>
-      </section>
+            </m.div>
+          </div>
 
-      {/* Footer */}
-      <footer className="relative z-[1] border-t border-edge/8 py-10">
-        <div className="mx-auto flex max-w-7xl 2xl:max-w-[1440px] flex-col items-center justify-between gap-4 px-4 text-sm text-muted sm:flex-row sm:px-6 lg:px-8">
-          <span className="font-display font-semibold text-ink">
-            Financing<span className="text-accent-strong">.</span>
+          <m.div {...rise(0.25)} className="mt-14 sm:mt-20">
+            <StatementSheet />
+          </m.div>
+        </section>
+
+        {/* ── How it works: sticky story ── */}
+        <section id="how" className={`${WRAP} scroll-mt-20 pt-28 sm:pt-36`}>
+          <h2 className="max-w-[18ch] font-display text-4xl font-normal leading-[1.05] tracking-[-0.02em] sm:text-5xl">
+            Three steps, once a month.
+          </h2>
+          <div className="mt-6 lg:mt-0">
+            <HowItWorks />
+          </div>
+        </section>
+
+        {/* ── What it does: ledger rows ── */}
+        <section className={`${WRAP} pt-24 sm:pt-32`}>
+          <h2 className="font-display text-4xl font-normal tracking-[-0.02em] sm:text-5xl">Built for real statements.</h2>
+          <dl className="mt-10 border-t border-ink/80">
+            {FEATURES.map(([term, text]) => (
+              <div key={term} className="grid gap-1 border-b border-edge/15 py-5 sm:grid-cols-[minmax(0,1fr),minmax(0,1.4fr)] sm:gap-10">
+                <dt className="font-display text-xl">{term}</dt>
+                <dd className="max-w-[60ch] text-[15px] leading-relaxed text-muted">{text}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        {/* ── Close ── */}
+        <section className={`${WRAP} pb-24 pt-28 sm:pb-32 sm:pt-36`}>
+          <div className="flex flex-col gap-8 border-t border-ink/80 pt-10 sm:flex-row sm:items-end sm:justify-between">
+            <p className="max-w-[16ch] font-display text-4xl font-normal leading-[1.05] tracking-[-0.02em] sm:text-6xl">
+              Start with this month’s statements.
+            </p>
+            <div className="flex flex-wrap items-center gap-5 sm:pb-2">
+              <Link href="/auth?mode=signup">
+                <Button size="lg">
+                  Create your account <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link href="/auth" className="text-sm underline decoration-edge/30 underline-offset-4 hover:decoration-accent">
+                I already have one
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-edge/15">
+        <div className={`${WRAP} flex flex-col gap-3 py-8 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between`}>
+          <span>
+            <span className="font-display text-base text-ink">
+              Financing<span className="text-accent">.</span>
+            </span>{' '}
+            · Personal transaction classification, trained on your own labels.
           </span>
-          <span>Personal transaction classification, powered by your own labels.</span>
-          <nav className="flex items-center gap-5">
-            <Link href="/privacy" className="transition-colors hover:text-ink">
-              Privacy Policy
-            </Link>
-            <Link href="/terms" className="transition-colors hover:text-ink">
-              Terms &amp; Conditions
-            </Link>
+          <nav className="flex gap-5">
+            <Link href="/privacy" className="hover:text-ink">Privacy</Link>
+            <Link href="/terms" className="hover:text-ink">Terms</Link>
           </nav>
         </div>
       </footer>

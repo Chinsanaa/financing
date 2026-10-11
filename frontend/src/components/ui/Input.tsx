@@ -2,8 +2,11 @@
 
 import { InputHTMLAttributes, SelectHTMLAttributes, ReactNode, useId } from 'react';
 
-const FIELD_CLASSES =
-  'w-full rounded-lg bg-surface-2 border border-edge/10 px-3.5 py-2.5 text-sm text-ink placeholder:text-muted outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/20';
+/** Shared text-field look (also used by auth/PasswordInput). No width or vertical
+ *  padding — callers add `w-full py-2.5` / `w-32 py-1.5` (Tailwind emits the larger
+ *  step later, so a value here would silently override the caller's). */
+export const FIELD_CLASSES =
+  'rounded-md bg-surface border border-edge/20 px-3 text-sm text-ink placeholder:text-muted outline-none transition-colors hover:border-edge/35 focus:border-accent focus:ring-1 focus:ring-accent focus-visible:outline-none';
 
 export default function Input({
   label,
@@ -16,7 +19,7 @@ export default function Input({
     <label className="block">
       {label && <span className="mb-1.5 block text-sm font-medium text-ink">{label}</span>}
       <input
-        className={`${FIELD_CLASSES} ${error ? 'border-danger/60 focus:border-danger/60 focus:ring-danger/20' : ''} ${className}`}
+        className={`${FIELD_CLASSES} w-full py-2.5 ${error ? 'border-danger focus:border-danger focus:ring-danger' : ''} ${className}`}
         aria-invalid={!!error}
         aria-describedby={error ? errorId : undefined}
         {...rest}
@@ -39,7 +42,7 @@ export function Select({
   return (
     <label className="block">
       {label && <span className="mb-1.5 block text-sm font-medium text-ink">{label}</span>}
-      <select className={`${FIELD_CLASSES} ${className}`} {...rest}>
+      <select className={`${FIELD_CLASSES} w-full py-2.5 ${className}`} {...rest}>
         {children}
       </select>
     </label>

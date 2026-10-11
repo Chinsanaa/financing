@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  // hover: utilities only on devices that really hover (no sticky hover on touch).
+  future: { hoverOnlyWhenSupported: true },
   darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
@@ -35,28 +37,23 @@ module.exports = {
         12: '0.12',
       },
       fontFamily: {
-        display: ['var(--font-display)', 'sans-serif'],
-        sans: ['var(--font-body)', 'sans-serif'],
+        // Ledger (v4): Newsreader (serif, optical sizes) for headlines and
+        // money; Schibsted Grotesk for UI and body.
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+        sans: ['var(--font-body)', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
-        card: '1rem',
+        card: '0.625rem',
         pill: '9999px',
       },
       boxShadow: {
-        card: '0 1px 2px rgb(0 0 0 / 0.06), 0 8px 32px -12px rgb(0 0 0 / 0.25)',
+        // Neutral, warm-ink tinted, offset + soft blur (never a colored halo).
+        card: '0 1px 2px rgb(27 26 23 / 0.06), 0 14px 32px -18px rgb(27 26 23 / 0.28)',
       },
       keyframes: {
         'fade-up': {
-          from: { opacity: '0', transform: 'translateY(16px)' },
+          from: { opacity: '0', transform: 'translateY(6px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
-        },
-        shimmer: {
-          from: { backgroundPosition: '200% 0' },
-          to: { backgroundPosition: '-200% 0' },
-        },
-        'glow-pulse': {
-          '0%, 100%': { opacity: '0.6' },
-          '50%': { opacity: '1' },
         },
         marquee: {
           from: { transform: 'translateX(0)' },
@@ -64,9 +61,7 @@ module.exports = {
         },
       },
       animation: {
-        'fade-up': 'fade-up 0.5s ease-out both',
-        shimmer: 'shimmer 1.8s linear infinite',
-        'glow-pulse': 'glow-pulse 3s ease-in-out infinite',
+        'fade-up': 'fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards',
         marquee: 'marquee 30s linear infinite',
       },
     },

@@ -69,10 +69,10 @@ export default function CategoryColorPicker({
         disabled={saving}
         aria-label={`Choose color for ${categoryName}`}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-pill border border-edge/20 px-2.5 py-1 text-xs text-muted transition-colors hover:border-accent-strong/50 hover:text-ink disabled:opacity-60"
+        className="inline-flex items-center gap-1.5 rounded-md border border-edge/20 px-2.5 py-1 text-xs text-muted transition-colors hover:border-edge/40 hover:text-ink disabled:opacity-60"
       >
         <span
-          className="h-3.5 w-3.5 shrink-0 rounded-full"
+          className="h-3 w-3 shrink-0 rounded-[2px]"
           style={{ backgroundColor: chartColorForKey(effectiveKey) }}
         />
         {color ? 'Color' : 'Auto'}
@@ -80,8 +80,8 @@ export default function CategoryColorPicker({
       </button>
 
       {open && (
-        <div className="glass absolute left-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl p-3 shadow-card">
-          <p className="section-label mb-2">Category color</p>
+        <div className="glass absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-card p-3 shadow-card">
+          <p className="mb-2 font-display text-lg">Color for {categoryName}</p>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {CATEGORY_COLORS.map((c) => {
               const selected = color === c.key;
@@ -93,19 +93,17 @@ export default function CategoryColorPicker({
                   disabled={!!usedBy}
                   onClick={() => choose(c.key)}
                   title={usedBy ? `Used by ${usedBy}` : `${c.label} — pick this color`}
-                  className={`flex flex-col items-start gap-0.5 rounded-lg border p-2 text-left transition-colors ${
-                    selected
-                      ? 'border-accent-strong/60 ring-1 ring-accent/40'
-                      : 'border-edge/10 hover:bg-surface-2'
+                  className={`flex flex-col items-start gap-0.5 rounded-md border p-2 text-left transition-colors ${
+                    selected ? 'border-ink' : 'border-edge/12 hover:bg-edge/[0.05]'
                   } ${usedBy ? 'cursor-not-allowed opacity-40' : ''}`}
                 >
                   <span className="flex w-full items-center gap-1.5">
                     <span
-                      className="h-4 w-4 shrink-0 rounded-full"
+                      className="h-3.5 w-3.5 shrink-0 rounded-[2px]"
                       style={{ backgroundColor: chartColorForKey(c.key) }}
                     />
                     <span className="min-w-0 flex-1 truncate text-xs font-medium">{c.label}</span>
-                    {selected && <Check className="h-3.5 w-3.5 shrink-0 text-accent-strong" />}
+                    {selected && <Check className="h-3.5 w-3.5 shrink-0 text-ink" />}
                   </span>
                   <span className="pl-[22px] font-mono text-[10px] text-muted">
                     {usedBy ? 'In use' : isDark ? c.dark : c.light}
@@ -118,7 +116,7 @@ export default function CategoryColorPicker({
             <button
               type="button"
               onClick={() => choose(null)}
-              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-edge/10 px-2 py-1.5 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-edge/15 px-2 py-1.5 text-xs text-muted transition-colors hover:bg-edge/[0.05] hover:text-ink"
             >
               <Palette className="h-3.5 w-3.5" /> Auto (no fixed color)
             </button>
