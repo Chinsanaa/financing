@@ -22,15 +22,17 @@ financing/
 │   ├── config.py              # env settings + service-role Supabase client
 │   ├── ml.py                  # per-user model loading (Storage) + bulk classification
 │   ├── translations.py        # background worker: stores English merchant/description once per string
+│   ├── fx.py                  # ECB rate cache (Frankfurter, background-only) + RateTable lookups for home currency
 │   ├── errors.py              # log-and-mask error helper
 │   ├── routes/                # auth, categories, uploads, training, classify,
-│   │                          #   dashboard, settings, subscriptions
+│   │                          #   dashboard (incl. cashflow), settings, subscriptions,
+│   │                          #   transactions (manual + PATCH kind), fx (currencies)
 │   ├── requirements.txt       # pinned backend deps (installed by Dockerfile)
 │   ├── Dockerfile             # Docker context is the repo root (needs ../src/ too)
 │   └── .env.example
 │
 ├── src/                       # ML pipeline (imported by backend/ and tests/)
-│   ├── parse.py               # Alipay/WeChat parsers → common schema
+│   ├── parse.py               # Alipay/WeChat/bank parsers → common schema with kind + flow_subtype
 │   ├── segment.py             # jieba tokenization + TF-IDF
 │   ├── feature_engineering.py # hybrid features (weighted merchant/description + numeric)
 │   ├── label.py               # merchant-rule matching (vectorized)
@@ -70,7 +72,12 @@ financing/
 │       ├── 20260927010000_add_english_label_columns.sql # transactions.merchant_en/description_en (stored translations)
 │       ├── 20260927020000_dashboard_aggregate_rpcs.sql  # available_months/spend_trend RPCs, search_path fix
 │       ├── 20260927030000_remove_purple_category_colors.sql # palette violet/indigo/fuchsia → blue/green/olive
-│       └── 20260927040000_onboarding_tour_state.sql     # profiles.tour_step/tour_finished_at (tour once per signup)
+│       ├── 20260927040000_onboarding_tour_state.sql     # profiles.tour_step/tour_finished_at (tour once per signup)
+│       ├── 20261011000000_add_bank_transaction_source.sql   # transaction_source += 'bank' (own file: ADD VALUE)
+│       ├── 20261011000100_transaction_kinds.sql             # transactions.kind (expense/income/transfer) + flow_subtype
+│       ├── 20261011000200_expense_only_sql_functions.sql    # spend RPCs filter kind='expense'; daily cash-flow RPCs
+│       ├── 20261011000300_uploads_parser_version.sql        # uploads.parser_version (v1 re-import reconciliation)
+│       └── 20261011000400_fx_rates_home_currency.sql        # fx_rates cache + profiles.home_currency
 │
 ├── tests/                     # pytest suite for src/ (74 tests)
 │   ├── test_parse.py, test_validate.py, test_semantic.py, test_calibration.py
@@ -82,11 +89,16 @@ financing/
 ├── .github/workflows/keepalive.yml  # pings /health/deep every 10 min (free-tier keep-alive)
 │
 ├── scripts/
-│   └── test_local.sh          # local backend run helper (not a test suite)
+│   ├── test_local.sh          # local backend run helper (not a test suite)
+│   ├── design_gate.sh         # fails on gradients/blur/glass/purple in frontend/src
+│   └── backfill_fx.py         # manual FX rate seed (Frankfurter → fx_rates)
 │
 ├── docs/
 │   ├── context.md             # project memory: sessions, decisions, open items
-│   ├── DESIGN_SYSTEM.md       # frontend tokens, motion, effects, components
+│   ├── DESIGN_SYSTEM.md       # frontend tokens, motion, effects, components ("Ledger" v5)
+│   ├── contracts/API_V5.md    # frozen API contract: kinds, cash flow, home currency, bank import
+│   ├── audits/                # COMPETITOR_AUDIT_2026-10.md, VERIFICATION_2026-10.md
+│   ├── design/                # palette-validation-2026-10.txt (contrast + palette validator output)
 │   ├── PROJECT_SUMMARY.md     # architecture overview + phase history
 │   ├── SECURITY_AUDIT.md      # security checklist + test specs
 │   ├── FULL_AUDIT.md          # ML integrity audit (historical, still relevant)
