@@ -19,7 +19,9 @@ Everything is token-driven, so light and dark stay in sync automatically.
   warm cream (all tokens re-derived, light + dark); **Fraunces** (SOFT 100)
   replaces Newsreader; category palette retuned for the green paper;
   `--positive` token; Stamp `size`/`once`; official Alipay / WeChat Pay marks;
-  `scripts/design_gate.sh`. Validation: `docs/design/palette-validation-2026-10.txt`.
+  `scripts/design_gate.sh`; legacy `.glass` class renamed `.panel`; `Card`'s
+  legacy `glass` boolean prop removed (use `variant="raised"`). Validation:
+  `docs/design/palette-validation-2026-10.txt`.
 
 > ## THE RULE: NO gradients. ONLY solid colors.
 > - No `linear-/radial-/conic-gradient` anywhere — backgrounds, text, borders,
@@ -33,11 +35,12 @@ Everything is token-driven, so light and dark stay in sync automatically.
 >   not in charts, not in the category palette.
 > - One flat page background (`bg`); surfaces are one flat color + a hairline.
 > - Check before shipping: **`bash scripts/design_gate.sh`** (exit 0 = clean).
->   It greps `frontend/src` for `gradient|backdrop-blur|blur-|blur\(|glass|violet|indigo|fuchsia|purple|plum|shadow-glow|drop-shadow`
->   (case-insensitive; a line containing `design-gate: allow` is skipped — only
+>   It greps `frontend/src` for `gradient|backdrop-blur|blur-|blur\(|\bblur\b|glass|violet|indigo|fuchsia|purple|plum|shadow-glow|drop-shadow`
+>   (case-insensitive; the bare `\bblur\b` class is checked on code lines only,
+>   not on comment lines; a line containing `design-gate: allow` is skipped — only
 >   for comments that explain the rule or a proven-solid legacy name) and fails
->   on any color in `globals.css` / `categoryColors.ts` with OKLCH hue
->   270–335° and chroma > 0.04.
+>   on any color literal (`#rrggbb`, `R G B` channels, `hsl(`, `oklch(`) in any
+>   `.ts/.tsx/.css` under `frontend/src` with OKLCH hue 270–335° and chroma > 0.04.
 
 ---
 
@@ -241,8 +244,9 @@ decisions are made in a layout effect after hydration, never during render
 2. "Under budget" on Overview for a closed past month — with `once`.
 3. "Sorted" in the landing LiveDemo (replaces the hero StatementSheet stamps).
 4. "Void" on the 404 page.
-5. LabelTab accept (existing).
-6. TrainingTab "Trained" (existing).
+5. One stamp in the auth brand panel (D2 reduces AuthClient's three to one).
+6. LabelTab accept (existing).
+7. TrainingTab "Trained" (existing).
 
 ### Brand marks (`components/brand/`)
 
@@ -276,7 +280,7 @@ Deleted in v4: `ThemeToggle`, `ProgressRing`, `utils/celebrate.ts`
 | Screen | Shape |
 |---|---|
 | Landing | (v5: LiveDemo "Sorted" stamp, shared `SiteFooter`) serif headline "Every yuan, accounted for." → a sample statement whose categories get **stamped** (solid = you, dashed = model) with "Stamp again" → sticky-scroll "Three steps, once a month" (sheets turn on the right; inline on phones) → capability rows (`dl`) → plain close. Lenis smooth scroll here only. Claims = mechanism only. |
-| Auth | darker paper well with three stamped rows; form on the page; underline mode tabs. |
+| Auth | darker paper well with one stamped row; form on the page; underline mode tabs. |
 | Shell | one-row header: wordmark · text nav · quiet ⌘K field · bell · account. Phones: nav as a second row. |
 | Overview | month figure + ▲/▼ · `FactRow` · twelve monthly bars (latest vermilion, dashed average) · "Where it went" stacked bar + ranked rows. |
 | Wizard | one ruled 5-step strip (done = ink + check, current = vermilion). |

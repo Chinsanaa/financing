@@ -19,8 +19,9 @@ const SIZE = {
  *   not by hue — the same rule the category badges follow).
  * - `size`: `md` (default) or `sm` for dense rows.
  * - `once`: a session key. The stamp animates only the first time per
- *   browser session for that key (sessionStorage); afterwards, and whenever
- *   storage is unavailable after a first play, it renders statically.
+ *   browser session for that key (sessionStorage) and renders statically
+ *   afterwards. If storage is blocked it cannot remember, so it animates
+ *   every time.
  *
  * Motion: the seal comes down from 1.12× with a small tilt and settles with
  * a lightly under-damped spring (bounce 0.25) — the one place in the app
