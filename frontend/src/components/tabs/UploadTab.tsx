@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { m } from 'framer-motion';
-import { FileSpreadsheet, UploadCloud, Trash2, PenLine } from 'lucide-react';
+import { ArrowUpRight, FileSpreadsheet, UploadCloud, Trash2, PenLine } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useApi, invalidate } from '@/utils/useApi';
 import { advanceTour } from '@/utils/tour';
@@ -14,11 +14,14 @@ import { SkeletonRows } from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import UploadQueueItem, { QueuedFile, QueueStatus } from '@/components/ui/UploadQueueItem';
 import Input, { Select } from '@/components/ui/Input';
+import FormatBadges from '@/components/brand/FormatBadges';
+import { describeRowsByKind } from '@/components/ui/UploadQueueItem';
+import type { TransactionKind, UploadFileType } from '@/types/v5';
 
 interface Upload {
   id: string;
   original_filename: string;
-  file_type: string;
+  file_type: UploadFileType | string | null;
   created_at: string;
   row_count: number;
   status: string;
@@ -38,10 +41,23 @@ function fileKey(f: File): string {
   return `${f.name}|${f.size}|${f.lastModified}`;
 }
 
+// Alipay, WeChat Pay and bank statements all arrive as .csv or .xlsx; the
+// server detects which one it is (API_V5.md §3.9: alipay | wechat | bank).
 function isSupportedFile(f: File): boolean {
   const name = f.name.toLowerCase();
   return name.endsWith('.csv') || name.endsWith('.xlsx');
 }
+
+/** Why a file type is refused, in words that say what to do instead. */
+function rejectReason(f: File): string {
+  const name = f.name.toLowerCase();
+  if (name.endsWith('.zip')) return 'unzip it first — the password is in the Alipay or WeChat Pay message';
+  if (name.endsWith('.xls')) return 'old Excel format — save it as .csv or .xlsx';
+  if (name.endsWith('.pdf')) return 'PDF statements can’t be read — export a spreadsheet';
+  return 'only CSV or Excel .xlsx';
+}
+
+const FILE_TYPE_LABELS: Record<string, string> = { alipay: 'Alipay', wechat: 'WeChat Pay', bank: 'Bank CSV' };
 
 function buildSummary(queue: QueuedFile[]): { kind: 'success' | 'info' | 'error'; text: string } | null {
   const attempted = queue.filter((i) => i.status !== 'pending');
@@ -51,12 +67,22 @@ function buildSummary(queue: QueuedFile[]): { kind: 'success' | 'info' | 'error'
   const duplicates = attempted.filter((i) => i.status === 'duplicate');
   const failed = attempted.filter((i) => i.status === 'error');
   const rowsImported = done.reduce((sum, i) => sum + (i.rowsImported ?? 0), 0);
+  const byKind: Record<TransactionKind, number> = { expense: 0, income: 0, transfer: 0 };
+  let haveKinds = false;
+  for (const i of done) {
+    const k = i.result?.rows_by_kind;
+    if (!k) continue;
+    haveKinds = true;
+    byKind.expense += k.expense ?? 0;
+    byKind.income += k.income ?? 0;
+    byKind.transfer += k.transfer ?? 0;
+  }
 
   const parts: string[] = [];
   if (done.length) {
     parts.push(
       `${done.length} of ${attempted.length} file${attempted.length !== 1 ? 's' : ''} imported` +
-        (rowsImported ? ` (${rowsImported} transactions)` : '')
+        (rowsImported ? ` (${describeRowsByKind(rowsImported, haveKinds ? byKind : null)})` : '')
     );
   }
   if (duplicates.length) parts.push(`${duplicates.length} skipped as already uploaded`);
@@ -156,7 +182,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
 
       for (const f of incoming) {
         if (!isSupportedFile(f)) {
-          rejections.push(`${f.name} (only CSV or Excel)`);
+          rejections.push(`${f.name} (${rejectReason(f)})`);
           continue;
         }
         if (f.size > MAX_SIZE) {
@@ -213,6 +239,13 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
     setSummary(null);
   };
 
+  // The most recently finished import carries the "Imported" stamp; every
+  // older finished row keeps the plain badge (never two stamps at once).
+  const [stampedId, setStampedId] = useState<string | null>(null);
+  // Screen-reader announcement per finished file (the badges' percentages
+  // change too often to sit in a live region themselves).
+  const [liveMsg, setLiveMsg] = useState('');
+
   const runQueue = async () => {
     const batch = queue.filter((i) => i.status === 'pending' || i.status === 'error');
     if (!batch.length) return;
@@ -234,7 +267,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
       patch(item.id, { status: 'uploading', progress: 0, detail: undefined });
 
       try {
-        const res = await api.uploads.upload(item.file, {
+        const res = await api.uploadsV5.upload(item.file, {
           onUploadProgress: (evt: any) => {
             const pct = evt.total ? Math.round((evt.loaded / evt.total) * 100) : 0;
             if (pct >= 100) {
@@ -249,8 +282,11 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
           progress: 100,
           rowsImported: res.data.rows_imported,
           detail: res.data.message,
+          result: res.data,
         };
         patch(item.id, done);
+        setStampedId(item.id);
+        setLiveMsg(`${item.file.name} imported. ${describeRowsByKind(res.data.rows_imported, res.data.rows_by_kind)}.`);
         outcomes[idx] = { ...outcomes[idx], ...done };
       } catch (err: any) {
         const status = err?.response?.status;
@@ -261,6 +297,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
               ? { status: 'error', detail: 'Network error — check your connection' }
               : { status: 'error', detail: err.response?.data?.detail || 'Upload failed' };
         patch(item.id, failure);
+        setLiveMsg(`${item.file.name}: ${failure.status === 'duplicate' ? 'skipped, already uploaded' : `failed. ${failure.detail}`}`);
         outcomes[idx] = { ...outcomes[idx], ...failure };
       }
 
@@ -310,8 +347,9 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
     <div className="w-full space-y-6">
       <SectionHeader title="Upload statements" />
       <p className="-mt-4 text-sm text-muted">
-        CSV or Excel exports from Alipay or WeChat — up to {MAX_QUEUE} files at a time. Both formats are
-        detected automatically, and each file uploads one after another.
+        CSV or Excel exports from Alipay, WeChat Pay or your bank — up to {MAX_QUEUE} files at a time. The source is
+        detected automatically, and each file uploads one after another. Alipay and WeChat send a .zip: unzip it
+        first and upload the file inside.
       </p>
 
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -321,7 +359,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
         onDragOver={handleDrag}
         onDrop={handleDrop}
         data-tour-id="upload-choose-files"
-        className={`group relative overflow-hidden rounded-card p-12 text-center transition-[opacity,background-color] duration-200 ${
+        className={`group relative overflow-hidden rounded-card px-5 py-10 text-center sm:p-12 transition-[opacity,background-color] duration-200 ${
           running ? 'pointer-events-none opacity-60' : ''
         } ${dragActive ? 'is-active bg-accent/[0.05]' : ''}`}
       >
@@ -359,10 +397,27 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
             multiple
             onChange={handleFileSelect}
             className="hidden"
+            aria-label="Choose statement files"
           />
           <Button type="button" variant="outline" disabled={running} onClick={() => inputRef.current?.click()}>
             Choose files
           </Button>
+          <div className="flex flex-col items-center gap-2 border-t border-edge/12 pt-4 text-xs text-muted">
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              <span>Exports from</span>
+              <FormatBadges compact size={16} />
+            </div>
+            <a
+              href="/guide"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1 text-ink underline decoration-edge/30 underline-offset-4 hover:decoration-accent"
+            >
+              How to export
+              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -458,7 +513,13 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
         <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
           <div className="space-y-2">
             {queue.map((item) => (
-              <UploadQueueItem key={item.id} item={item} onRemove={removeFromQueue} disabled={running} />
+              <UploadQueueItem
+                key={item.id}
+                item={item}
+                onRemove={removeFromQueue}
+                disabled={running}
+                stamped={item.id === stampedId}
+              />
             ))}
           </div>
 
@@ -469,7 +530,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
                   Stop after this file
                 </Button>
                 {batchProgress && (
-                  <span className="text-xs text-muted">
+                  <span className="text-xs text-muted" aria-live="polite">
                     Uploading {batchProgress.current} of {batchProgress.total}
                   </span>
                 )}
@@ -492,6 +553,9 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
         </m.div>
       )}
 
+      <p className="sr-only" role="status" aria-live="polite">
+        {liveMsg}
+      </p>
       {queueError && <Alert kind="error">{queueError}</Alert>}
       {summary && <Alert kind={summary.kind}>{summary.text}</Alert>}
       {error && <Alert kind="error">{error}</Alert>}
@@ -525,7 +589,9 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
                   {uploadsData.uploads.map((upload) => (
                     <tr key={upload.id} className="transition-colors hover:bg-edge/5">
                       <td className="px-4 py-3 font-medium">{upload.original_filename}</td>
-                      <td className="px-4 py-3 text-xs text-muted capitalize">{upload.file_type}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-muted">
+                        {FILE_TYPE_LABELS[upload.file_type ?? ''] ?? upload.file_type ?? '—'}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums">{upload.row_count}</td>
                       <td className="px-4 py-3 text-xs text-muted">
                         {formatDate(upload.created_at)}
