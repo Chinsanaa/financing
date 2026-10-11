@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import LegalPageLayout, { LegalSection } from '@/components/legal/LegalPageLayout';
 
 export const metadata: Metadata = {
@@ -6,7 +7,7 @@ export const metadata: Metadata = {
   description: 'The terms that govern your use of Financing.',
 };
 
-const LAST_UPDATED = 'August 11, 2026';
+const LAST_UPDATED = 'October 11, 2026';
 
 export default function TermsPage() {
   return (
@@ -46,13 +47,19 @@ export default function TermsPage() {
           investment advice. Always verify figures independently before making financial
           decisions.
         </p>
+        <p>
+          Home-currency amounts are converted with European Central Bank reference rates
+          (fetched via Frankfurter) and are approximate. They are not the rate your bank or
+          payment app applied, and income and transfer types are inferred from your statements,
+          so they may also be wrong.
+        </p>
       </LegalSection>
 
       <LegalSection title="4. Your data and content">
         <p>
           You retain ownership of the statements and data you upload. You grant us permission
           to process that data solely to provide the service to you, as described in our{' '}
-          <span className="text-ink">Privacy Policy</span>. You can export or delete your data
+          <Link href="/privacy" className="text-ink underline decoration-edge/30 underline-offset-4 hover:decoration-accent">Privacy Policy</Link>. You can export or delete your data
           at any time from Settings.
         </p>
       </LegalSection>

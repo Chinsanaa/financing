@@ -6,15 +6,15 @@ export const metadata: Metadata = {
   description: 'How Financing collects, uses, and protects your data.',
 };
 
-const LAST_UPDATED = 'August 11, 2026';
+const LAST_UPDATED = 'October 11, 2026';
 
 export default function PrivacyPolicyPage() {
   return (
     <LegalPageLayout title="Privacy Policy" lastUpdated={LAST_UPDATED}>
       <p>
         Financing (&ldquo;we&rdquo;, &ldquo;our&rdquo;, &ldquo;the service&rdquo;) helps you
-        categorize personal transactions from Alipay and WeChat statements using a machine
-        learning model trained on your own labels. This policy explains what data we collect,
+        categorize personal transactions from Alipay, WeChat Pay and bank statements using a
+        machine learning model trained on your own labels. This policy explains what data we collect,
         how we use it, and the choices you have.
       </p>
 
@@ -25,12 +25,16 @@ export default function PrivacyPolicyPage() {
             authentication credentials, managed by our authentication provider, Supabase.
           </li>
           <li>
-            <strong className="text-ink">Uploaded statements:</strong> the Alipay/WeChat CSV or
-            Excel files you upload, stored so they can be re-parsed if needed.
+            <strong className="text-ink">Uploaded statements:</strong> the Alipay or WeChat Pay CSV
+            or Excel files, and bank CSV files, that you upload, stored so they can be re-parsed
+            if needed.
           </li>
           <li>
             <strong className="text-ink">Transaction data:</strong> merchant names,
-            descriptions, amounts, and timestamps extracted from your uploaded statements.
+            descriptions, amounts, and timestamps extracted from your uploaded statements. This
+            includes spending, and also money coming in and moving between accounts (for example
+            salary, red packets received, split-bill repayments, and transfers between your own
+            accounts), so the app can show your cash flow.
           </li>
           <li>
             <strong className="text-ink">Categories and labels:</strong> the categories you
@@ -39,7 +43,7 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong className="text-ink">Financial preferences:</strong> optional figures you
-            provide, such as monthly income and budget/savings goals.
+            provide, such as monthly income, budget/savings goals, and a home currency.
           </li>
           <li>
             <strong className="text-ink">Model artifacts:</strong> the trained machine learning
@@ -59,7 +63,11 @@ export default function PrivacyPolicyPage() {
             To train and run a machine learning classifier personal to your account, so future
             transactions can be categorized automatically.
           </li>
-          <li>To compute budgets, savings projections, and spending reports for you.</li>
+          <li>To compute budgets, savings projections, cash flow, and spending reports for you.</li>
+          <li>
+            If you choose a home currency, to show your amounts converted into it alongside the
+            original yuan amounts.
+          </li>
           <li>To authenticate you and keep your account secure.</li>
         </ul>
         <p>We do not sell your data, and we do not use your data to train models for other users.</p>
@@ -75,12 +83,29 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           Our infrastructure is provided by Supabase (authentication, database, and file
-          storage), Railway (backend hosting), and Vercel (frontend hosting).
+          storage), Render (backend hosting), and Vercel (frontend hosting).
           <span className="text-ink"> [Confirm and list the specific hosting region(s) for these providers before publishing.]</span>
         </p>
       </LegalSection>
 
-      <LegalSection title="4. Data retention and deletion">
+      <LegalSection title="4. Outside services we call">
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
+            <strong className="text-ink">Translation:</strong> to show Chinese merchant names and
+            descriptions in English, our server sends that text (one request per distinct
+            phrase) to Google Translate and stores the result. Your email, username and amounts
+            are not part of these requests.
+          </li>
+          <li>
+            <strong className="text-ink">Exchange rates:</strong> home-currency amounts use
+            European Central Bank reference rates, which our server fetches from Frankfurter
+            (frankfurter.dev). These requests contain only currency codes and date ranges; no
+            personal or transaction data is sent. Rates are stored and shared across accounts.
+          </li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="5. Data retention and deletion">
         <p>
           You can permanently delete your account at any time from{' '}
           <span className="text-ink">Settings → Danger zone</span>. Doing so removes your
@@ -90,7 +115,7 @@ export default function PrivacyPolicyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="5. Your choices">
+      <LegalSection title="6. Your choices">
         <ul className="list-disc space-y-1.5 pl-5">
           <li>You can export your transaction history at any time from Settings.</li>
           <li>You can edit or delete individual categories, rules, and transactions.</li>
@@ -98,14 +123,14 @@ export default function PrivacyPolicyPage() {
         </ul>
       </LegalSection>
 
-      <LegalSection title="6. Changes to this policy">
+      <LegalSection title="7. Changes to this policy">
         <p>
           We may update this policy as the product changes. We&rsquo;ll update the &ldquo;Last
           updated&rdquo; date above when we do.
         </p>
       </LegalSection>
 
-      <LegalSection title="7. Contact">
+      <LegalSection title="8. Contact">
         <p>
           Questions about this policy or your data can be sent to{' '}
           <span className="text-ink">[support email address]</span>.
