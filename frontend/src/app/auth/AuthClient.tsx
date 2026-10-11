@@ -30,7 +30,7 @@ const MAX_LOCKOUT_SECONDS = 300;
 const TRUST_POINTS = [
   { text: 'A model that is yours — trained on your own labels.' },
   { text: 'Chinese merchant text, segmented and shown in English.' },
-  { text: 'Private per account — nothing shared.' },
+  { text: 'Private per account — never sold, never used to train anyone else’s model.' },
 ];
 
 // Brand-panel sample statement (static demo; translated merchants). Each
