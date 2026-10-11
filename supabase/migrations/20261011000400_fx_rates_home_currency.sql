@@ -31,3 +31,8 @@ CREATE TABLE IF NOT EXISTS public.fx_rates (
 
 ALTER TABLE public.fx_rates ENABLE ROW LEVEL SECURITY;
 -- Deliberately NO policies (service role only).
+
+-- Defense in depth: RLS with no policies already hides every row, but
+-- Supabase's default privileges grant table access to these roles on new
+-- public tables; only the backend's service role should touch fx_rates.
+REVOKE ALL ON public.fx_rates FROM anon, authenticated;
