@@ -2,10 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens — "Ledger" (design system v4, docs/DESIGN_SYSTEM.md).
-   Light (warm paper + ink) is the flagship; dark is a quiet night ledger.
-   Values are space-separated RGB channels so Tailwind can apply alpha.
-   THE RULE: solid colors only — no gradients, glows, blur, purple. */
+/* Design tokens — "Ledger" (design system v5, docs/DESIGN_SYSTEM.md).
+   Light (grey-green ledger paper + ink) is the flagship; dark is a quiet
+   green-black night ledger. Values are space-separated RGB channels so
+   Tailwind can apply alpha. Contrast of every text token on bg / surface /
+   surface-2 is script-checked in docs/design/palette-validation-2026-10.txt.
+   THE RULE: solid colors only — no gradients, glows, blur, purple. (design-gate: allow) */
 :root {
   /* ── Motion tokens ── */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* entrances, "expo-out" */
@@ -13,64 +15,67 @@
   --dur-base: 240ms; /* state changes */
   --dur-slow: 280ms; /* entrances — tab switches happen tens of times a day */
 
-  --bg: 244 241 234; /* paper */
-  --surface: 251 250 246; /* lifted paper: popovers, inputs, the label card */
-  --surface-2: 235 231 222; /* inset well */
-  --ink: 27 26 23;
-  --muted: 104 99 90; /* 5.3:1 on paper */
-  --edge: 27 26 23; /* hairlines — always at low alpha (border-edge/12) */
-  --accent: 194 55 27; /* seal vermilion — primary action, active nav, the stamp */
+  --bg: 232 236 228; /* #e8ece4 grey-green ledger paper */
+  --surface: 244 246 241; /* #f4f6f1 lifted paper: popovers, inputs, the label card */
+  --surface-2: 219 225 216; /* #dbe1d8 inset well */
+  --ink: 24 32 27; /* #18201b green-black ink (13.9:1 on paper) */
+  --muted: 86 97 90; /* #56615a (5.4:1 on paper, 4.85:1 in wells) */
+  --edge: 24 32 27; /* hairlines = ink, always at low alpha (border-edge/12) */
+  --accent: 194 55 27; /* #c2371b seal vermilion — primary action, active nav, the stamp */
   --accent-ink: 255 248 242; /* text on an accent fill (5.2:1) */
-  --accent-strong: 176 48 26; /* vermilion TEXT, safe on wells too */
+  --accent-strong: 176 48 26; /* #b0301a vermilion TEXT, safe on wells too (4.8:1) */
+  --positive: 15 107 87; /* #0f6b57 money in / income — deep teal-green */
   --cyan: 31 95 122; /* info (kept name) */
   --danger: 155 28 49; /* crimson — always paired with a word ("Over") */
   --success: 47 107 58; /* ink green */
-  --warn: 138 90 0; /* ochre — "approaching" */
-  /* Category palette — user-selectable, keyed by name in categoryColors.ts.
-     One value per theme serves swatches, bars and chart fills (the category
-     NAME is always printed in ink beside the color, so these need 3:1 mark
-     contrast, not text contrast). Validated with the dataviz validator:
-     lightness, chroma, CVD + normal-vision ΔE and contrast all PASS. */
-  --cat-lime: 89 113 35;
-  --cat-blue: 38 88 169;
-  --cat-cyan: 10 148 175;
-  --cat-pink: 168 58 97;
-  --cat-amber: 174 115 36;
-  --cat-sky: 39 128 173;
-  --cat-emerald: 11 103 48;
-  --cat-rose: 193 105 99;
-  --cat-green: 56 101 6;
-  --cat-teal: 27 154 137;
-  --cat-orange: 154 64 25;
-  --cat-olive: 145 133 27;
+  --warn: 131 85 0; /* #835500 ochre — "approaching" (4.8:1 in wells) */
+  /* Category palette — user-selectable, keyed by name in categoryColors.ts
+     (keep both files in sync). One value per theme serves swatches, bars and
+     chart fills; the category NAME is always printed in ink beside the
+     color, so these need 3:1 mark contrast (all >= 3.4:1 on paper). Five
+     green-family keys are spread by lightness and hue for the green paper.
+     Dataviz validator (picker order): PASS in both themes. */
+  --cat-lime: 97 124 53; /* #617c35 */
+  --cat-blue: 45 82 150; /* #2d5296 */
+  --cat-cyan: 34 144 175; /* #2290af */
+  --cat-pink: 127 51 81; /* #7f3351 */
+  --cat-amber: 169 98 0; /* #a96200 */
+  --cat-sky: 0 116 174; /* #0074ae */
+  --cat-emerald: 0 152 74; /* #00984a */
+  --cat-rose: 154 71 82; /* #9a4752 */
+  --cat-green: 53 96 0; /* #356000 */
+  --cat-teal: 21 147 124; /* #15937c */
+  --cat-orange: 164 50 3; /* #a43203 */
+  --cat-olive: 149 134 10; /* #95860a */
 }
 
 .dark {
-  --bg: 21 20 17;
-  --surface: 29 27 24;
-  --surface-2: 38 36 31;
-  --ink: 237 233 224;
-  --muted: 163 157 145;
-  --edge: 237 233 224;
-  --accent: 226 86 56;
+  --bg: 18 24 20; /* #121814 */
+  --surface: 25 32 27; /* #19201b */
+  --surface-2: 35 43 37; /* #232b25 */
+  --ink: 228 234 226; /* #e4eae2 */
+  --muted: 155 166 158; /* #9ba69e */
+  --edge: 228 234 226;
+  --accent: 226 86 56; /* #e25638 */
   --accent-ink: 26 15 11;
-  --accent-strong: 234 106 78;
+  --accent-strong: 234 106 78; /* #ea6a4e */
+  --positive: 92 198 166; /* #5cc6a6 */
   --cyan: 111 179 207;
   --danger: 240 122 134;
   --success: 125 186 132;
   --warn: 214 158 46;
-  --cat-lime: 103 139 46;
-  --cat-blue: 37 104 191;
-  --cat-cyan: 11 157 170;
-  --cat-pink: 178 66 111;
-  --cat-amber: 176 135 57;
-  --cat-sky: 31 144 210;
-  --cat-emerald: 56 169 98;
-  --cat-rose: 173 78 83;
-  --cat-green: 101 146 0;
-  --cat-teal: 11 166 166;
-  --cat-orange: 169 85 46;
-  --cat-olive: 158 149 39;
+  --cat-lime: 114 127 4; /* #727f04 */
+  --cat-blue: 49 101 199; /* #3165c7 */
+  --cat-cyan: 36 159 185; /* #249fb9 */
+  --cat-pink: 189 80 123; /* #bd507b */
+  --cat-amber: 200 124 6; /* #c87c06 */
+  --cat-sky: 10 134 196; /* #0a86c4 */
+  --cat-emerald: 11 150 70; /* #0b9646 */
+  --cat-rose: 209 116 125; /* #d1747d */
+  --cat-green: 30 121 39; /* #1e7927 */
+  --cat-teal: 5 169 144; /* #05a990 */
+  --cat-orange: 159 87 58; /* #9f573a */
+  --cat-olive: 151 152 69; /* #979845 */
 }
 
 html {
@@ -115,26 +120,46 @@ p {
   text-wrap: pretty;
 }
 
-/* NumberFlow fades rolling digits with a linear-gradient mask (inside its
-   shadow DOM). THE RULE: no gradients — zero mask size gives a hard-edged
-   odometer window instead. Inherited custom properties cross the shadow root. */
+/* NumberFlow fades rolling digits with a linear-gradient mask (design-gate: allow)
+   inside its shadow DOM. THE RULE forbids that — zero mask size gives a
+   hard-edged odometer window instead. Inherited custom properties cross the shadow root. */
 :root {
   --number-flow-mask-height: 0px;
   --number-flow-mask-width: 0px;
 }
 
-/* Ledger numerals: serif, lining, tabular — columns of money line up. */
+/* Display face: Fraunces with SOFT 100 (rounded terminals — friendlier,
+   less "bank") and WONK 0 (no leaning n/m/h). opsz stays automatic
+   (font-optical-sizing), wght follows font-weight. */
+.font-display {
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+}
+
+/* Ledger numerals for tables and columns: the BODY face, tabular + lining,
+   so columns of money line up. Verified in the built font files (v5): the
+   Fraunces web subset has NO tnum/lnum GSUB features (its default figures
+   are lining but proportional), while Schibsted Grotesk has tnum and ¥.
+   See docs/design/palette-validation-2026-10.txt. */
 .num {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Display figures: Fraunces (SOFT 100) for big single numbers — hero month
+   total, StatTile/fact figures — where proportional digits are fine and the
+   serif ¥ carries the page. Never for aligned columns (use .num). */
+.num-display {
   font-family: var(--font-display), Georgia, serif;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-variant-numeric: lining-nums;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-/* Solid lifted panel (name kept for call sites — never translucent). */
-.glass {
+/* Solid lifted panel (legacy name kept for call sites — never translucent). */
+.glass { /* design-gate: allow */
   background-color: rgb(var(--surface));
   border: 1px solid rgb(var(--edge) / 0.12);
 }
@@ -193,8 +218,8 @@ code {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   Design system v4 — interaction effects. RULE: NO gradients, ONLY solid
-   colors (no glows, blurs, aurora, grain, grids). Token-driven, collapses
+   Design system v5 — interaction effects. THE RULE: ONLY solid colors
+   (no glows, aurora, grain, grids — see DESIGN_SYSTEM.md). Token-driven, collapses
    to static under prefers-reduced-motion (global rule above).
    Full reference: docs/DESIGN_SYSTEM.md
    ════════════════════════════════════════════════════════════════════ */

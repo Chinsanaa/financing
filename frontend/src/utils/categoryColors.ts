@@ -7,34 +7,40 @@
  * `--cat-<key>` CSS variables in globals.css), so a chosen color stays inside
  * the design system and looks right in both themes.
  *
- * Ledger palette (design system v4, 2026-10-09): muted "ink" hues tuned
- * for warm paper (light) and the night ledger (dark). Found with a search
- * over OKLCH constrained to each key's hue family, then checked with the
- * dataviz validator (validate_palette.js), in stored key order, against
- * both page and card surfaces: lightness band, chroma floor, CVD separation,
- * normal-vision floor and 3:1 contrast all PASS in both themes. Every
- * colored element still prints the category NAME (in ink) beside the color.
+ * Ledger palette (design system v5, 2026-10-11): muted "ink" hues retuned
+ * for the grey-green ledger paper (light) and the green-black night ledger
+ * (dark). Found with a constrained OKLCH search (each key held to its hue
+ * family, OKLCH chroma 0.10-0.165, >= 3:1 against both page and card
+ * surface), maximising separation, then checked with the dataviz validator
+ * in this (picker) order: lightness band, chroma floor, CVD separation,
+ * normal-vision floor and contrast all PASS in both themes. The five
+ * green-family keys (lime/Moss, green, emerald, teal, olive) are spread by
+ * lightness and hue so none disappears into the green paper. An all-pairs
+ * check cannot pass with 12 hue-locked colors; every colored element
+ * therefore prints the category NAME (in ink) beside it.
+ * Results: docs/design/palette-validation-2026-10.txt.
  *
- * NO purple (design rule, 2026-09-27): "pink" is held to rose-pink hues
- * (OKLCH 354–4°) so it never drifts toward magenta/plum.
+ * No OKLCH hue 270-335 (design rule, 2026-09-27; scripts/design_gate.sh):
+ * "pink" is held to rose-pink hues (OKLCH 352-8 deg) so it never drifts
+ * toward magenta.
  *
  * Must stay in sync with ALLOWED_COLORS in backend/routes/categories.py and
  * the CHECK constraint in migration 20260709120000_add_category_color.sql
  * (only the KEYS are stored — changing values here needs no migration).
  */
 export const CATEGORY_COLORS = [
-  { key: 'lime', label: 'Moss', light: '#597123', dark: '#678b2e' },
-  { key: 'blue', label: 'Blue', light: '#2658a9', dark: '#2568bf' },
-  { key: 'cyan', label: 'Cyan', light: '#0a94af', dark: '#0b9daa' },
-  { key: 'pink', label: 'Pink', light: '#a83a61', dark: '#b2426f' },
-  { key: 'amber', label: 'Ochre', light: '#ae7324', dark: '#b08739' },
-  { key: 'sky', label: 'Sky', light: '#2780ad', dark: '#1f90d2' },
-  { key: 'emerald', label: 'Emerald', light: '#0b6730', dark: '#38a962' },
-  { key: 'rose', label: 'Rose', light: '#c16963', dark: '#ad4e53' },
-  { key: 'green', label: 'Green', light: '#386506', dark: '#659200' },
-  { key: 'teal', label: 'Teal', light: '#1b9a89', dark: '#0ba6a6' },
-  { key: 'orange', label: 'Rust', light: '#9a4019', dark: '#a9552e' },
-  { key: 'olive', label: 'Olive', light: '#91851b', dark: '#9e9527' },
+  { key: 'lime', label: 'Moss', light: '#617c35', dark: '#727f04' },
+  { key: 'blue', label: 'Blue', light: '#2d5296', dark: '#3165c7' },
+  { key: 'cyan', label: 'Cyan', light: '#2290af', dark: '#249fb9' },
+  { key: 'pink', label: 'Pink', light: '#7f3351', dark: '#bd507b' },
+  { key: 'amber', label: 'Ochre', light: '#a96200', dark: '#c87c06' },
+  { key: 'sky', label: 'Sky', light: '#0074ae', dark: '#0a86c4' },
+  { key: 'emerald', label: 'Emerald', light: '#00984a', dark: '#0b9646' },
+  { key: 'rose', label: 'Rose', light: '#9a4752', dark: '#d1747d' },
+  { key: 'green', label: 'Green', light: '#356000', dark: '#1e7927' },
+  { key: 'teal', label: 'Teal', light: '#15937c', dark: '#05a990' },
+  { key: 'orange', label: 'Rust', light: '#a43203', dark: '#9f573a' },
+  { key: 'olive', label: 'Olive', light: '#95860a', dark: '#979845' },
 ] as const;
 
 export type CategoryColorKey = (typeof CATEGORY_COLORS)[number]['key'];
@@ -62,5 +68,5 @@ export const toneForKey = (key: string) => `cat-${key}`;
 export const chartColorForKey = (key: string) => `rgb(var(--cat-${key}))`;
 
 /** Same paint for chart fills (kept as a separate name for call sites —
- *  in v4 one value per theme serves swatches, bars and fills). */
+ *  since v4 one value per theme serves swatches, bars and fills). */
 export const chartFillColorForKey = (key: string) => `rgb(var(--cat-${key}))`;

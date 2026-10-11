@@ -1,20 +1,27 @@
 import type { Metadata, Viewport } from 'next';
 import { ReactNode } from 'react';
-import { Newsreader, Schibsted_Grotesk } from 'next/font/google';
+import { Fraunces, Schibsted_Grotesk } from 'next/font/google';
 import './globals.css';
 import { MotionProvider } from '@/components/ui/MotionProvider';
 import Toaster from '@/components/ui/Toaster';
 
-// Variable fonts: Newsreader's optical-size axis (opsz) gives big figures the
-// fine display cut and table cells the sturdy text cut, from one file.
-const body = Schibsted_Grotesk({ subsets: ['latin'], variable: '--font-body' });
-const display = Newsreader({ subsets: ['latin'], variable: '--font-display', axes: ['opsz'] });
+// Variable fonts. Fraunces (v5): optical size (opsz) gives big figures the
+// display cut and small ones the sturdy text cut; SOFT rounds the terminals
+// (set to 100 in globals.css — friendlier, less "bank"); WONK stays 0.
+const body = Schibsted_Grotesk({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
+const display = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-display',
+  axes: ['opsz', 'SOFT', 'WONK'],
+  display: 'swap',
+});
 
-// Browser chrome matches the page: paper in light, night ledger in dark.
+// Browser chrome matches the page: grey-green ledger paper in light, night
+// ledger in dark (= the --bg tokens in globals.css).
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f4f1ea' },
-    { media: '(prefers-color-scheme: dark)', color: '#151411' },
+    { media: '(prefers-color-scheme: light)', color: '#e8ece4' },
+    { media: '(prefers-color-scheme: dark)', color: '#121814' },
   ],
 };
 
