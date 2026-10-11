@@ -5,6 +5,7 @@ from typing import Optional
 from config import supabase_client
 from db import run_query
 from errors import internal_error, logger
+import fx
 
 router = APIRouter()
 
@@ -22,6 +23,33 @@ class ProfileUpdate(BaseModel):
     budget_inapp_enabled: Optional[bool] = None
     pending_review_inapp_enabled: Optional[bool] = None
     monthly_overview_email_enabled: Optional[bool] = None
+    # Home currency (API v5 §3.2): ISO code from GET /fx/currencies, or
+    # null to clear. Validated in the handler (exact 422 messages).
+    home_currency: Optional[str] = None
+
+
+def _normalize_home_currency(value: Optional[str]) -> Optional[str]:
+    """Trim + upper-case; None clears. 'CNY' and unsupported codes → 422."""
+    if value is None:
+        return None
+    code = value.strip().upper()
+    if code == fx.BASE:
+        raise HTTPException(
+            status_code=422,
+            detail="CNY is the base currency; clear home_currency with null instead",
+        )
+    if code not in fx.SUPPORTED:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported home currency '{code}'. See GET /fx/currencies.",
+        )
+    return code
+
+
+def _with_defaults(profile: dict) -> dict:
+    """v5 fields a profile row always carries (even before the migration)."""
+    profile.setdefault("home_currency", None)
+    return profile
 
 
 class BudgetSettingsUpdate(BaseModel):
@@ -39,7 +67,7 @@ async def get_profile(request: Request):
         if not response.data:
             raise HTTPException(status_code=404, detail="Profile not found")
 
-        return {"profile": response.data[0]}
+        return {"profile": _with_defaults(response.data[0])}
     except HTTPException:
         raise
     except Exception as e:
@@ -55,6 +83,8 @@ async def update_profile(request: Request, data: ProfileUpdate):
         update_data = data.dict(exclude_unset=True)
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
+        if "home_currency" in update_data:
+            update_data["home_currency"] = _normalize_home_currency(update_data["home_currency"])
         response = await run_query(
             lambda: supabase_client.table("profiles").update(update_data).eq("id", user_id).execute()
         )
@@ -62,7 +92,12 @@ async def update_profile(request: Request, data: ProfileUpdate):
         if not response.data:
             raise HTTPException(status_code=404, detail="Profile not found")
 
-        return {"profile": response.data[0]}
+        if update_data.get("home_currency"):
+            # Contract §2 trigger 1: respond now, backfill rates in the
+            # background (non-blocking, never raises).
+            fx.request_backfill_for_user(user_id)
+
+        return {"profile": _with_defaults(response.data[0])}
     except HTTPException:
         raise
     except Exception as e:

@@ -17,6 +17,8 @@ from limiter import limiter
 
 # Initialize routers (will be imported below)
 from routes import auth, categories, uploads, training, classify, dashboard, settings as settings_router, subscriptions, transactions
+from routes import fx as fx_router
+import fx
 
 # --- Startup / Shutdown ---
 @asynccontextmanager
@@ -166,6 +168,13 @@ async def deep_health_check():
     except Exception as e:
         logger.warning(f"Deep health check DB query failed: {e}")
         return JSONResponse({"status": "degraded", "db": False}, status_code=503)
+    # The pinger also keeps the FX rate cache current: refresh each in-use
+    # home currency at most once per 6 h. Fire-and-forget on a daemon
+    # thread — must never delay or change this response.
+    try:
+        fx.maybe_refresh_all()
+    except Exception as e:
+        logger.warning(f"FX refresh trigger failed: {e}")
     return {"status": "ok", "db": True}
 
 
@@ -179,6 +188,7 @@ app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(settings_router.router, prefix="/settings", tags=["settings"])
 app.include_router(subscriptions.router, prefix="/subscriptions", tags=["subscriptions"])
 app.include_router(transactions.router, prefix="/transactions", tags=["transactions"])
+app.include_router(fx_router.router, prefix="/fx", tags=["fx"])
 
 
 # --- Root ---
