@@ -15,7 +15,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import StatTile, { FactRow } from '@/components/ui/StatTile';
 import MonthSelect from '@/components/ui/MonthSelect';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
-import { formatCurrencyWhole, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
+import { formatCurrencyWhole, formatHomeCurrency, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
 import RuleBreakdown, { useRuleData } from './RuleBreakdown';
 
 interface BudgetInfo {
@@ -28,9 +28,18 @@ interface BudgetInfo {
     monthly_budget: number;
     current_spend: number;
     type: string;
+    /** v5 (API_V5.md §3.6); absent on older backends. */
+    monthly_budget_home?: number | null;
+    current_spend_home?: number | null;
   }>;
   month: string; // resolved "YYYY-MM"
   available_months: string[]; // months with transactions, newest first
+  /** v5 totals + home currency (null = no home currency / no rate). */
+  total_budget?: number;
+  total_spent?: number;
+  currency_home?: string | null;
+  total_budget_home?: number | null;
+  total_spent_home?: number | null;
 }
 
 interface Category {
@@ -117,8 +126,10 @@ export default function BudgetTab() {
     }
   };
 
-  const totalBudget = (budget?.category_budgets || []).reduce((s, b) => s + b.monthly_budget, 0);
-  const totalSpent = (budget?.category_budgets || []).reduce((s, b) => s + b.current_spend, 0);
+  const totalBudget = budget?.total_budget ?? (budget?.category_budgets || []).reduce((s, b) => s + b.monthly_budget, 0);
+  const totalSpent = budget?.total_spent ?? (budget?.category_budgets || []).reduce((s, b) => s + b.current_spend, 0);
+  const homeCurrency = budget?.currency_home ?? null;
+  const homeOf = (amount: number | null | undefined) => (homeCurrency ? { amount: amount ?? null, currency: homeCurrency } : null);
   const remaining = totalBudget - totalSpent;
 
   if (loading) {
@@ -147,8 +158,8 @@ export default function BudgetTab() {
       {budget && (
         <FactRow>
           <StatTile label="Monthly income" value={budget.budget_config?.monthly_income ?? 0} currency footer="From your settings" />
-          <StatTile label="Budgeted" value={totalBudget} currency footer={`${budget.category_budgets.length} categories`} />
-          <StatTile label="Spent" value={totalSpent} currency footer={selectedMonth ? formatMonthLong(selectedMonth) : 'This month'} />
+          <StatTile label="Budgeted" value={totalBudget} currency home={homeOf(budget.total_budget_home)} footer={`${budget.category_budgets.length} categories`} />
+          <StatTile label="Spent" value={totalSpent} currency home={homeOf(budget.total_spent_home)} footer={selectedMonth ? formatMonthLong(selectedMonth) : 'This month'} />
           <StatTile
             label={remaining >= 0 ? 'Left to spend' : 'Over budget'}
             value={Math.abs(remaining)}
@@ -262,8 +273,15 @@ export default function BudgetTab() {
                         <Badge tone="warn">Near limit</Badge>
                       )}
                     </span>
-                    <p className={`num text-[15px] ${statusTextColor}`}>
+                    <p className={`num text-right text-[15px] ${statusTextColor}`}>
                       {formatCurrencyWhole(cat.current_spend)} / {formatCurrencyWhole(cat.monthly_budget)}
+                      {homeCurrency && cat.current_spend_home !== null && cat.current_spend_home !== undefined && (
+                        <span className="ml-2 text-xs text-muted">
+                          <span aria-hidden="true">≈ </span>
+                          <span className="sr-only">spent approximately </span>
+                          {formatHomeCurrency(cat.current_spend_home, homeCurrency, 0)}
+                        </span>
+                      )}
                     </p>
                   </div>
                   <ProgressBar percent={percentage} fillColor={chartColorFor(cat.category)} label={`${cat.category} budget used`} />
