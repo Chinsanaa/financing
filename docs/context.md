@@ -4898,3 +4898,14 @@ verification: `docs/audits/VERIFICATION_2026-10.md`.
 
 **Next:** user approves the live migrations, then deploy, then upload a real
 statement to see income and transfers and the ≈ home amounts.
+
+### Session 76 (2026-10-12): ponytail plugin declared in repo settings
+- The user asked to install `ponytail` (a "lazy senior dev" plugin). `/plugin`
+  commands can only be typed by the user, so it is declared in
+  `.claude/settings.json` instead (marketplace `DietrichGebert/ponytail`,
+  `ponytail@ponytail` enabled). It loads from the next session onward.
+- It adds 3 hooks (SessionStart, SubagentStart, UserPromptSubmit) that run
+  `node` scripts: they write a mode flag file under `~/.claude` and inject
+  "simplest solution" instructions. No MCP server, no network calls seen.
+- Trade-off: its terse, minimal-code style can pull against CLAUDE.md's
+  "teach as you build" rule. CLAUDE.md wins; `/ponytail off` disables it.

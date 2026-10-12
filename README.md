@@ -240,6 +240,10 @@ pytest tests/             # backend: JWT verification, cross-user isolation
 There is no automated frontend test suite yet (open item); frontend is
 verified with `npx tsc --noEmit && npm run build`.
 
+**Claude Code plugin:** `.claude/settings.json` declares the third-party
+`ponytail` plugin (DietrichGebert/ponytail); Claude Code offers to install it
+when a session starts on this repo.
+
 ## Repo layout
 
 ```
