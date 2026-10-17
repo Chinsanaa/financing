@@ -1,0 +1,54 @@
+# Runs on every PR and push to main: the same checks a contributor runs
+# locally (see README "Testing").
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Offline LSA encoder (as on the server) — no 128M model download.
+      MODEL2VEC_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install (backend pins cover src/ too)
+        run: pip install -r backend/requirements-dev.txt
+      - name: ML pipeline tests (src/)
+        run: python -m pytest tests -q
+      - name: Backend tests
+        working-directory: backend
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Design gate (no gradients / blur / purple)
+        working-directory: .
+        run: bash scripts/design_gate.sh

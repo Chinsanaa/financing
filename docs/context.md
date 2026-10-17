@@ -45,6 +45,8 @@ A pipeline that:
 | Semantic classifier | Model2Vec static embeddings + LogisticRegression, LSA fallback when weights unavailable | Numpy-only (no torch), captures merchant meaning TF-IDF can't (Session 31) |
 | Auto-apply threshold | Derived from grouped-CV data (target precision 90%, min support 30); no threshold saved if unreachable | Never invent a trust boundary — honest "stays in review" beats a guessed number (Session 31) |
 | Category taxonomy size | Expanded 7 → 13 ML categories (Housing, Personal Care & Health, Entertainment, Travel, Education, Investments added) | User wanted fuller spending coverage; trimmed from a much longer list (Insurance, Debt payments, separate Personal Care/Health, etc.) to keep per-category sample counts viable for the classifier (Session 52) |
+| Rules vs description keywords | Merchant rules win; description keywords only label rows no rule matched, and English keywords must start a word | "payment"/"rent" in a description used to overwrite a known merchant's rule ("rent" even fired on "current") (Session 77) |
+| Numeric features at prediction time | Amount buckets, merchant frequency and 0-1 scaling are fitted at training and saved with the model | Per-batch stats gave one transaction different features depending on what else was uploaded with it; old models fall back until retrained (Session 77) |
 
 ## Key Terms
 
@@ -63,6 +65,10 @@ Open items are tracked in the Session 27 audit entry below (privacy/git-history
 scrub is the main one needing a user decision).
 
 ## Next Suggested Step
+
+Current (Session 77, 2026-10-17): codebase cleanup PR (see Session 77). Next:
+merge it, then press **Train** once so your model saves the new fitted numeric
+stats. Open items from the audit are listed in the Session 77 entry.
 
 Current (Session 74, 2026-10-09): "Ledger" redesign done (PR #64) — see the
 Session 74 entry. Next: user reviews the preview; decide whether to keep the
@@ -4909,3 +4915,70 @@ statement to see income and transfers and the ≈ home amounts.
   "simplest solution" instructions. No MCP server, no network calls seen.
 - Trade-off: its terse, minimal-code style can pull against CLAUDE.md's
   "teach as you build" rule. CLAUDE.md wins; `/ponytail off` disables it.
+
+### Session 77 (2026-10-17): Codebase audit — weak points, dead code, dedupe, CI
+Three read-only audits (ML pipeline, backend, frontend), then fixes in small
+tested commits. Decisions the user made up front: fix both ML issues below,
+delete all CLI/test-only code, upgrade FastAPI, remove the backend auth routes.
+
+**Security / correctness (backend)**
+- Removed `/auth/signup|login|logout`. They signed in on the *shared*
+  service-role Supabase client; supabase-py then swaps that client's token to
+  the user's JWT, so every later query for every user ran as that one user.
+  The frontend never called them (supabase-js handles auth in the browser).
+- FastAPI 0.104 → 0.115.6, python-multipart 0.0.6 → 0.0.20 (multipart DoS
+  advisories reachable through the upload route).
+- Merchant rules and labeled-training rows are now paged: PostgREST silently
+  caps a query at 1,000 rows, so heavy users lost rules / training data.
+- `label_source` can no longer be spoofed by the client; trends params clamped;
+  upload parsing runs in a threadpool (was blocking the single worker);
+  model temp dirs are deleted; an explicit 0% alert threshold is respected in
+  emails too (was turned into 80% by `or 80`).
+
+**ML (behaviour changes — user approved)**
+- *Rules beat description keywords.* Why: a merchant rule is specific
+  knowledge ("this shop is Groceries"); a keyword like "payment" is a weak
+  guess. Keywords now only label rows no rule matched, and English keywords
+  must start a word (`(?<![a-z0-9])rent` — "rent", "rental" yes; "current" no;
+  "fund" no longer matches "refund"). 面 narrowed to noodle words (面包 = bread).
+- *Numeric features fitted once at training.* Plain-language version: the
+  "amount bucket" (which tenth of your spending a purchase falls in) and
+  "how often you visit this merchant" used to be computed from whatever rows
+  were being classified together — so the same coffee could look "expensive"
+  in a batch of coffees and "cheap" in a batch with rent. `fit_numeric_stats()`
+  learns these from the training data and saves them inside the hybrid
+  vectorizer file. Old models keep the old behaviour until retrained. Grouped
+  eval now fits them per fold (removes a small test-data leak).
+
+**Removed:** `src/validate.py`, all CLI `__main__` sections and CLI helpers,
+`LOCAL_MERCHANT_RULES` (personal names; never reached production),
+`supabase/generate_seed_migration.py` (would re-seed the old 7 categories),
+unused frontend files (`motion.tsx`, `Stepper.tsx`, `MoneyPair.tsx`) and
+~20 unused exports/API helpers. `tsconfig` now has `noUnusedLocals`.
+
+**Deduped:** `src/paths.py` `ARTIFACT_FILES`/`artifact_paths()` (was 4 copies),
+`categories.prepare_labeled()` (3), `segment.clean_texts()` (4 row-wise
+`apply`s → a zip), `backend/budget.py` (alerts no longer imports a route
+module), `db.new_client()`, classify-route helpers; frontend `errorDetail()`
+(a 422 detail list used to crash tabs), `downloadBlob()`, `useDismiss()`, `WRAP`.
+
+**Frontend robustness:** 401 → local sign-out + `/auth?expired=1` (was an
+endless redirect loop); `useApi` ignores stale responses; training poll no
+longer leaks, is capped at 10 min and resumes on return; saving income
+refreshes Budget/Savings/50-30-20; Excel export errors are shown;
+`formatDate` reads date-only strings as local; unknown `?tab=` → Overview.
+
+**CI:** `.github/workflows/ci.yml` runs src + backend pytest (158 + 264),
+frontend typecheck + build, and the design gate on every PR.
+
+**Kept on purpose:** `semantic.nearest_examples` (reads the semantic index
+every model still saves); NYU Shanghai / 上海蕤盛工贸 special cases (removing
+them changes classifications — needs a decision).
+
+**Still open (from the audit, not done here):** proxy-aware rate limiting on
+Render (limits may be shared across users), CORS regex tightening, `/docs`
+public in production, bulk-label N+1 queries, one-UPDATE-per-row in
+`ml.py`, unifying `src.` vs bare imports (pickled artifacts depend on it),
+scikit-learn + `@supabase/ssr` upgrades, ESLint setup, consolidating duplicate
+frontend types into `types/v5.ts`, a global exception handler instead of ~45
+try/except blocks.

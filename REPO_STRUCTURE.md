@@ -1,7 +1,7 @@
 # Repository Structure
 
-**Last updated**: 2026-08-11 (post-cleanup: legacy Flask/PWA and Streamlit
-stacks removed; the Next.js + FastAPI + Supabase product is the only UI).
+**Last updated**: 2026-10-17 (Session 77 cleanup: CLI-only code removed,
+shared helpers, CI added). The Next.js + FastAPI + Supabase product is the only UI.
 
 ```
 financing/
@@ -15,16 +15,18 @@ financing/
 │   ├── src/middleware.ts      # server-side auth gating
 │   ├── src/app/               # auth, dashboard (5 sections, tabs code-split), settings pages
 │   ├── src/components/        # ui-feedback.tsx atoms + ui/*.tsx + tabs/*.tsx
-│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror), chunkReload.ts (stale-tab recovery), tour.ts (onboarding tour state); design rules in docs/DESIGN_SYSTEM.md (NO gradients, solid colors only)
+│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror), errors.ts (errorDetail), download.ts, useDismiss.ts, format.ts, chunkReload.ts, tour.ts; design rules in docs/DESIGN_SYSTEM.md (NO gradients, solid colors only)
 │
 ├── backend/                   # FastAPI app → Render (see backend/README.md)
 │   ├── main.py                # app, JWT auth middleware, CORS, rate limiting
 │   ├── config.py              # env settings + service-role Supabase client
+│   ├── db.py                  # run_query/fetch_all paging helpers, new_client() for background threads
+│   ├── budget.py              # month windows, spend-by-category, budget crossings (dashboard + alerts)
 │   ├── ml.py                  # per-user model loading (Storage) + bulk classification
 │   ├── translations.py        # background worker: stores English merchant/description once per string
 │   ├── fx.py                  # ECB rate cache (Frankfurter, background-only) + RateTable lookups for home currency
 │   ├── errors.py              # log-and-mask error helper
-│   ├── routes/                # auth, categories, uploads, training, classify,
+│   ├── routes/                # auth (resolve-identifier only), categories, uploads, training, classify,
 │   │                          #   dashboard (incl. cashflow), settings, subscriptions,
 │   │                          #   transactions (manual + PATCH kind), fx (currencies)
 │   ├── requirements.txt       # pinned backend deps (installed by Dockerfile)
@@ -34,23 +36,22 @@ financing/
 ├── src/                       # ML pipeline (imported by backend/ and tests/)
 │   ├── parse.py               # Alipay/WeChat/bank parsers → common schema with kind + flow_subtype
 │   ├── segment.py             # jieba tokenization + TF-IDF
-│   ├── feature_engineering.py # hybrid features (weighted merchant/description + numeric)
+│   ├── feature_engineering.py # hybrid features (weighted merchant/description + numeric; stats fitted at training)
 │   ├── label.py               # merchant-rule matching (vectorized)
-│   ├── merchant_categories.py # ~600 global rule patterns + description keywords
-│   ├── categories.py          # category constants + normalization map
+│   ├── merchant_categories.py # ~600 global rule patterns + description keywords (word-boundary matched)
+│   ├── categories.py          # category constants, normalization map, prepare_labeled()
 │   ├── classify.py            # rules-first + graduated-trust classification
 │   ├── semantic.py            # embedding classifier (Model2Vec, LSA fallback)
 │   ├── calibration.py         # top-label Platt scaling
 │   ├── eval_grouped.py        # GroupKFold eval + auto-apply threshold derivation
 │   ├── retrain.py             # training entry point (used by backend/routes/training.py)
 │   ├── cv_utils.py            # merchant-leakage guard for CV splits
-│   ├── validate.py            # data sanity checks
 │   ├── recurring.py           # recurring/subscription merchant detection (pure pandas)
-│   └── paths.py               # CLI-mode artifact paths
+│   ├── llm_classify.py, translate.py, merchant_display.py
+│   └── paths.py               # local data paths + ARTIFACT_FILES/artifact_paths() (model file names)
 │
 ├── supabase/
 │   ├── config.toml
-│   ├── generate_seed_migration.py   # regenerates the rules-seed SQL
 │   └── migrations/            # 15 migrations:
 │       ├── 20260703000000_initial_schema.sql          # 9 tables + RLS + triggers
 │       ├── 20260703000001_seed_rules_and_categories.sql
@@ -79,14 +80,16 @@ financing/
 │       ├── 20261011000300_uploads_parser_version.sql        # uploads.parser_version (v1 re-import reconciliation)
 │       └── 20261011000400_fx_rates_home_currency.sql        # fx_rates cache + profiles.home_currency
 │
-├── tests/                     # pytest suite for src/ (74 tests)
-│   ├── test_parse.py, test_validate.py, test_semantic.py, test_calibration.py
+├── tests/                     # pytest suite for src/ (158 tests)
+│   ├── test_parse.py, test_parse_v2.py, test_numeric_stats.py, test_merchant_rules.py, test_semantic.py, test_calibration.py
 │   ├── test_classify_routing.py, test_agreement_routing.py
 │   ├── test_leakage_guard.py, test_reproducibility.py
 │   ├── test_feature_engineering.py, test_matching_optimization.py
 │   └── conftest.py
 │
-├── .github/workflows/keepalive.yml  # pings /health/deep every 10 min (free-tier keep-alive)
+├── .github/workflows/
+│   ├── ci.yml                 # PRs: src + backend pytest, frontend typecheck + build, design gate
+│   └── keepalive.yml          # pings /health/deep every 10 min (free-tier keep-alive)
 │
 ├── scripts/
 │   ├── test_local.sh          # local backend run helper (not a test suite)
@@ -122,3 +125,11 @@ financing/
   `docs/phase1_analysis.py`, `docs/phase4_analysis.py`, `docs/CLEANUP_SUMMARY.md`
 - `backend/migrate_personal_data.py` (contained personal data; procedure
   documented in `docs/guides/MIGRATION_GUIDE.md`)
+
+## What was removed (2026-10-17, Session 77)
+
+- `src/validate.py`, the CLI sections of parse/classify/label/segment/
+  feature_engineering/merchant_categories, `LOCAL_MERCHANT_RULES`
+- `supabase/generate_seed_migration.py` (emitted the pre-2026-07 taxonomy)
+- Backend `/auth/signup`, `/auth/login`, `/auth/logout` (unused, unsafe)
+- Frontend `ui/motion.tsx`, `ui/Stepper.tsx`, `ui/MoneyPair.tsx`, unused exports
