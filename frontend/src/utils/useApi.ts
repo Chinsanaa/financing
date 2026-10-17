@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
-import { clearApiCache, readCached, writeCached, dropCached } from './apiCache';
+import { readCached, writeCached, dropCached } from './apiCache';
 
 /**
  * Tiny stale-while-revalidate data hook (no external deps).
@@ -16,8 +16,6 @@ import { clearApiCache, readCached, writeCached, dropCached } from './apiCache';
  *   OnboardingTour and StatsTab both mount with /dashboard/summary).
  * - Mutations call `invalidate(prefix)` and/or `reload()`.
  */
-
-export { clearApiCache };
 
 // Mounted useApi(path) instances register a background-revalidate callback here,
 // keyed by their exact path, so invalidate() can reach components that never

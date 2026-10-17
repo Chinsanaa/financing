@@ -267,7 +267,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
       patch(item.id, { status: 'uploading', progress: 0, detail: undefined });
 
       try {
-        const res = await api.uploadsV5.upload(item.file, {
+        const res = await api.uploads.upload(item.file, {
           onUploadProgress: (evt: any) => {
             const pct = evt.total ? Math.round((evt.loaded / evt.total) * 100) : 0;
             if (pct >= 100) {

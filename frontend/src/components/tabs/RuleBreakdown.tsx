@@ -7,7 +7,7 @@ import Card from '@/components/ui/Card';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useApi } from '@/utils/useApi';
-import { chartFillColorForKey } from '@/utils/categoryColors';
+import { chartColorForKey } from '@/utils/categoryColors';
 import { formatCurrencyWhole } from '@/utils/format';
 
 export interface BucketCategory {
@@ -37,9 +37,9 @@ export interface RuleData {
 // identities, so they stay constant rather than going through
 // useCategoryColors(). Picked from the same design-system palette.
 const BUCKET_COLOR: Record<'needs' | 'wants' | 'savings', string> = {
-  needs: chartFillColorForKey('sky'),
-  wants: chartFillColorForKey('amber'),
-  savings: chartFillColorForKey('emerald'),
+  needs: chartColorForKey('sky'),
+  wants: chartColorForKey('amber'),
+  savings: chartColorForKey('emerald'),
 };
 
 const BUCKET_LABEL: Record<'needs' | 'wants' | 'savings', string> = {

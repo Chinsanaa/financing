@@ -2,7 +2,6 @@
 
 import { ReactNode } from 'react';
 import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
-import { SkeletonRows } from '@/components/ui/Skeleton';
 
 /** Shared UI atoms used across the dashboard tabs, themed via design tokens. */
 
@@ -31,11 +30,6 @@ export function Alert({
       <div>{children}</div>
     </div>
   );
-}
-
-/** Legacy loading state — now renders a skeleton block instead of text. */
-export function Loading({ label }: { label?: string }) {
-  return <SkeletonRows rows={4} />;
 }
 
 export function ProgressBar({

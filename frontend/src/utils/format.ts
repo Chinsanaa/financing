@@ -130,3 +130,10 @@ export function formatHomeCurrency(value: number, currency: string, decimals?: n
     .map((p) => (p.type === 'currency' && p.value === CURRENCY_SYMBOL && code !== 'CNY' ? `${code.slice(0, 2)}${p.value}` : p.value))
     .join('');
 }
+
+/** Tooltip for a home-currency figure: "Rate 0.1388 on 2026-10-10 (ECB)". */
+export function rateTooltip(rate?: number, rateDate?: string): string | undefined {
+  if (rate === undefined || !Number.isFinite(rate)) return undefined;
+  const r = rate >= 1 ? rate.toFixed(2) : rate.toPrecision(4);
+  return `Rate ${r}${rateDate ? ` on ${rateDate}` : ''} (ECB)`;
+}
