@@ -79,11 +79,8 @@ def test_retrain_saves_stats_and_classify_uses_them(tmp_path, synthetic_labeled,
 
     labeled = synthetic_labeled.copy()
     labeled['timestamp'] = pd.date_range('2026-01-01', periods=len(labeled), freq='5h')
-    names = ['classifier', 'vectorizer', 'vectorizer_hybrid', 'vectorizer_config',
-             'semantic_model', 'semantic_index', 'semantic_calibrator',
-             'tfidf_calibrator', 'ensemble_config']
-    paths = {k: tmp_path / f'{k}.pkl' for k in names}
-    paths['report'] = tmp_path / 'report.txt'
+    from paths import artifact_paths
+    paths = artifact_paths(tmp_path)
     retrain_model(labeled, paths=paths)
 
     vec = joblib.load(paths['vectorizer_hybrid'])

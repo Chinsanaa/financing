@@ -7,14 +7,15 @@ from datetime import datetime
 from typing import Optional, Dict
 sys.path.insert(0, str(Path(__file__).parent))
 
-from segment import clean_text, vectorize, build_vectorizer, LR_HYPERPARAMS
+from segment import clean_texts, vectorize, build_vectorizer, LR_HYPERPARAMS
 from feature_engineering import (
     extract_numeric_features,
     fit_numeric_stats,
     build_hybrid_vectorizers,
     create_hybrid_feature_matrix,
 )
-from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
+from categories import ML_CATEGORIES, prepare_labeled
+from paths import LABELED_TXNS, PROCESSED, REPORTS, artifact_paths
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, classification_report
@@ -42,30 +43,15 @@ def retrain_model(
     Returns:
         dict with 'accuracy', 'f1_macro', 'n_samples', 'n_features' for model_runs tracking.
     """
-    # Backward compatibility: fill in defaults for CLI usage
+    # Defaults for local runs (the backend always passes all three).
     if df_labeled is None:
-        labeled_path = 'data/labeled/labeled_transactions.csv'
-        df_labeled = pd.read_csv(labeled_path)
+        df_labeled = pd.read_csv(LABELED_TXNS)
 
     if valid_categories is None:
         valid_categories = ML_CATEGORIES
 
     if paths is None:
-        # Default to local data/processed/ paths
-        proc_dir = Path('data/processed')
-        report_dir = Path('data/reports')
-        paths = {
-            'classifier': proc_dir / 'classifier.pkl',
-            'vectorizer': proc_dir / 'tfidf_vectorizer.pkl',
-            'vectorizer_hybrid': proc_dir / 'tfidf_vectorizer_hybrid.pkl',
-            'vectorizer_config': proc_dir / 'vectorizer_config.pkl',
-            'semantic_model': proc_dir / 'semantic_classifier.pkl',
-            'semantic_index': proc_dir / 'semantic_index.pkl',
-            'semantic_calibrator': proc_dir / 'semantic_calibrator.pkl',
-            'tfidf_calibrator': proc_dir / 'tfidf_calibrator.pkl',
-            'ensemble_config': proc_dir / 'ensemble_config.json',
-            'report': report_dir / 'TRAINING_REPORT.txt',
-        }
+        paths = artifact_paths(PROCESSED, REPORTS / 'TRAINING_REPORT.txt')
     print("="*70)
     print(f"AUTOMATED RETRAINING WORKFLOW — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*70)
@@ -73,21 +59,12 @@ def retrain_model(
     # Filter to only explicitly labeled rows to match train.py. CLI mode's CSV
     # uses a 'labeled' boolean column; the Supabase-backed caller instead marks
     # rows via 'is_manually_labeled'.
-    labeled_col = 'labeled' if 'labeled' in df_labeled.columns else 'is_manually_labeled'
-    df_labeled = df_labeled[df_labeled[labeled_col] == True].copy()
-    df_labeled['category'] = df_labeled['category'].replace(CATEGORY_NORMALIZE)
-    df_labeled = df_labeled[df_labeled['category'].isin(valid_categories)]
-    # semantic.py/eval_grouped.py both re-filter on a 'labeled' column (their
-    # own CLI-mode convention); the Supabase caller's frame never has one,
-    # which raised KeyError there, silently disabling the semantic layer on
-    # every Supabase-backed run. Every row here already passed the labeled
-    # filter above, so this is just aligning the column name for them.
+    df_labeled = prepare_labeled(df_labeled, valid_categories)
+    # semantic.py/eval_grouped.py re-filter with prepare_labeled(), which
+    # needs a labeled flag; the Supabase frame's flag column may have been
+    # dropped by now, so mark every surviving row explicitly.
     df_labeled['labeled'] = True
 
-    # Labeled CSV stores the datetime as 'timestamp'; feature engineering
-    # expects 'time'. Normalize once here.
-    if 'time' not in df_labeled.columns and 'timestamp' in df_labeled.columns:
-        df_labeled['time'] = df_labeled['timestamp']
     print(f"\n1. Loaded {len(df_labeled)} labeled transactions")
     print(f"   Category distribution:")
     for cat, count in df_labeled['category'].value_counts().sort_values(ascending=False).items():
@@ -167,10 +144,7 @@ def retrain_model(
         print(f"   Using LEGACY feature engineering (combined text only)")
 
         # Classic approach: combine merchant + description
-        df_labeled['text'] = df_labeled.apply(
-            lambda row: clean_text(row['merchant'], row['description']),
-            axis=1
-        )
+        df_labeled['text'] = clean_texts(df_labeled)
 
         vectorizer = build_vectorizer(df_labeled['text'].tolist())
         X = vectorize(df_labeled['text'].tolist(), vectorizer)

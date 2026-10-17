@@ -40,25 +40,13 @@ from errors import logger
 
 from src.classify import classify_all, load_model_bundle, ModelBundle  # noqa: E402
 from src.llm_classify import classify_with_llm  # noqa: E402
+from src.paths import ARTIFACT_FILES  # noqa: E402
 
 # Safety valve: cap how many distinct merchants one classification pass will
 # send to the LLM, so one big/weird upload can't spike cost in a single call.
 # Anything beyond the cap is simply left for the next pass / manual review,
 # same as if this fallback tier didn't run at all.
 _LLM_MERCHANT_CAP = 40
-
-# Artifact file names, keyed the same way training.py's paths dict is.
-ARTIFACT_FILES = {
-    'classifier': 'classifier.pkl',
-    'vectorizer': 'tfidf_vectorizer.pkl',
-    'vectorizer_hybrid': 'tfidf_vectorizer_hybrid.pkl',
-    'vectorizer_config': 'vectorizer_config.pkl',
-    'semantic_model': 'semantic_classifier.pkl',
-    'semantic_index': 'semantic_index.pkl',
-    'semantic_calibrator': 'semantic_calibrator.pkl',
-    'tfidf_calibrator': 'tfidf_calibrator.pkl',
-    'ensemble_config': 'ensemble_config.json',
-}
 
 # In-process bundle cache: user_id -> (model_run_id, ModelBundle, temp_dir).
 # The temp dir must outlive the bundle (semantic encoder may lazy-read).

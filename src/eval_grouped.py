@@ -35,7 +35,7 @@ from sklearn.model_selection import GroupKFold
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
+from categories import prepare_labeled
 from cv_utils import assert_no_group_leakage
 from segment import LR_HYPERPARAMS
 from calibration import (
@@ -67,17 +67,8 @@ EVAL_REPORT = REPORTS / 'EVAL_GROUPED.txt'
 
 
 def load_labeled() -> pd.DataFrame:
-    """Load labeled rows, normalize categories, ensure a 'time' column exists.
-
-    The labeled CSV uses 'timestamp'; feature_engineering expects 'time'.
-    """
-    df = pd.read_csv(LABELED_TXNS)
-    df = df[df['labeled'] == True].copy()
-    df['category'] = df['category'].replace(CATEGORY_NORMALIZE)
-    df = df[df['category'].isin(ML_CATEGORIES)]
-    if 'time' not in df.columns and 'timestamp' in df.columns:
-        df['time'] = df['timestamp']
-    return df.reset_index(drop=True)
+    """Load labeled rows from the local labeled CSV, categories normalized."""
+    return prepare_labeled(pd.read_csv(LABELED_TXNS)).reset_index(drop=True)
 
 
 def _pick_n_splits(groups: np.ndarray, requested: int = 5) -> int:

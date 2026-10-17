@@ -15,7 +15,7 @@ from scipy import sparse
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 sys.path.insert(0, str(Path(__file__).parent))
-from segment import tokenize
+from segment import column_or_blank, tokenize
 
 # Tunable hyperparameter
 MERCHANT_WEIGHT = 0.3  # How much merchant features are downweighted vs description
@@ -258,17 +258,11 @@ def create_hybrid_feature_matrix(
         Sparse CSR matrix of combined features
     """
     # Clean and vectorize description (full weight)
-    desc_texts = df.apply(
-        lambda row: clean_description_only(row.get('merchant', ''), row.get('description', '')),
-        axis=1
-    ).tolist()
+    desc_texts = [clean_description_only('', d) for d in column_or_blank(df, 'description')]
     X_desc = desc_vectorizer.transform(desc_texts)
 
     # Clean and vectorize merchant (downweighted)
-    merch_texts = df.apply(
-        lambda row: clean_merchant_only(row.get('merchant', '')),
-        axis=1
-    ).tolist()
+    merch_texts = [clean_merchant_only(m) for m in column_or_blank(df, 'merchant')]
     X_merch = merch_vectorizer.transform(merch_texts)
     X_merch = X_merch * MERCHANT_WEIGHT  # Apply downweighting
 

@@ -12,7 +12,7 @@ from typing import Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
-from segment import clean_text, vectorize
+from segment import clean_texts, vectorize
 from label import apply_merchant_rules
 from merchant_categories import special_category
 from paths import (
@@ -292,10 +292,7 @@ def classify_all(
             df['label_source'] = 'model'
         else:
             # Legacy vectorizer: single object
-            df['text'] = df.apply(
-                lambda row: clean_text(row['merchant'], row['description']),
-                axis=1,
-            )
+            df['text'] = clean_texts(df)
             X = vectorize(df['text'].tolist(), vectorizer)
             df['category'] = classifier.predict(X)
             df['confidence'] = classifier.predict_proba(X).max(axis=1)

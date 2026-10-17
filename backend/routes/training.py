@@ -29,6 +29,7 @@ STALE_RUNNING_THRESHOLD = timedelta(minutes=30)
 router = APIRouter()
 
 from src.retrain import retrain_model
+from src.paths import artifact_paths
 
 
 @router.post("/retrain")
@@ -193,18 +194,7 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
 
         # Create temporary directory for model artifacts
         temp_dir = tempfile.mkdtemp(prefix=f"training_{model_run_id}_")
-        paths = {
-            'classifier': Path(temp_dir) / 'classifier.pkl',
-            'vectorizer': Path(temp_dir) / 'tfidf_vectorizer.pkl',
-            'vectorizer_hybrid': Path(temp_dir) / 'tfidf_vectorizer_hybrid.pkl',
-            'vectorizer_config': Path(temp_dir) / 'vectorizer_config.pkl',
-            'semantic_model': Path(temp_dir) / 'semantic_classifier.pkl',
-            'semantic_index': Path(temp_dir) / 'semantic_index.pkl',
-            'semantic_calibrator': Path(temp_dir) / 'semantic_calibrator.pkl',
-            'tfidf_calibrator': Path(temp_dir) / 'tfidf_calibrator.pkl',
-            'ensemble_config': Path(temp_dir) / 'ensemble_config.json',
-            'report': Path(temp_dir) / 'TRAINING_REPORT.txt',
-        }
+        paths = artifact_paths(temp_dir)
 
         # Call retrain_model with user's data and categories
         results = retrain_model(

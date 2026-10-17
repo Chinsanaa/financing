@@ -66,6 +66,18 @@ def clean_text(merchant: str, description: str) -> str:
     return ''.join(result).strip()
 
 
+def column_or_blank(df: pd.DataFrame, col: str) -> list:
+    """df[col] as a list, or '' per row when the column is absent."""
+    return df[col].tolist() if col in df.columns else [''] * len(df)
+
+
+def clean_texts(df: pd.DataFrame) -> list:
+    """clean_text() for every row (merchant + description), as a list.
+    A plain zip is much faster than DataFrame.apply(axis=1)."""
+    return [clean_text(m, d) for m, d in
+            zip(column_or_blank(df, 'merchant'), column_or_blank(df, 'description'))]
+
+
 # ============================================================================
 # STAGE 4: TOKENIZATION + TF-IDF VECTORIZATION
 # ============================================================================
