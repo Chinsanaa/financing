@@ -25,6 +25,7 @@ sharpens both the classifier and the nearest-example index.
 """
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -42,6 +43,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 from segment import clean_text, LR_HYPERPARAMS
 from paths import MODEL2VEC_DIR, SEMANTIC_MODEL, SEMANTIC_INDEX
+
+logger = logging.getLogger(__name__)
 
 MODEL2VEC_NAME = 'minishlab/potion-multilingual-128M'
 
@@ -108,7 +111,7 @@ def get_encoder(local_dir: Path = MODEL2VEC_DIR, allow_download: bool = True):
         try:
             return StaticModel.from_pretrained(str(local_dir))
         except Exception as e:
-            print(f"   [semantic] cached model unreadable ({type(e).__name__}); ignoring cache")
+            logger.warning("Cached model2vec model unreadable (%s); ignoring cache", type(e).__name__)
 
     if not allow_download:
         return None
@@ -119,8 +122,8 @@ def get_encoder(local_dir: Path = MODEL2VEC_DIR, allow_download: bool = True):
         model.save_pretrained(str(local_dir))
         return model
     except Exception as e:
-        print(f"   [semantic] model download unavailable ({type(e).__name__}); "
-              f"will fall back to LsaEncoder")
+        logger.warning("model2vec download unavailable (%s); falling back to LsaEncoder",
+                       type(e).__name__)
         return None
 
 

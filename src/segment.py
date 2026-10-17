@@ -45,14 +45,14 @@ def clean_text(merchant: str, description: str) -> str:
     parts = []
 
     # Clean merchant
-    if pd.notna(merchant) and merchant.strip():
+    if pd.notna(merchant) and str(merchant).strip():
         m = str(merchant).strip()
         m = re.sub(r'\d{10,}', '', m)  # Remove long order numbers
         if m:
             parts.append(m)
 
     # Clean description
-    if pd.notna(description) and description.strip():
+    if pd.notna(description) and str(description).strip():
         d = str(description).strip()
         if d != '/':  # Skip WeChat "/" placeholder
             d = re.sub(r'\d{10,}', '', d)  # Remove long order numbers

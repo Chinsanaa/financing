@@ -134,3 +134,42 @@ def test_bare_bank_rule_removed():
     the file; explicit bank names should carry this category instead."""
     all_patterns_lower = {p.lower() for p, _ in all_merchant_rules()}
     assert "bank" not in all_patterns_lower
+
+
+# --- Description keywords: word boundaries + rule precedence (Session 77) ---
+
+@pytest.mark.parametrize("description,not_category", [
+    ("current account fee", "Housing"),          # "rent" inside "current"
+    ("facebook ads", "Shopping"),                # "book" inside "facebook"
+    ("override charge", "Transportation"),       # "ride" inside "override"
+    ("refund for order 12", "Investments"),      # "fund" inside "refund"
+    ("面包 bakery", "Eating Out"),                # 面 inside 面包 (bread)
+])
+def test_keywords_do_not_fire_inside_other_words(description, not_category):
+    assert special_category("Random Unmapped Merchant XYZ", description) != not_category
+
+
+@pytest.mark.parametrize("description,category", [
+    ("monthly rent", "Housing"),
+    ("noodles to go", "Eating Out"),
+    ("two books", "Shopping"),
+    ("牛肉拉面", "Eating Out"),
+])
+def test_keywords_still_match_whole_words_and_plurals(description, category):
+    assert special_category("Random Unmapped Merchant XYZ", description) == category
+
+
+def test_merchant_rule_beats_description_keyword():
+    from classify import classify_all
+
+    df = pd.DataFrame({
+        "merchant": ["Starbucks Coffee", "Unknown Shop"],
+        "description": ["payment", "payment"],
+        "amount": [30.0, 30.0],
+    })
+    out = classify_all(df, rules={"starbucks": "Eating Out"})
+    assert out.loc[0, "category"] == "Eating Out"
+    assert out.loc[0, "label_source"] == "rule"
+    # Rows no rule covers still get the description override.
+    assert out.loc[1, "category"] == "Transfers & Gifts"
+    assert out.loc[1, "label_source"] == "override"

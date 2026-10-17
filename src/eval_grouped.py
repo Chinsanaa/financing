@@ -46,6 +46,7 @@ from calibration import (
 )
 from feature_engineering import (
     extract_numeric_features,
+    fit_numeric_stats,
     build_hybrid_vectorizers,
     create_hybrid_feature_matrix,
 )
@@ -98,9 +99,8 @@ def grouped_oof(df_labeled: pd.DataFrame, model_kind: str,
 
     # Restrict once to rows with valid time/amount so both models see the SAME
     # rows and the agreement frame aligns 1:1.
-    numeric_all, valid_idx = extract_numeric_features(df)
+    _, valid_idx = extract_numeric_features(df)
     df = df.loc[valid_idx].reset_index(drop=True)
-    numeric_all = numeric_all.reset_index(drop=True)
 
     y = df['category'].reset_index(drop=True)
     groups = df['merchant'].astype(str).values
@@ -120,10 +120,13 @@ def grouped_oof(df_labeled: pd.DataFrame, model_kind: str,
         if model_kind == 'tfidf':
             desc_vec, merch_vec = build_hybrid_vectorizers(
                 df_tr['description'].tolist(), df_tr['merchant'].tolist())
-            X_tr = create_hybrid_feature_matrix(df_tr, desc_vec, merch_vec,
-                                                numeric_all.iloc[tr])
-            X_te = create_hybrid_feature_matrix(df_te, desc_vec, merch_vec,
-                                                numeric_all.iloc[te])
+            # Numeric stats fitted on the training fold only (no test leakage),
+            # exactly as retrain.py fits them on the training set.
+            stats = fit_numeric_stats(df_tr)
+            num_tr, _ = extract_numeric_features(df_tr, stats)
+            num_te, _ = extract_numeric_features(df_te, stats)
+            X_tr = create_hybrid_feature_matrix(df_tr, desc_vec, merch_vec, num_tr, stats)
+            X_te = create_hybrid_feature_matrix(df_te, desc_vec, merch_vec, num_te, stats)
         elif model_kind == 'semantic':
             # LsaEncoder is unsupervised but fit in-fold anyway (strictest);
             # a pretrained static encoder (model2vec) has nothing to fit.

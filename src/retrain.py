@@ -5,11 +5,12 @@ from pathlib import Path
 import sys
 from datetime import datetime
 from typing import Optional, Dict
-sys.path.insert(0, str(Path.cwd()))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from segment import clean_text, vectorize, build_vectorizer, LR_HYPERPARAMS
 from feature_engineering import (
     extract_numeric_features,
+    fit_numeric_stats,
     build_hybrid_vectorizers,
     create_hybrid_feature_matrix,
 )
@@ -97,7 +98,8 @@ def retrain_model(
     min_class_count = df_labeled['category'].value_counts().min()
     if min_class_count < 2:
         print(f"\n   WARNING: Found categories with < 2 samples. Filtering them out.")
-        classes_to_keep = df_labeled['category'].value_counts()[df_labeled['category'].value_counts() >= 2].index
+        class_counts = df_labeled['category'].value_counts()
+        classes_to_keep = class_counts[class_counts >= 2].index
         df_labeled = df_labeled[df_labeled['category'].isin(classes_to_keep)].copy()
         print(f"   Kept {len(classes_to_keep)} categories, now training on {len(df_labeled)} samples")
 
@@ -133,11 +135,14 @@ def retrain_model(
 
     # Clean and vectorize using either hybrid or legacy approach
     print(f"\n2. Cleaning and vectorizing text...")
-    if USE_HYBRID_FEATURES:
+    if use_hybrid:
         print(f"   Using HYBRID feature engineering (semantic-weighted text + numeric features)")
 
-        # Extract numeric contextual features
-        numeric_features, valid_indices = extract_numeric_features(df_labeled)
+        # Extract numeric contextual features. The stats (amount buckets,
+        # merchant frequencies, 0-1 range) are fitted here and saved with
+        # the vectorizers so prediction uses the same scale for every batch.
+        numeric_stats = fit_numeric_stats(df_labeled)
+        numeric_features, valid_indices = extract_numeric_features(df_labeled, numeric_stats)
 
         # Filter DataFrame to only valid rows (those with time/amount)
         df_valid = df_labeled.iloc[valid_indices].copy()
@@ -149,10 +154,10 @@ def retrain_model(
         desc_vec, merch_vec = build_hybrid_vectorizers(desc_texts, merch_texts)
 
         # Create hybrid feature matrix
-        X = create_hybrid_feature_matrix(df_valid, desc_vec, merch_vec, numeric_features)
+        X = create_hybrid_feature_matrix(df_valid, desc_vec, merch_vec, numeric_features, numeric_stats)
 
         # Save vectorizers with '_hybrid' suffix to distinguish from legacy
-        vectorizer = {'desc': desc_vec, 'merch': merch_vec}
+        vectorizer = {'desc': desc_vec, 'merch': merch_vec, 'numeric_stats': numeric_stats}
         print(f"   Description vectorizer: {len(desc_vec.get_feature_names_out())} features")
         print(f"   Merchant vectorizer: {len(merch_vec.get_feature_names_out())} features")
         print(f"   Numeric features: 6 (hour, day, lunch, dinner, amount_bucket, merchant_freq)")
@@ -188,9 +193,10 @@ def retrain_model(
         clf_fold = LogisticRegression(**LR_HYPERPARAMS)
         clf_fold.fit(X_train, y_train)
 
-        acc = accuracy_score(y_test, clf_fold.predict(X_test))
-        f1_w = f1_score(y_test, clf_fold.predict(X_test), average='weighted', zero_division=0)
-        f1_m = f1_score(y_test, clf_fold.predict(X_test), average='macro', zero_division=0)
+        y_pred = clf_fold.predict(X_test)
+        acc = accuracy_score(y_test, y_pred)
+        f1_w = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+        f1_m = f1_score(y_test, y_pred, average='macro', zero_division=0)
 
         cv_scores.append(acc)
         cv_f1_weighted.append(f1_w)

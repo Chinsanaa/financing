@@ -1,5 +1,6 @@
 """Apply trained classifier to all transactions."""
 import json
+import logging
 import numpy as np
 import pandas as pd
 import joblib
@@ -12,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 from segment import clean_text, vectorize
+
+logger = logging.getLogger(__name__)
 from label import load_merchant_rules, apply_merchant_rules
 from merchant_categories import special_category
 from paths import (
@@ -62,8 +65,12 @@ def _override_category(merchant: str, desc: str) -> Optional[str]:
     return None
 
 
-def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
+def apply_description_overrides(df: pd.DataFrame, protect: Optional[pd.Series] = None) -> pd.DataFrame:
     """Override categories using merchant/description patterns.
+
+    `protect` (boolean mask aligned to df) marks rows that must keep their
+    category — classify_all passes the merchant-rule matches, so a known
+    merchant isn't re-labelled by a description keyword.
 
     Optimized: overrides are resolved once per unique (merchant, description)
     pair and applied with vectorized masks instead of row-by-row iteration.
@@ -79,6 +86,8 @@ def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
     cache = {pair: _override_category(pair[0], pair[1]) for pair in set(pairs)}
     override_cat = pairs.map(cache)
     mask = override_cat.notna()
+    if protect is not None:
+        mask &= ~protect.reindex(df.index, fill_value=False).astype(bool)
 
     if mask.any():
         df.loc[mask, 'category'] = override_cat[mask]
@@ -165,15 +174,16 @@ def load_model_bundle(paths: Optional[dict] = None) -> ModelBundle:
     if config and config.get('use_hybrid') and hybrid_path.exists():
         try:
             vectorizer = joblib.load(hybrid_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Could not load hybrid vectorizer %s: %s", hybrid_path, e)
     if classifier is None and classifier_path.exists() and hybrid_path.exists():
         # hybrid-only training run: no legacy vectorizer file
         try:
             vectorizer = joblib.load(hybrid_path)
             classifier = joblib.load(classifier_path)
             config = {'use_hybrid': True}
-        except Exception:
+        except Exception as e:
+            logger.warning("Could not load hybrid model artifacts: %s", e)
             vectorizer, classifier = None, None
 
     bundle.vectorizer = vectorizer
@@ -184,7 +194,8 @@ def load_model_bundle(paths: Optional[dict] = None) -> ModelBundle:
     try:
         from semantic import load_semantic_artifacts
         bundle.semantic = load_semantic_artifacts(paths)
-    except Exception:
+    except Exception as e:
+        logger.warning("Semantic layer unavailable: %s", e)
         bundle.semantic = None
 
     for attr, path in [('cal_tfidf', tfidf_cal_path),
@@ -192,13 +203,14 @@ def load_model_bundle(paths: Optional[dict] = None) -> ModelBundle:
         if path.exists():
             try:
                 setattr(bundle, attr, joblib.load(path))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Could not load calibrator %s: %s", path, e)
 
     if ensemble_path.exists():
         try:
             bundle.ensemble = json.loads(ensemble_path.read_text(encoding='utf-8'))
-        except Exception:
+        except Exception as e:
+            logger.warning("Could not read ensemble config %s: %s", ensemble_path, e)
             bundle.ensemble = None
 
     return bundle
@@ -257,15 +269,18 @@ def classify_all(
         if config.get('use_hybrid', False):
             from feature_engineering import extract_numeric_features
 
-            # Extract numeric features
-            numeric_features, valid_indices = extract_numeric_features(df)
+            # Training-time stats make features independent of the batch;
+            # models trained before they were saved fall back to per-batch.
+            numeric_stats = vectorizer.get('numeric_stats')
+            numeric_features, valid_indices = extract_numeric_features(df, numeric_stats)
             # valid_indices are df.index *labels* (a subset after dropna), so use
             # .loc — matching the df.loc[df_valid.index, ...] writes below. Using
             # .iloc here treats labels as positions and overflows on a gappy index.
             df_valid = df.loc[valid_indices].copy()
 
             # Create hybrid feature matrix with desc and merch vectorizers
-            X = create_hybrid_feature_matrix(df_valid, vectorizer['desc'], vectorizer['merch'], numeric_features)
+            X = create_hybrid_feature_matrix(df_valid, vectorizer['desc'], vectorizer['merch'],
+                                            numeric_features, numeric_stats)
 
             # Predict on valid rows only
             predictions = classifier.predict(X)
@@ -330,7 +345,7 @@ def classify_all(
         except Exception as e:
             # Never let the trust layer break classification; fall back to
             # review-everything behavior for model rows.
-            print(f"   [agreement layer skipped: {type(e).__name__}: {e}]")
+            logger.warning("Agreement layer skipped: %s: %s", type(e).__name__, e)
 
     if rules:
         ruled = apply_merchant_rules(df, rules)
@@ -339,7 +354,9 @@ def classify_all(
         df.loc[matched, 'confidence'] = 1.0
         df.loc[matched, 'label_source'] = 'rule'
 
-    df = apply_description_overrides(df)
+    # Merchant rules are the user's (or curated) knowledge about a specific
+    # merchant; generic description keywords must not overwrite them.
+    df = apply_description_overrides(df, protect=df['label_source'] == 'rule')
     df = normalize_categories(df, valid_categories=valid_categories, catch_all=catch_all)
 
     # Routing: rules/overrides trusted; model predictions auto-apply only via

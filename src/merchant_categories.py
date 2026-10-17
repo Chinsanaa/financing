@@ -16,6 +16,7 @@ tests/test_merchant_rules.py for regression coverage of known-risky cases).
 from __future__ import annotations
 
 import csv
+import re
 from pathlib import Path
 
 # (pattern, category) — specific patterns before broad substrings
@@ -786,7 +787,7 @@ NYU_SERVICE_DESCRIPTION_MARKERS = (
 # Module-level so the tuples aren't rebuilt on every special_category() call.
 DESCRIPTION_KEYWORD_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("Eating Out", ("noodle", "ramen", "sushi", "burger", "pizza", "food order",
-                    "takeout", "meal", "dine", "餐", "面", "烧烤", "火锅", "粥", "外卖")),
+                    "takeout", "meal", "dine", "餐", "面馆", "拉面", "面条", "烧烤", "火锅", "粥", "外卖")),
     ("Groceries", ("vegetable", "fruit", "produce", "grocery", "生鲜", "蔬菜",
                    "水果", "食材", "日用品", "菜", "批发")),
     ("Shopping", ("shoe", "cloth", "dress", "gadget", "book", "laptop",
@@ -823,6 +824,24 @@ DESCRIPTION_KEYWORD_RULES: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
+def _compile_keyword_pattern(keywords: tuple[str, ...]) -> re.Pattern:
+    """One regex per category. ASCII keywords must start at a word boundary
+    so "rent" no longer fires on "current", "fund" on "refund", "book" on
+    "facebook" or "ride" on "override"; plurals ("noodles") still match.
+    CJK keywords stay plain substrings (Chinese has no word spaces)."""
+    parts = []
+    for kw in keywords:
+        escaped = re.escape(kw)
+        parts.append(rf"(?<![a-z0-9]){escaped}" if kw.isascii() else escaped)
+    return re.compile("|".join(parts))
+
+
+_DESCRIPTION_KEYWORD_PATTERNS = [
+    (category, _compile_keyword_pattern(keywords))
+    for category, keywords in DESCRIPTION_KEYWORD_RULES
+]
+
+
 def special_category(merchant: str, description: str) -> str | None:
     """Per-row category override from merchant + description. None if no rule."""
     merchant = str(merchant or "").strip()
@@ -839,8 +858,8 @@ def special_category(merchant: str, description: str) -> str | None:
 
     # Description-based disambiguation for unseen merchants.
     # High-confidence product/action keywords that clearly indicate a category.
-    for category, keywords in DESCRIPTION_KEYWORD_RULES:
-        if any(kw in description_lower for kw in keywords):
+    for category, pattern in _DESCRIPTION_KEYWORD_PATTERNS:
+        if pattern.search(description_lower):
             return category
 
     return None
