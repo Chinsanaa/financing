@@ -4,7 +4,6 @@ Calls src/retrain.py::retrain_model() with user's labeled transactions
 and user's categories. Model artifacts uploaded to Supabase Storage.
 """
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
-from pydantic import BaseModel
 from pathlib import Path
 from config import supabase_client
 from db import fetch_all_async, run_query
@@ -30,11 +29,6 @@ STALE_RUNNING_THRESHOLD = timedelta(minutes=30)
 router = APIRouter()
 
 from src.retrain import retrain_model
-
-
-class TrainRequest(BaseModel):
-    """Trigger training on user's labeled data."""
-    pass
 
 
 @router.post("/retrain")

@@ -291,19 +291,3 @@ def create_hybrid_feature_matrix(
         X_combined = sparse.hstack([X_combined, X_numeric])
 
     return X_combined.astype(np.float32)
-
-
-if __name__ == '__main__':
-    print("Feature Engineering Module")
-    print("=" * 70)
-    print("\nThis module provides:")
-    print("  - extract_numeric_features(): Extract hour, day, amount, merchant frequency")
-    print("  - clean_description_only(): Description text without merchant")
-    print("  - clean_merchant_only(): Merchant name only")
-    print("  - build_hybrid_vectorizers(): Separate TF-IDF for desc (1.0x) + merchant (0.3x)")
-    print("  - create_hybrid_feature_matrix(): Combine all into one matrix")
-    print("\nUsage:")
-    print("  from feature_engineering import create_hybrid_feature_matrix, ...")
-    print("  numeric_features, _ = extract_numeric_features(df)")
-    print("  desc_vec, merch_vec = build_hybrid_vectorizers(desc_texts, merch_texts)")
-    print("  X = create_hybrid_feature_matrix(df, desc_vec, merch_vec, numeric_features)")

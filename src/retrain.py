@@ -17,7 +17,7 @@ from feature_engineering import (
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 # Enable/disable hybrid semantic-weighted feature engineering
 USE_HYBRID_FEATURES = True

@@ -13,23 +13,19 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
 from segment import clean_text, vectorize
-
-logger = logging.getLogger(__name__)
-from label import load_merchant_rules, apply_merchant_rules
+from label import apply_merchant_rules
 from merchant_categories import special_category
 from paths import (
     CLASSIFIER,
     ENSEMBLE_CONFIG,
-    MERCHANT_RULES,
-    NEEDS_REVIEW,
     PROCESSED,
     SEMANTIC_CALIBRATOR,
     TFIDF_CALIBRATOR,
-    TRANSACTIONS,
-    TRANSACTIONS_CLASSIFIED,
     VECTORIZER,
 )
 from feature_engineering import create_hybrid_feature_matrix
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_categories(df: pd.DataFrame, valid_categories: list = None, catch_all: str = 'Other') -> pd.DataFrame:
@@ -363,60 +359,3 @@ def classify_all(
     # the calibrated-agreement gate above; everything else goes to review.
     df['needs_review'] = ~df['label_source'].isin(['rule', 'override', 'model_agreed'])
     return df
-
-
-def save_classification_outputs(df_classified: pd.DataFrame) -> None:
-    """Write classified transactions and manual-review queue."""
-    PROCESSED.mkdir(parents=True, exist_ok=True)
-    df_classified.to_csv(TRANSACTIONS_CLASSIFIED, index=False)
-
-    needs_review = df_classified[df_classified['needs_review']]
-    if len(needs_review) > 0:
-        needs_review.to_csv(NEEDS_REVIEW, index=False)
-    elif NEEDS_REVIEW.exists():
-        NEEDS_REVIEW.unlink()
-
-
-if __name__ == '__main__':
-    print("=" * 70)
-    print("STAGE 6: CLASSIFY ALL TRANSACTIONS")
-    print("=" * 70)
-
-    df = pd.read_csv(TRANSACTIONS)
-    bundle = load_model_bundle()
-    rules = load_merchant_rules(str(MERCHANT_RULES))
-
-    print(f"\n1. Loaded {len(df)} transactions")
-    if bundle.classifier is not None:
-        feature_type = "HYBRID (semantic-weighted)" if bundle.config.get('use_hybrid', False) else "LEGACY (combined text)"
-        print(f"2. Loaded trained classifier ({feature_type})")
-        if bundle.agreement_ready:
-            print(f"   Graduated trust ON — semantic model ({bundle.semantic['encoder_kind']}) "
-                  f"+ calibrated agreement, threshold {bundle.ensemble['threshold']}")
-        else:
-            print("   Graduated trust OFF — all model predictions route to review")
-    else:
-        print("2. No classifier found — rules-only mode (run bootstrap.py to train)")
-    print(f"3. Loaded {len(rules)} merchant rules")
-
-    print("\n4. Classifying all transactions...")
-    df_classified = classify_all(df, rules=rules, bundle=bundle)
-
-    print("\n4. CLASSIFICATION RESULTS:")
-    for cat, count in df_classified['category'].value_counts().items():
-        avg_conf = df_classified[df_classified['category'] == cat]['confidence'].mean()
-        print(f"   {cat:30s}: {count:3d} transactions (avg confidence: {avg_conf:.1%})")
-
-    needs_review = df_classified[df_classified['needs_review']]
-    rule_covered = (~df_classified['needs_review']).sum()
-    print(f"\n4b. TRUSTED (rule/override): {rule_covered}  |  "
-          f"MODEL SUGGESTIONS ROUTED TO REVIEW (unseen merchants): {len(needs_review)}")
-
-    print(f"\n5. Mean confidence: {df_classified['confidence'].mean():.1%}")
-
-    save_classification_outputs(df_classified)
-    print(f"\n6. Saved to {TRANSACTIONS_CLASSIFIED}")
-
-    print(f"\n{'=' * 70}")
-    print(f"Stage 6 Complete! All {len(df_classified)} transactions classified")
-    print("=" * 70)

@@ -1,12 +1,11 @@
 """FastAPI backend for financing SaaS - multi-tenant transaction classification."""
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import jwt
-from typing import Optional
 from slowapi.errors import RateLimitExceeded
 
 from config import settings, supabase_client

@@ -46,15 +46,3 @@ CATEGORY_BUCKET = {
     'Other': 'Want',
     'Investments': 'Savings',
 }
-
-# All categories shown during interactive labeling
-LABEL_CATEGORIES = ML_CATEGORIES
-
-# Dashboard + budget buckets
-ACTIVE_CATEGORIES = ML_CATEGORIES
-
-FORECAST_MONTHS = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
-
-# Minimum labeled rows before bootstrap will train a classifier
-MIN_TRAINING_SAMPLES = 80
-MIN_SAMPLES_PER_CLASS = 2

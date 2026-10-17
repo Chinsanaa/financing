@@ -1,13 +1,14 @@
 """Merchant pattern → spending category rules for the classifier pipeline.
 
-Order matters for export: more specific patterns should appear before broader
-ones in MERCHANT_CATEGORY_RULES. apply_merchant_rules() also sorts by length.
+MERCHANT_CATEGORY_RULES is seeded into the merchant_rules table as the global
+rule set (supabase/migrations/*seed_rules*). apply_merchant_rules() sorts by
+length.
 
 Precedence at match time (see label._match_merchant): patterns are tried
 longest-first, so a more specific/longer pattern always beats a shorter,
 broader one for the same merchant string. For two patterns of *equal*
-length, the sort is stable, so whichever one appears first in this file (in
-MERCHANT_CATEGORY_RULES, then LOCAL_MERCHANT_RULES) wins — a same-length
+length, the sort is stable, so whichever one appears first in
+MERCHANT_CATEGORY_RULES wins — a same-length
 collision is resolved by list position, not by any explicit rule. Keep this
 in mind when adding new short/generic patterns; prefer patterns specific
 enough that same-length collisions can't happen at all (see
@@ -15,9 +16,7 @@ tests/test_merchant_rules.py for regression coverage of known-risky cases).
 """
 from __future__ import annotations
 
-import csv
 import re
-from pathlib import Path
 
 # (pattern, category) — specific patterns before broad substrings
 MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
@@ -696,84 +695,6 @@ MERCHANT_CATEGORY_RULES: list[tuple[str, str]] = [
     # already cover the realistic domestic cases.
 ]
 
-# User-specific / local merchants (override or supplement chain rules)
-LOCAL_MERCHANT_RULES: list[tuple[str, str]] = [
-    # NYU Shanghai split by description in special_category() — no blanket rule here
-    ("上海蕤盛工贸", "Transportation"),  # Shanghai metro (~¥5 rides)
-    ("上海都畅数字技术有限公司", "Transportation"),  # metro payment tech
-
-    # --- Eating Out (from manual review) ---
-    ("济明路蘭州牛肉面", "Eating Out"),
-    ("美淑家", "Eating Out"),
-    ("饿梨酱", "Eating Out"),
-    ("YogurtDay", "Eating Out"),
-    ("马永胜牛肉面", "Eating Out"),
-    ("豹喵酒吧", "Eating Out"),
-    ("橘柚梧桐", "Eating Out"),
-    ("Holy Bagel", "Eating Out"),
-    ("Habibi", "Eating Out"),
-    ("13DE MARZO", "Eating Out"),
-    ("AMINO AMIGO", "Eating Out"),
-    ("LA BARAKA UV", "Eating Out"),
-    ("鹈鹕镇大王", "Eating Out"),
-    ("上海英和企业管理有限公司", "Eating Out"),
-    ("floating kitchen", "Eating Out"),
-
-    # --- Groceries (from manual review) ---
-    ("高青西门市", "Groceries"),
-    ("K-MART", "Groceries"),
-    ("上海香雪海国际贸易有限公司", "Groceries"),
-    ("上海优悠生活商业管理有限公司", "Groceries"),
-
-    # --- Shopping (from manual review) ---
-    ("JUNGLEplus", "Shopping"),
-    ("上海谱墨品牌管理有限公司", "Shopping"),
-    ("ws**1", "Shopping"),
-    ("**店", "Shopping"),  # masked Taobao stores
-
-    # --- Transfers & Gifts (from manual review - personal names & P2P transfers) ---
-    ("Sydney Yuen", "Transfers & Gifts"),
-    ("Evie", "Transfers & Gifts"),
-    ("Tara", "Transfers & Gifts"),
-    ("sydney", "Transfers & Gifts"),
-    ("Steve", "Transfers & Gifts"),
-    ("dudu", "Transfers & Gifts"),
-    ("enni", "Transfers & Gifts"),
-    ("urnma", "Transfers & Gifts"),
-    ("UYANGA", "Transfers & Gifts"),
-    ("Margad", "Transfers & Gifts"),
-    ("O. A. OCHIR", "Transfers & Gifts"),
-    ("Yesui Battogtokh", "Transfers & Gifts"),
-    ("Munkh-Erdene", "Transfers & Gifts"),
-    ("ERDENE", "Transfers & Gifts"),
-    ("Tselmeg Bayarjargal", "Transfers & Gifts"),
-    ("Tsolmon Khurelbaatar", "Transfers & Gifts"),
-    ("Ujin", "Transfers & Gifts"),
-    ("ujin", "Transfers & Gifts"),
-    ("Uranmaa", "Transfers & Gifts"),
-    ("Udval Lkhagvadorj", "Transfers & Gifts"),
-    # "Ari" deliberately excluded: doubles as a common substring (e.g. "Mariana",
-    # "Aristocrat") — too broad to trust as a bare, never-reviewed rule.
-    ("Anar", "Transfers & Gifts"),
-    ("E. DULGUUN", "Transfers & Gifts"),
-    ("B. E. DULGUUN", "Transfers & Gifts"),
-    ("P2P Transfer", "Transfers & Gifts"),
-    ("River", "Transfers & Gifts"),
-    ("S. MISHEEL", "Transfers & Gifts"),
-    ("Laine", "Transfers & Gifts"),
-    ("M.i", "Transfers & Gifts"),
-    ("Misheel.S", "Transfers & Gifts"),
-    ("Erkhkhongor", "Transfers & Gifts"),
-    ("G. A. ERDENE", "Transfers & Gifts"),
-    ("ODAY", "Transfers & Gifts"),
-    ("Naransuvd", "Transfers & Gifts"),
-    ("Yugi", "Transfers & Gifts"),
-    ("murun", "Transfers & Gifts"),
-    # "Hi" and "alex" deliberately excluded: common English greeting/word and a
-    # substring of unrelated brand names (e.g. "Alexander McQueen", "Alex's Pizza")
-    # — too broad to trust as a bare, never-reviewed rule.
-]
-
 # NYU Shanghai: cafeteria POS charges vs campus admin fees (match on description).
 NYU_SHANGHAI_MERCHANT = "上海纽约大学"
 NYU_SERVICE_DESCRIPTION_MARKERS = (
@@ -863,43 +784,3 @@ def special_category(merchant: str, description: str) -> str | None:
             return category
 
     return None
-
-
-def all_merchant_rules() -> list[tuple[str, str]]:
-    """Chain rules first; local rules override category for the same pattern."""
-    merged: dict[str, str] = {}
-    order: list[str] = []
-    for pattern, category in MERCHANT_CATEGORY_RULES:
-        if pattern not in merged:
-            order.append(pattern)
-        merged[pattern] = category
-    for pattern, category in LOCAL_MERCHANT_RULES:
-        if pattern not in merged:
-            order.append(pattern)
-        merged[pattern] = category
-    return [(pattern, merged[pattern]) for pattern in order]
-
-
-def rules_as_dict() -> dict[str, str]:
-    """Lowercase pattern → category for label.apply_merchant_rules."""
-    return {p.lower(): c for p, c in all_merchant_rules()}
-
-
-def write_rules_csv(path: Path) -> int:
-    """Write rules CSV; returns row count."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rows = all_merchant_rules()
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["merchant_pattern", "category"])
-        writer.writerows(rows)
-    return len(rows)
-
-
-if __name__ == "__main__":
-    root = Path(__file__).resolve().parent.parent
-    starter = root / "data" / "templates" / "merchant_rules_starter.csv"
-    expanded = root / "data" / "labeled" / "merchant_rules_expanded.csv"
-    n = write_rules_csv(starter)
-    write_rules_csv(expanded)
-    print(f"Wrote {n} rules to {starter.name} and merchant_rules_expanded.csv")

@@ -738,12 +738,11 @@ async def get_rule_503020(request: Request, month: Optional[str] = None):
             cats.sort(key=lambda c: c["amount"], reverse=True)
 
         def _bucket(name: str, target_pct: int) -> dict:
-            key = {"Need": "Need", "Want": "Want", "Savings": "Savings"}[name]
             return {
                 "target_pct": target_pct,
                 "target_amount": round(income * target_pct / 100, 2) if income > 0 else None,
-                "spent": round(bucket_totals[key], 2),
-                "categories": bucket_categories[key],
+                "spent": round(bucket_totals[name], 2),
+                "categories": bucket_categories[name],
             }
 
         return {
@@ -1409,8 +1408,7 @@ async def export_transactions(request: Request):
     from io import BytesIO
     from fastapi.responses import StreamingResponse
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from datetime import datetime
+    from openpyxl.styles import Font, PatternFill
 
     user_id = request.state.user_id
 

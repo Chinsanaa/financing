@@ -42,7 +42,6 @@ from calibration import (
     fit_top_label_calibrator,
     apply_calibrator,
     expected_calibration_error,
-    reliability_table,
 )
 from feature_engineering import (
     extract_numeric_features,

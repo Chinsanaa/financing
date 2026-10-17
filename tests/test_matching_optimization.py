@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'src'))
 
 from label import apply_merchant_rules  # noqa: E402
 from classify import apply_description_overrides  # noqa: E402
-from merchant_categories import rules_as_dict, special_category  # noqa: E402
+from merchant_categories import MERCHANT_CATEGORY_RULES, special_category  # noqa: E402
 
 
 # --- Reference (original) implementations -----------------------------------
@@ -72,7 +72,7 @@ def _old_apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
 
 @pytest.fixture
 def rules():
-    return rules_as_dict()
+    return {p.lower(): c for p, c in MERCHANT_CATEGORY_RULES}
 
 
 @pytest.fixture
