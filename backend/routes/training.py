@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from pathlib import Path
 from config import supabase_client
-from db import run_query
+from db import fetch_all_async, run_query
 from errors import internal_error, logger
 from limiter import limiter
 from datetime import datetime, timedelta, timezone
@@ -55,7 +55,8 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
         # Fetch user's labeled transactions, joining categories for the
         # category *name* (retrain_model works on category names, but
         # transactions only store category_id)
-        response = await run_query(
+        # Paged so users with >1,000 labels train on all of them.
+        labeled_rows = await fetch_all_async(
             lambda: supabase_client.table("transactions")
             .select("*, categories(name)")
             .eq("user_id", user_id)
@@ -63,12 +64,12 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
             # is_manually_labeled but loses its category — not training data.
             .eq("kind", "expense")
             .eq("is_manually_labeled", True)
-            .execute()
+            .order("id")
         )
-        if not response.data:
+        if not labeled_rows:
             raise HTTPException(status_code=400, detail="No labeled transactions to train on")
 
-        df_labeled = pd.DataFrame(response.data)
+        df_labeled = pd.DataFrame(labeled_rows)
         df_labeled['category'] = df_labeled['categories'].apply(
             lambda c: c['name'] if c else None
         )

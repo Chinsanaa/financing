@@ -338,6 +338,9 @@ async def get_trends(request: Request, days: int = 30, granularity: str = "day",
     string format differs (day vs month).
     """
     user_id = request.state.user_id
+    # Clamp so absurd values can't overflow datetime math into a 500.
+    days = max(1, min(days, 3650))
+    months = max(1, min(months, 120))
 
     try:
         if granularity == "month":

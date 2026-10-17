@@ -66,12 +66,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     PUBLIC_PATHS = frozenset({
         "/", "/health", "/health/deep", "/docs", "/redoc", "/openapi.json",
-        "/auth/signup", "/auth/login", "/auth/resolve-identifier",
+        "/auth/resolve-identifier",
     })
 
     async def dispatch(self, request: Request, call_next):
         # Skip auth for health check, docs, and public auth routes
-        # (signup/login/resolve-identifier happen before a user has a
+        # (resolve-identifier happens before a user has a
         # token to send). CORS preflights carry no Authorization header
         # either.
         if request.url.path in self.PUBLIC_PATHS or request.method == "OPTIONS":

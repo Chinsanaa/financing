@@ -9,7 +9,7 @@ is scoped to kind='expense', so labeling/splitting/accepting an income or
 transfer row answers 404 "Transaction not found" — change its kind first
 (PATCH /transactions/{id}/kind).
 """
-from typing import List, Optional
+from typing import List, Literal, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 from alerts import check_budget_alerts
@@ -26,7 +26,9 @@ MAX_BULK_LABEL_TRANSACTIONS = 500
 class LabelRequest(BaseModel):
     """Request to label/recategorize a transaction."""
     category_id: str
-    label_source: str = "override"
+    # Only "override" is client-settable; other sources (rule, llm, …) are
+    # set server-side and must not be spoofable.
+    label_source: Literal["override"] = "override"
 
 
 class BulkLabelRequest(BaseModel):

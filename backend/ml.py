@@ -25,14 +25,17 @@ classify anything. Now:
 Model bundles are cached in-process per (user_id, model_run_id); a new
 training run invalidates the cache via `invalidate_user_bundle`.
 """
+import shutil
 import tempfile
 import threading
+import weakref
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
 from config import settings, supabase_client
+from db import fetch_all
 from errors import logger
 
 from src.classify import classify_all, load_model_bundle, ModelBundle  # noqa: E402
@@ -172,19 +175,26 @@ def get_user_bundle(user_id: str) -> Optional[ModelBundle]:
             content = storage.download(f"{prefix}/{fname}")
             paths[key].write_bytes(content)
             downloaded += 1
-        except Exception:
+        except Exception as e:
             # Optional artifact (e.g. no semantic model) — bundle degrades
             # gracefully, exactly like the CLI path.
+            logger.debug("Artifact %s missing for user %s run %s: %s", fname, user_id, run_id, e)
             continue
 
     if downloaded == 0:
         logger.warning("No artifacts found in Storage for user %s run %s", user_id, run_id)
+        shutil.rmtree(temp_dir, ignore_errors=True)
         return None
 
     bundle = load_model_bundle(paths)
     if bundle.classifier is None:
         logger.warning("Artifacts for user %s run %s did not contain a usable classifier", user_id, run_id)
+        shutil.rmtree(temp_dir, ignore_errors=True)
         return None
+    # Delete the temp dir once nothing references the bundle any more
+    # (evicted/invalidated and no in-flight classification holds it), so
+    # retrains don't leak a directory per run.
+    weakref.finalize(bundle, shutil.rmtree, temp_dir, True)
 
     with _cache_lock:
         if len(_bundle_cache) >= _MAX_CACHED_USERS:
@@ -196,15 +206,17 @@ def get_user_bundle(user_id: str) -> Optional[ModelBundle]:
 def _fetch_rules(user_id: str) -> dict:
     """Global + user merchant rules as {pattern: category_name}. User rules
     override global ones on pattern collisions."""
-    resp = (
-        supabase_client.table("merchant_rules")
+    # Paged: ~640 global rules plus one per learned merchant can pass
+    # PostgREST's 1,000-row cap, which would silently drop rules.
+    rows = fetch_all(
+        lambda: supabase_client.table("merchant_rules")
         .select("user_id, merchant_pattern, category_name")
         .or_(f"user_id.is.null,user_id.eq.{user_id}")
-        .execute()
+        .order("id")
     )
     rules: dict = {}
     user_patterns = set()
-    for row in resp.data or []:
+    for row in rows:
         pattern = str(row["merchant_pattern"]).strip().lower()
         if row["user_id"] is not None:
             rules[pattern] = row["category_name"]
@@ -285,8 +297,6 @@ def classify_user_transactions(user_id: str) -> int:
 
 
 def _classify_user_transactions(user_id: str) -> int:
-    from db import fetch_all
-
     rows = fetch_all(
         lambda: supabase_client.table("transactions")
         .select("id, timestamp, merchant, description, amount")
