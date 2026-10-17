@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useDismiss } from '@/utils/useDismiss';
 import { AnimatePresence, m } from 'framer-motion';
 import { LogOut, Settings } from 'lucide-react';
 import { setTheme, useIsDark } from '@/utils/theme';
@@ -14,21 +15,10 @@ import Segmented from './Segmented';
 export default function AccountMenu({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
   const dark = useIsDark();
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  useDismiss(rootRef, open, closeMenu);
 
   const initial = (name || '?').charAt(0).toUpperCase();
   const item =

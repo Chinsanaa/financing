@@ -17,6 +17,8 @@ import Switch from '@/components/ui/Switch';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import PasswordChecklist, { passwordMeetsRequirements } from '@/components/auth/PasswordChecklist';
 import PasswordInput from '@/components/auth/PasswordInput';
+import { errorDetail } from '@/utils/errors';
+import { downloadTransactionsXlsx } from '@/utils/download';
 
 interface Profile {
   id: string;
@@ -33,12 +35,6 @@ interface Profile {
 }
 
 /** FastAPI error detail → one readable line (422s may carry a list). */
-function errorDetail(err: any, fallback: string): string {
-  const detail = err?.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) return detail.map((d: any) => d?.msg).filter(Boolean).join('; ') || fallback;
-  return fallback;
-}
 
 export default function SettingsClient() {
   const router = useRouter();
@@ -109,7 +105,7 @@ export default function SettingsClient() {
         setHomeCurrency(res.data.profile.home_currency || '');
         setSavedHomeCurrency(res.data.profile.home_currency || '');
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load profile');
+        setError(errorDetail(err, 'Failed to load profile'));
       } finally {
         setLoading(false);
       }
@@ -149,17 +145,9 @@ export default function SettingsClient() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const response = await api.export.xlsx();
-      const url = URL.createObjectURL(response.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download =
-        response.headers['content-disposition']?.split('filename=')[1]?.replace(/"/g, '') ||
-        'transactions.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadTransactionsXlsx();
     } catch (err) {
-      setError('Failed to export data');
+      setError(errorDetail(err, 'Failed to export data'));
     } finally {
       setExporting(false);
     }
@@ -179,7 +167,7 @@ export default function SettingsClient() {
       });
       setAlertSuccess('Notification preferences saved');
     } catch (err: any) {
-      setAlertError(err.response?.data?.detail || 'Failed to save notification preferences');
+      setAlertError(errorDetail(err, 'Failed to save notification preferences'));
     } finally {
       setAlertSaving(false);
     }
@@ -248,7 +236,7 @@ export default function SettingsClient() {
       await supabase.auth.signOut();
       router.push('/');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete account');
+      setError(errorDetail(err, 'Failed to delete account'));
       setDeleting(false);
       setDeleteConfirm(false);
     }

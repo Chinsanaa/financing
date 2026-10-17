@@ -13,6 +13,7 @@ import CashFlowTeaser from './CashFlowTeaser';
 import PrivacyPromise from './PrivacyPromise';
 import Faq from './Faq';
 import SmoothScroll from './SmoothScroll';
+import { WRAP } from '@/components/layout/wrap';
 
 /**
  * Landing (design system v5, "Ledger"). One flat page, sections separated
@@ -21,7 +22,6 @@ import SmoothScroll from './SmoothScroll';
  * are always labeled. The one stamp on the page lives in LiveDemo.
  */
 
-const WRAP = 'mx-auto max-w-6xl px-4 sm:px-6 lg:px-8';
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 const SIGNUP = '/auth?mode=signup';
 

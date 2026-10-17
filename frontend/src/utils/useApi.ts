@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 import { readCached, writeCached, dropCached } from './apiCache';
+import { errorDetail } from '@/utils/errors';
 
 /**
  * Tiny stale-while-revalidate data hook (no external deps).
@@ -65,7 +66,7 @@ export function useApi<T>(path: string | null) {
         setData((await fetchShared(path)) as T);
         setError('');
       } catch (err: any) {
-        setError(err?.response?.data?.detail || 'Failed to load data');
+        setError(errorDetail(err, 'Failed to load data'));
       } finally {
         setLoading(false);
       }

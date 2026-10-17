@@ -15,6 +15,7 @@ import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonCard } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/format';
+import { errorDetail } from '@/utils/errors';
 
 interface Transaction {
   id: string;
@@ -152,7 +153,7 @@ export default function LabelTab() {
       await api.classifyTx.accept(tx.id);
       await stampThenRemove(tx, tx.suggested_category || 'Labeled', viaKey);
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || 'Failed to accept classification');
+      setActionError(errorDetail(err, 'Failed to accept classification'));
     } finally {
       setActing(false);
     }
@@ -169,7 +170,7 @@ export default function LabelTab() {
       await stampThenRemove(tx, categories.find((c) => c.id === categoryId)?.name || 'Labeled', viaKey);
       advanceTour('label'); // a hand label (rule-labeled rows never count)
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || 'Failed to label transaction');
+      setActionError(errorDetail(err, 'Failed to label transaction'));
     } finally {
       setActing(false);
     }

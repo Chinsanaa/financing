@@ -9,6 +9,7 @@ import Card from '@/components/ui/Card';
 import { Alert } from '@/components/ui-feedback';
 import UploadTab from './UploadTab';
 import { CURRENCY_SYMBOL } from '@/utils/format';
+import { errorDetail } from '@/utils/errors';
 
 export default function UploadWithIncomeTab() {
   const [income, setIncome] = useState<string>('');
@@ -46,7 +47,7 @@ export default function UploadWithIncomeTab() {
       });
       toast.success('Income saved', { description: 'Budgets and savings now use it.' });
     } catch (err: any) {
-      setIncomeError(err.response?.data?.detail || 'Failed to save income');
+      setIncomeError(errorDetail(err, 'Failed to save income'));
     } finally {
       setSavingIncome(false);
     }

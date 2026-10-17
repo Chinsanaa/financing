@@ -16,6 +16,7 @@ import Stamp from '@/components/ui/Stamp';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
+import { errorDetail } from '@/utils/errors';
 
 // Mirrors the model_runs table columns
 interface TrainingRun {
@@ -107,7 +108,7 @@ export default function TrainingTab() {
         }
       }, 5000);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to start training');
+      setError(errorDetail(err, 'Failed to start training'));
       setTraining(false);
     }
   };

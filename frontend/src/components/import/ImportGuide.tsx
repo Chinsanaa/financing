@@ -5,8 +5,7 @@ import AlipaySteps from './AlipaySteps';
 import BankCsvSteps from './BankCsvSteps';
 import GuideSwitcher from './GuideSwitcher';
 import WeChatSteps from './WeChatSteps';
-
-const WRAP = 'mx-auto max-w-6xl px-4 sm:px-6 lg:px-8';
+import { WRAP } from '@/components/layout/wrap';
 
 const AT_A_GLANCE: { label: string; alipay: string; wechat: string; bank: string }[] = [
   { label: 'Arrives as', alipay: '.zip by email (.csv inside)', wechat: '.zip by email (.xlsx inside)', bank: '.csv or .xlsx download' },
