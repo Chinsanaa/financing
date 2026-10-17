@@ -8,9 +8,7 @@ from config import supabase_client
 from db import run_query
 from mailer import send_alert_email
 from errors import logger
-from routes.dashboard import _budget_crossings, _month_bounds
-
-DEFAULT_ALERT_THRESHOLD_PCT = 80
+from budget import _budget_crossings, _month_bounds, alert_threshold_pct
 
 
 async def check_budget_alerts(user_id: str) -> None:
@@ -38,7 +36,7 @@ async def check_budget_alerts(user_id: str) -> None:
         inapp_enabled = profile_row.get("budget_inapp_enabled", True)
         if not email_enabled and not inapp_enabled:
             return
-        threshold_pct = float(profile_row.get("alert_threshold_pct") or DEFAULT_ALERT_THRESHOLD_PCT)
+        threshold_pct = alert_threshold_pct(profile_row)
 
         crossings = await _budget_crossings(user_id, threshold_pct)
         if not crossings:

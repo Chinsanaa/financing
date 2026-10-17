@@ -52,3 +52,13 @@ def test_fetch_rules_user_rules_override_global(monkeypatch, fake_db):
     rules = ml._fetch_rules(USER_A)
     assert rules["starbucks"] == "Work"
     assert "didi" not in rules
+
+
+def test_alert_threshold_zero_is_respected_everywhere():
+    # alerts.py used `or 80`, turning an explicit 0 into 80 for emails while
+    # the in-app path kept 0. Both now share budget.alert_threshold_pct.
+    from budget import alert_threshold_pct
+
+    assert alert_threshold_pct({"alert_threshold_pct": 0}) == 0
+    assert alert_threshold_pct({"alert_threshold_pct": None}) == 80
+    assert alert_threshold_pct(None) == 80

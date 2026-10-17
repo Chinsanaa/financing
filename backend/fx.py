@@ -29,10 +29,9 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 import httpx
-from supabase import Client, create_client
 
-from config import settings, supabase_client
-from db import _call_with_retry, fetch_all, fetch_all_async, run_query
+from config import supabase_client
+from db import _call_with_retry, fetch_all, fetch_all_async, new_client as _new_client, run_query
 from errors import logger
 
 BASE = "CNY"
@@ -244,12 +243,6 @@ async def get_home_currency(user_id: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Background: Frankfurter fetch + upsert
 # ---------------------------------------------------------------------------
-
-def _new_client() -> Client:
-    """A Supabase client owned by one background thread (shares nothing with
-    the request path's client — see translations._new_client)."""
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
 
 def _series_url(api_base: str, quote: str, start: date, end: date) -> str:
     api_base = api_base.rstrip("/")

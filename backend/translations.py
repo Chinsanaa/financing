@@ -17,10 +17,8 @@ import threading
 import time
 from typing import Callable, Dict, Iterable, Optional
 
-from supabase import Client, create_client
-
-from config import settings, supabase_client
-from db import _call_with_retry, fetch_all
+from config import supabase_client
+from db import _call_with_retry, fetch_all, new_client as _new_client
 from errors import logger
 from src.translate import english_for_storage
 
@@ -61,17 +59,6 @@ LOG_EVERY = 50
 # cheap indexed query).
 PERIODIC_CHECK_SECONDS = 30 * 60
 _last_periodic: Dict[str, float] = {}
-
-
-def _new_client() -> Client:
-    """A Supabase client owned by one worker thread.
-
-    The process-wide `supabase_client` is shared by the request threadpool
-    (several calls at once via asyncio.gather) over one HTTP/2 connection;
-    using it from a long-running background thread too is the prime suspect
-    for the 2026-09-29 hang. A private client shares nothing.
-    """
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 def request_translation(user_id: str) -> bool:

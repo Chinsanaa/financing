@@ -2,6 +2,9 @@
 from typing import Callable, List
 import httpx
 from starlette.concurrency import run_in_threadpool
+from supabase import Client, create_client
+
+from config import settings
 
 PAGE_SIZE = 1000  # PostgREST's default max-rows cap per request
 
@@ -79,3 +82,14 @@ async def fetch_all_async(make_query: Callable, page_size: int = PAGE_SIZE) -> L
         if len(page) < page_size:
             return rows
         offset += page_size
+
+
+def new_client() -> Client:
+    """A Supabase client owned by one background worker thread.
+
+    The process-wide `supabase_client` is shared by the request threadpool
+    over one HTTP/2 connection; using it from a long-running background
+    thread too was the prime suspect for the 2026-09-29 translation hang.
+    A private client shares nothing.
+    """
+    return create_client(settings.supabase_url, settings.supabase_service_role_key)
