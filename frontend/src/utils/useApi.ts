@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { readCached, writeCached, dropCached } from './apiCache';
 import { errorDetail } from '@/utils/errors';
@@ -42,13 +42,18 @@ export function invalidate(prefix = '', opts?: { except?: string[] }): void {
 function fetchShared(path: string): Promise<unknown> {
   const pending = inflight.get(path);
   if (pending) return pending;
-  const request = api
+  const request: Promise<unknown> = api
     .get(path)
     .then((res) => {
-      writeCached(path, res.data);
+      // invalidate() drops a GET that started before a mutation; its
+      // (pre-mutation) result must not repopulate the cache.
+      if (inflight.get(path) === request) writeCached(path, res.data);
       return res.data;
     })
-    .finally(() => inflight.delete(path));
+    .finally(() => {
+      // Only clear our own entry — a newer request may have replaced it.
+      if (inflight.get(path) === request) inflight.delete(path);
+    });
   inflight.set(path, request);
   return request;
 }
@@ -57,18 +62,26 @@ export function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(() => (path ? (readCached(path) as T | undefined) ?? null : null));
   const [loading, setLoading] = useState<boolean>(() => !!path && readCached(path) === undefined);
   const [error, setError] = useState('');
+  // Only the most recent load may update state: paging quickly (Reports) or
+  // switching months (Budget) otherwise let a slow, older response land last
+  // and overwrite the newer one.
+  const latestLoad = useRef(0);
 
   const load = useCallback(
     async (background = false) => {
       if (!path) return;
+      const id = ++latestLoad.current;
       if (!background) setLoading(true);
       try {
-        setData((await fetchShared(path)) as T);
+        const result = (await fetchShared(path)) as T;
+        if (id !== latestLoad.current) return;
+        setData(result);
         setError('');
       } catch (err: any) {
+        if (id !== latestLoad.current) return;
         setError(errorDetail(err, 'Failed to load data'));
       } finally {
-        setLoading(false);
+        if (id === latestLoad.current) setLoading(false);
       }
     },
     [path]

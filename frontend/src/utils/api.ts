@@ -65,10 +65,20 @@ apiClient.interceptors.request.use(async (config) => {
 
 // A 401 means the session is gone (expired refresh token, revoked user) —
 // bounce to the login page instead of leaving every tab in an error state.
-apiClient.interceptors.response.use(undefined, (error) => {
-  if (typeof window !== 'undefined' && error?.response?.status === 401) {
+// Sign out locally FIRST: the middleware only checks that a session cookie
+// exists, so redirecting while it lingers bounced /auth straight back to
+// /dashboard, which 401'd again — an endless reload loop.
+let redirectingToAuth = false;
+apiClient.interceptors.response.use(undefined, async (error) => {
+  if (typeof window !== 'undefined' && error?.response?.status === 401 && !redirectingToAuth) {
+    redirectingToAuth = true;
     clearApiCache();
-    window.location.href = '/auth';
+    try {
+      await supabaseClient.auth.signOut({ scope: 'local' });
+    } catch {
+      // Best effort — middleware also lets /auth?expired=1 through.
+    }
+    window.location.href = '/auth?expired=1';
   }
   return Promise.reject(error);
 });

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/utils/api';
+import { useApi, invalidate } from '@/utils/useApi';
+import type { ProfileResponse } from '@/types/v5';
 import Button from '@/components/ui/Button';
 import { FIELD_CLASSES } from '@/components/ui/Input';
 import Card from '@/components/ui/Card';
@@ -16,21 +18,13 @@ export default function UploadWithIncomeTab() {
   const [savingIncome, setSavingIncome] = useState(false);
   const [incomeError, setIncomeError] = useState('');
 
-  // Fetch current income on mount
+  // Shares useApi's cache with Settings, so both always show the same value.
+  const { data: profileData } = useApi<ProfileResponse>(api.paths.profile);
+  const savedIncome = profileData?.profile?.monthly_income;
+  // Prefill once the saved value arrives, without clobbering what's typed.
   useEffect(() => {
-    const fetchIncome = async () => {
-      try {
-        const res = await api.get('/settings/profile');
-        const monthlyIncome = res.data?.profile?.monthly_income;
-        if (monthlyIncome != null) {
-          setIncome(monthlyIncome.toString());
-        }
-      } catch (err) {
-        console.error('Failed to fetch income:', err);
-      }
-    };
-    fetchIncome();
-  }, []);
+    if (savedIncome != null) setIncome((current) => current || savedIncome.toString());
+  }, [savedIncome]);
 
   const handleSaveIncome = async () => {
     if (!income || parseFloat(income) <= 0) {
@@ -42,9 +36,11 @@ export default function UploadWithIncomeTab() {
     setIncomeError('');
 
     try {
-      await api.patch('/settings/profile', {
-        monthly_income: parseFloat(income),
-      });
+      await api.settings.updateProfile({ monthly_income: parseFloat(income) });
+      // Budget, Savings and 50/30/20 all derive from income: drop their
+      // cached figures so the toast below is actually true.
+      invalidate('/dashboard');
+      invalidate(api.paths.profile);
       toast.success('Income saved', { description: 'Budgets and savings now use it.' });
     } catch (err: any) {
       setIncomeError(errorDetail(err, 'Failed to save income'));

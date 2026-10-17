@@ -67,10 +67,17 @@ export function formatMonthLong(ym: string): string {
   return d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ym;
 }
 
+/** Date-only "YYYY-MM-DD" parses as LOCAL midnight (new Date() would read it
+ *  as UTC and show the previous day west of UTC); anything else as usual. */
+function parseDateValue(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+}
+
 /** Any timestamp -> "yyyy/mm/dd", fixed regardless of browser locale. */
 export function formatDate(value: string | Date | null | undefined): string {
   if (value == null) return '—';
-  const d = value instanceof Date ? value : new Date(value);
+  const d = value instanceof Date ? value : parseDateValue(value);
   if (Number.isNaN(d.getTime())) return '—';
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
