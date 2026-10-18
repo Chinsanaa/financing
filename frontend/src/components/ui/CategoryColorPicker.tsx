@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useDismiss } from '@/utils/useDismiss';
 import { Check, ChevronDown, Palette } from 'lucide-react';
 import {
   CATEGORY_COLORS,
@@ -31,6 +32,7 @@ export default function CategoryColorPicker({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
 
   // Effective key drives the trigger dot even when no color is chosen.
   const effectiveKey = color || hashCategoryKey(categoryName);
@@ -40,21 +42,7 @@ export default function CategoryColorPicker({
   const isDark =
     typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
 
-  useEffect(() => {
-    if (!open) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
+  useDismiss(rootRef, open, closeMenu);
 
   const choose = (key: string | null) => {
     setOpen(false);

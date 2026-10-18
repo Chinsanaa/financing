@@ -141,10 +141,8 @@ p {
    (verified in the built files): its default figures are already lining
    but PROPORTIONAL, so amount columns align at their right edge only, not
    digit-by-digit. Deliberately NOT the body face's tabular figures — its
-   tnum also widens "." and "," to a full figure ("¥12 , 480").
-   `.num-display` is an alias so call sites can use either name. */
-.num,
-.num-display {
+   tnum also widens "." and "," to a full figure ("¥12 , 480"). */
+.num {
   font-family: var(--font-display), Georgia, serif;
   font-variation-settings: 'SOFT' 100, 'WONK' 0;
 }

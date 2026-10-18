@@ -13,6 +13,7 @@ import StatTile, { FactRow } from '@/components/ui/StatTile';
 import RollingNumber from '@/components/ui/RollingNumber';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole } from '@/utils/format';
+import { errorDetail } from '@/utils/errors';
 
 interface SavingsInfo {
   savings_goal_monthly: number;
@@ -44,7 +45,7 @@ export default function SavingsTab() {
       await reload();
       toast.success('Savings goal updated', { description: `${formatCurrencyWhole(value)} per month.` });
     } catch (err: any) {
-      setGoalError(err.response?.data?.detail || 'Failed to save goal');
+      setGoalError(errorDetail(err, 'Failed to save goal'));
     } finally {
       setSavingGoal(false);
     }

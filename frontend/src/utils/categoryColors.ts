@@ -67,6 +67,3 @@ export const toneForKey = (key: string) => `cat-${key}`;
 /** Theme-aware paint for charts/swatches (resolves via the CSS variable). */
 export const chartColorForKey = (key: string) => `rgb(var(--cat-${key}))`;
 
-/** Same paint for chart fills (kept as a separate name for call sites —
- *  since v4 one value per theme serves swatches, bars and fills). */
-export const chartFillColorForKey = (key: string) => `rgb(var(--cat-${key}))`;

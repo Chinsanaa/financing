@@ -16,6 +16,7 @@ import Stamp from '@/components/ui/Stamp';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
+import { errorDetail } from '@/utils/errors';
 
 // Mirrors the model_runs table columns
 interface TrainingRun {
@@ -29,6 +30,9 @@ interface TrainingRun {
   finished_at?: string | null;
 }
 
+const POLL_INTERVAL_MS = 5000;
+const MAX_POLL_MS = 10 * 60 * 1000;
+
 export default function TrainingTab() {
   const { data, setData, loading, error: loadError, reload } = useApi<{ training_runs: TrainingRun[] }>('/training/');
   const [training, setTraining] = useState(false);
@@ -41,6 +45,8 @@ export default function TrainingTab() {
 
   const runs = data?.training_runs || [];
 
+  const mountedRef = useRef(true);
+
   const stopPolling = () => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
@@ -50,7 +56,74 @@ export default function TrainingTab() {
 
   // Clear any live interval when the tab unmounts — the old implementation
   // leaked the interval on tab switches and could stack several of them.
-  useEffect(() => stopPolling, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      stopPolling();
+    };
+  }, []);
+
+  const startPolling = (modelRunId: string) => {
+    stopPolling();
+    // handleRetrain awaits before getting here; if the user left the tab
+    // meanwhile, the unmount cleanup already ran and would never clear this.
+    if (!mountedRef.current) return;
+    const startedAt = Date.now();
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - startedAt > MAX_POLL_MS) {
+        // A run stuck in 'running' must not be polled forever.
+        stopPolling();
+        setTraining(false);
+        setMessage('Training is taking longer than usual. Check back in a few minutes.');
+        return;
+      }
+      try {
+        const statusRes = await api.training.getStatus(modelRunId);
+        const run: TrainingRun = statusRes.data;
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                training_runs: prev.training_runs.map((r) => (r.id === run.id ? run : r)),
+              }
+            : prev
+        );
+
+        if (run.status === 'succeeded' || run.status === 'failed') {
+          stopPolling();
+          setTraining(false);
+          invalidate('/dashboard'); // fresh model reclassified transactions
+          if (run.status === 'succeeded') {
+            setMessage('Training finished — your transactions have been re-classified.');
+            // A real milestone: the run gets stamped (replaces confetti).
+            setJustTrained(run.id);
+            toast.success('Your model is trained', {
+              description:
+                run.cv_accuracy != null
+                  ? `Cross-validated accuracy ${(run.cv_accuracy * 100).toFixed(1)}%.`
+                  : 'Transactions have been re-classified.',
+            });
+          } else {
+            toast.error('Training failed', { description: run.error_message || 'See the run details below.' });
+          }
+        }
+      } catch {
+        // transient polling error, keep trying
+      }
+    }, POLL_INTERVAL_MS);
+  };
+
+  // Coming back to the tab while a run is still going: pick polling back up.
+  const activeRunId = runs.find((r) => r.status === 'queued' || r.status === 'running')?.id;
+  useEffect(() => {
+    if (activeRunId && !pollRef.current) {
+      setTraining(true);
+      startPolling(activeRunId);
+    }
+    // startPolling only touches refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunId]);
 
   const handleRetrain = async () => {
     try {
@@ -60,54 +133,16 @@ export default function TrainingTab() {
       const res = await api.training.retrain();
       const modelRunId: string = res.data.model_run_id;
       setMessage('Training started. Results appear below when it finishes.');
+      // Without an id the poll would hit /training/undefined every 5s (seen
+      // in production); the run list still refreshes on reload. Start the
+      // poll before reloading so the resume effect doesn't start a second.
+      if (modelRunId) startPolling(modelRunId);
+      else setTraining(false);
       await reload(true);
       invalidate('/training');
       advanceTour('train'); // last tour step — the tour ends here
-
-      stopPolling();
-      // Without an id the poll would hit /training/undefined every 5s (seen
-      // in production); the run list above still refreshes on reload.
-      if (!modelRunId) {
-        setTraining(false);
-        return;
-      }
-      pollRef.current = setInterval(async () => {
-        try {
-          const statusRes = await api.training.getStatus(modelRunId);
-          const run: TrainingRun = statusRes.data;
-          setData((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  training_runs: prev.training_runs.map((r) => (r.id === run.id ? run : r)),
-                }
-              : prev
-          );
-
-          if (run.status === 'succeeded' || run.status === 'failed') {
-            stopPolling();
-            setTraining(false);
-            invalidate('/dashboard'); // fresh model reclassified transactions
-            if (run.status === 'succeeded') {
-              setMessage('Training finished — your transactions have been re-classified.');
-              // A real milestone: the run gets stamped (replaces confetti).
-              setJustTrained(run.id);
-              toast.success('Your model is trained', {
-                description:
-                  run.cv_accuracy != null
-                    ? `Cross-validated accuracy ${(run.cv_accuracy * 100).toFixed(1)}%.`
-                    : 'Transactions have been re-classified.',
-              });
-            } else {
-              toast.error('Training failed', { description: run.error_message || 'See the run details below.' });
-            }
-          }
-        } catch {
-          // transient polling error, keep trying
-        }
-      }, 5000);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to start training');
+      setError(errorDetail(err, 'Failed to start training'));
       setTraining(false);
     }
   };

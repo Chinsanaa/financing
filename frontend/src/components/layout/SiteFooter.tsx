@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import FormatBadges from '@/components/brand/FormatBadges';
-
-const WRAP = 'mx-auto max-w-6xl px-4 sm:px-6 lg:px-8';
+import { WRAP } from '@/components/layout/wrap';
 
 const COLUMNS: { title: string; links: [label: string, href: string][] }[] = [
   {

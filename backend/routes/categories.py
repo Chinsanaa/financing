@@ -93,8 +93,11 @@ async def create_category(request: Request, cat: CategoryCreate):
     except HTTPException:
         raise
     except Exception as e:
-        # Most likely a duplicate name (unique constraint)
-        raise HTTPException(status_code=400, detail="Could not create category (does it already exist?)")
+        # A duplicate name trips the unique constraint (Postgres 23505); any
+        # other failure is a real error and must not be masked as a 400.
+        if "23505" in str(e) or "duplicate key" in str(e).lower():
+            raise HTTPException(status_code=400, detail="Could not create category (does it already exist?)")
+        raise internal_error(e, "categories/create")
 
 
 @router.put("/{category_id}")

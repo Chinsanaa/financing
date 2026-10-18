@@ -6,12 +6,11 @@ bank statements are accepted as source 'bank'; uploads that overlap rows
 imported by the v1 parser are reconciled in place (the "re-import" below).
 """
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
-from pydantic import BaseModel
 from typing import Dict, List, Optional
 from pathlib import Path
 from starlette.concurrency import run_in_threadpool
 from config import supabase_client
-from db import run_query
+from db import fetch_all_async, run_query
 from errors import internal_error, logger
 from limiter import limiter
 import pandas as pd
@@ -56,24 +55,31 @@ def _validate_file_content(filename: str, content: bytes) -> None:
     the case that matters: a file claiming to be .csv/.xlsx that's actually
     something else, parsed downstream as if it were trusted.
     """
+    filename = filename.lower()
     if filename.endswith('.xlsx') and not content.startswith(XLSX_MAGIC):
         raise ValueError("File does not look like a valid Excel (.xlsx) file")
     if filename.endswith('.csv') and content.startswith(XLSX_MAGIC):
         raise ValueError("File extension is .csv but content looks like a binary/Excel file")
 
 
-class UploadResponse(BaseModel):
-    upload_id: str
-    file_name: str
-    file_type: str
-    status: str
-    message: str
-    rows_imported: int
-    rows_skipped: int
-    rows_updated: int
-    rows_removed: int
-    reimported: bool
-    rows_by_kind: Dict[str, int]
+def _parse_file(tmp_path: str):
+    """Detect, parse and normalize an uploaded file (sync, CPU-bound).
+
+    Returns (file_type, normalized_df, export_filter). Raises ValueError with
+    a user-facing message when the file can't be used.
+    """
+    file_type = detect_source(tmp_path)
+    if not file_type:
+        raise ValueError(UNDETECTED_MESSAGE)
+
+    df = parse_with_src(tmp_path, file_type)
+    if df is None or len(df) == 0:
+        raise ValueError(f"Could not parse {file_type} file. Check format and encoding.")
+
+    if len(df) > MAX_ROWS:
+        raise ValueError(f"File exceeds {MAX_ROWS} rows limit ({len(df)} rows)")
+
+    return file_type, normalize_schema(df, file_type), detect_export_filter(tmp_path)
 
 
 @router.post("/")
@@ -95,7 +101,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     upload_id = None
     created_upload = False
 
-    if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
+    if not (file.filename or '').lower().endswith(('.csv', '.xlsx')):
         raise HTTPException(status_code=400, detail="Only CSV and Excel files are supported")
 
     tmp_path = None
@@ -140,19 +146,9 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
             tmp.write(content)
             tmp_path = tmp.name
 
-        file_type = detect_source(tmp_path)
-        if not file_type:
-            raise ValueError(UNDETECTED_MESSAGE)
-
-        df = parse_with_src(tmp_path, file_type)
-        if df is None or len(df) == 0:
-            raise ValueError(f"Could not parse {file_type} file. Check format and encoding.")
-
-        if len(df) > MAX_ROWS:
-            raise ValueError(f"File exceeds {MAX_ROWS} rows limit ({len(df)} rows)")
-
-        df_normalized = normalize_schema(df, file_type)
-        export_filter = detect_export_filter(tmp_path)
+        # pandas parsing of up to 10MB is CPU-bound; run it off the event
+        # loop so other users' requests aren't stalled meanwhile.
+        file_type, df_normalized, export_filter = await run_in_threadpool(_parse_file, tmp_path)
 
         # Re-import over parser-v1 rows (steps 2-4 and 6 inside).
         reimport = await reimport_v1_rows(
@@ -444,8 +440,7 @@ async def store_original(user_id: str, file_name: str, content: bytes) -> Option
 
 
 async def create_upload_record(user_id: str, file_name: str, file_type: Optional[str],
-                               storage_path: Optional[str] = None, size_bytes: int = 0,
-                               row_count: int = 0, file_hash: str = None,
+                               size_bytes: int = 0, file_hash: Optional[str] = None,
                                status: str = 'uploaded') -> str:
     """Create an uploads table entry (parser_version = 2).
 
@@ -458,10 +453,10 @@ async def create_upload_record(user_id: str, file_name: str, file_type: Optional
             "user_id": user_id,
             "original_filename": file_name,
             "file_type": file_type,
-            "storage_path": storage_path,
+            "storage_path": None,
             "size_bytes": size_bytes,
             "status": status,
-            "row_count": row_count,
+            "row_count": 0,
             "file_hash": file_hash,
             "parser_version": PARSER_VERSION,
         }).execute()
@@ -565,7 +560,6 @@ async def reimport_v1_rows(user_id: str, df: pd.DataFrame, file_type: str,
     t_max}. Step 5 (insert) and step 6 (parser_version) are done by the
     caller.
     """
-    from db import fetch_all_async
 
     t_min, t_max = _window(df)
     result = {
@@ -719,7 +713,6 @@ async def dedup_new_rows(user_id: str, df: pd.DataFrame, file_type: str):
 
     Returns (df_new, skipped_count).
     """
-    from db import fetch_all_async
 
     if len(df) == 0:
         return df, 0

@@ -111,7 +111,9 @@ export default function DashboardClient() {
   const wizardStepAlias: Record<string, string> = { training: 'train' };
   const resolvedTab = urlTab ? (wizardStepAlias[urlTab] || urlTab) : urlTab;
   const isWizardStep = resolvedTab && wizardSteps.includes(resolvedTab);
-  const activeTab = isWizardStep ? 'transactions-model' : (resolvedTab || 'overview');
+  // An unknown ?tab= (stale link, typo) falls back to Overview, not a blank page.
+  const requestedTab = isWizardStep ? 'transactions-model' : (resolvedTab || 'overview');
+  const activeTab = TAB_SECTION[requestedTab] ? requestedTab : 'overview';
   const activeSection = TAB_SECTION[activeTab];
 
   const goToTab = useCallback(

@@ -2,8 +2,7 @@
 
 import { ReactNode } from 'react';
 import RollingNumber from './RollingNumber';
-import { rateTooltip } from './MoneyPair';
-import { formatHomeCurrency } from '@/utils/format';
+import { formatHomeCurrency, rateTooltip } from '@/utils/format';
 
 /** Home-currency equivalent of a CNY figure (docs/contracts/API_V5.md §0). */
 export interface HomeAmount {

@@ -16,15 +16,6 @@ def has_cjk(text: str) -> bool:
     return bool(_CJK_RE.search(str(text or '')))
 
 
-def _mostly_ascii(text: str) -> bool:
-    """Check if text is mostly ASCII."""
-    try:
-        text.encode('ascii')
-        return True
-    except UnicodeEncodeError:
-        return False
-
-
 GOOGLE_TIMEOUT_SECONDS = 10
 
 

@@ -59,6 +59,8 @@ export default function AuthClient() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  // Set by the API client when the backend rejects the session (utils/api.ts).
+  const sessionExpired = searchParams.get('expired') === '1';
 
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutCount, setLockoutCount] = useState(0);
@@ -421,6 +423,9 @@ export default function AuthClient() {
                 </label>
               )}
 
+              {!isSignup && sessionExpired && !error && (
+                <Alert kind="info">Your session ended. Please sign in again.</Alert>
+              )}
               {!isSignup && isLocked && (
                 <Alert kind="error">
                   Too many failed attempts. Try again in {lockRemainingSeconds}s.

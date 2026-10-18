@@ -35,17 +35,17 @@ from sklearn.model_selection import GroupKFold
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
+from categories import prepare_labeled
 from cv_utils import assert_no_group_leakage
 from segment import LR_HYPERPARAMS
 from calibration import (
     fit_top_label_calibrator,
     apply_calibrator,
     expected_calibration_error,
-    reliability_table,
 )
 from feature_engineering import (
     extract_numeric_features,
+    fit_numeric_stats,
     build_hybrid_vectorizers,
     create_hybrid_feature_matrix,
 )
@@ -67,17 +67,8 @@ EVAL_REPORT = REPORTS / 'EVAL_GROUPED.txt'
 
 
 def load_labeled() -> pd.DataFrame:
-    """Load labeled rows, normalize categories, ensure a 'time' column exists.
-
-    The labeled CSV uses 'timestamp'; feature_engineering expects 'time'.
-    """
-    df = pd.read_csv(LABELED_TXNS)
-    df = df[df['labeled'] == True].copy()
-    df['category'] = df['category'].replace(CATEGORY_NORMALIZE)
-    df = df[df['category'].isin(ML_CATEGORIES)]
-    if 'time' not in df.columns and 'timestamp' in df.columns:
-        df['time'] = df['timestamp']
-    return df.reset_index(drop=True)
+    """Load labeled rows from the local labeled CSV, categories normalized."""
+    return prepare_labeled(pd.read_csv(LABELED_TXNS)).reset_index(drop=True)
 
 
 def _pick_n_splits(groups: np.ndarray, requested: int = 5) -> int:
@@ -98,9 +89,8 @@ def grouped_oof(df_labeled: pd.DataFrame, model_kind: str,
 
     # Restrict once to rows with valid time/amount so both models see the SAME
     # rows and the agreement frame aligns 1:1.
-    numeric_all, valid_idx = extract_numeric_features(df)
+    _, valid_idx = extract_numeric_features(df)
     df = df.loc[valid_idx].reset_index(drop=True)
-    numeric_all = numeric_all.reset_index(drop=True)
 
     y = df['category'].reset_index(drop=True)
     groups = df['merchant'].astype(str).values
@@ -120,10 +110,13 @@ def grouped_oof(df_labeled: pd.DataFrame, model_kind: str,
         if model_kind == 'tfidf':
             desc_vec, merch_vec = build_hybrid_vectorizers(
                 df_tr['description'].tolist(), df_tr['merchant'].tolist())
-            X_tr = create_hybrid_feature_matrix(df_tr, desc_vec, merch_vec,
-                                                numeric_all.iloc[tr])
-            X_te = create_hybrid_feature_matrix(df_te, desc_vec, merch_vec,
-                                                numeric_all.iloc[te])
+            # Numeric stats fitted on the training fold only (no test leakage),
+            # exactly as retrain.py fits them on the training set.
+            stats = fit_numeric_stats(df_tr)
+            num_tr, _ = extract_numeric_features(df_tr, stats)
+            num_te, _ = extract_numeric_features(df_te, stats)
+            X_tr = create_hybrid_feature_matrix(df_tr, desc_vec, merch_vec, num_tr, stats)
+            X_te = create_hybrid_feature_matrix(df_te, desc_vec, merch_vec, num_te, stats)
         elif model_kind == 'semantic':
             # LsaEncoder is unsupervised but fit in-fold anyway (strictest);
             # a pretrained static encoder (model2vec) has nothing to fit.

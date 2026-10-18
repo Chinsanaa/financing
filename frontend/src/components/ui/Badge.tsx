@@ -1,15 +1,4 @@
 import { ReactNode } from 'react';
-import { hashCategoryKey, toneForKey } from '@/utils/categoryColors';
-
-/**
- * Deterministic fallback tone for a category name (stable across renders).
- * Components with access to the user's saved colors should prefer
- * `useCategoryColors().toneFor(name)` — this hash is for static contexts
- * (landing demos) and categories with no chosen color.
- */
-export function categoryColor(name: string): string {
-  return toneForKey(hashCategoryKey(name));
-}
 
 /**
  * Ledger badge.

@@ -1,12 +1,11 @@
 """FastAPI backend for financing SaaS - multi-tenant transaction classification."""
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import jwt
-from typing import Optional
 from slowapi.errors import RateLimitExceeded
 
 from config import settings, supabase_client
@@ -66,12 +65,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     PUBLIC_PATHS = frozenset({
         "/", "/health", "/health/deep", "/docs", "/redoc", "/openapi.json",
-        "/auth/signup", "/auth/login", "/auth/resolve-identifier",
+        "/auth/resolve-identifier",
     })
 
     async def dispatch(self, request: Request, call_next):
         # Skip auth for health check, docs, and public auth routes
-        # (signup/login/resolve-identifier happen before a user has a
+        # (resolve-identifier happens before a user has a
         # token to send). CORS preflights carry no Authorization header
         # either.
         if request.url.path in self.PUBLIC_PATHS or request.method == "OPTIONS":

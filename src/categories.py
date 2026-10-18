@@ -47,14 +47,17 @@ CATEGORY_BUCKET = {
     'Investments': 'Savings',
 }
 
-# All categories shown during interactive labeling
-LABEL_CATEGORIES = ML_CATEGORIES
 
-# Dashboard + budget buckets
-ACTIVE_CATEGORIES = ML_CATEGORIES
+def prepare_labeled(df, valid_categories=None):
+    """Labeled rows only, categories normalized and restricted to
+    `valid_categories` (default ML_CATEGORIES).
 
-FORECAST_MONTHS = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
-
-# Minimum labeled rows before bootstrap will train a classifier
-MIN_TRAINING_SAMPLES = 80
-MIN_SAMPLES_PER_CLASS = 2
+    Accepts either labeled-flag convention: 'labeled' (local CSVs) or
+    'is_manually_labeled' (rows read from Supabase).
+    """
+    if valid_categories is None:
+        valid_categories = ML_CATEGORIES
+    flag = 'labeled' if 'labeled' in df.columns else 'is_manually_labeled'
+    df = df[df[flag] == True].copy()  # noqa: E712 — column may hold objects
+    df['category'] = df['category'].replace(CATEGORY_NORMALIZE)
+    return df[df['category'].isin(valid_categories)]

@@ -230,15 +230,20 @@ to sessionStorage (per-tab; cleared on sign-out/401) so reloads render instantly
 ## Tests
 
 ```bash
-pip install -r requirements-dev.txt
-pytest tests/            # ML pipeline: parsing, routing, calibration, leakage guard
+cd backend && pip install -r requirements-dev.txt   # pinned deps; covers src/ too
+cd .. && MODEL2VEC_ENABLED=0 python -m pytest tests -q   # ML pipeline (158)
+cd backend && python -m pytest -q                   # backend API (264)
 
-cd backend && pip install -r requirements-dev.txt
-pytest tests/             # backend: JWT verification, cross-user isolation
+cd frontend && npm run typecheck && npm run build   # tsc (noUnusedLocals) + build
+bash scripts/design_gate.sh                        # no gradients / blur / purple
 ```
 
-There is no automated frontend test suite yet (open item); frontend is
-verified with `npx tsc --noEmit && npm run build`.
+CI (`.github/workflows/ci.yml`) runs all of the above on every PR. There is
+no automated frontend test suite yet (open item).
+
+**Claude Code plugin:** `.claude/settings.json` declares the third-party
+`ponytail` plugin (DietrichGebert/ponytail); Claude Code offers to install it
+when a session starts on this repo.
 
 ## Repo layout
 
@@ -246,9 +251,10 @@ verified with `npx tsc --noEmit && npm run build`.
 financing/
 ├── frontend/            # Next.js app (see frontend/README.md)
 ├── backend/             # FastAPI app (see backend/README.md)
-│   ├── routes/          # auth, categories, uploads, training, classify, dashboard, settings, subscriptions, transactions
+│   ├── routes/          # auth (resolve-identifier), categories, uploads, training, classify, dashboard, settings, subscriptions, transactions, fx
+│   ├── budget.py        # month windows + budget crossings (dashboard + alert emails)
 │   ├── auth_utils.py    # JWT verification against Supabase's JWKS
-│   ├── tests/           # JWT verification + cross-user isolation tests
+│   ├── tests/           # API tests against an in-memory fake Supabase
 │   └── ml.py            # per-user model loading + bulk classification
 ├── src/                 # ML pipeline shared by backend + tests
 │   ├── parse.py         # Alipay/WeChat parsers → common schema
@@ -258,7 +264,9 @@ financing/
 │   ├── semantic.py      # embedding classifier (Model2Vec / LSA fallback)
 │   ├── calibration.py   # top-label Platt scaling
 │   ├── eval_grouped.py  # GroupKFold evaluation + threshold derivation
-│   ├── merchant_categories.py  # global rule patterns
+│   ├── merchant_categories.py  # global rule patterns + description keywords
+│   ├── feature_engineering.py  # hybrid TF-IDF + numeric features (stats fitted at training)
+│   ├── paths.py         # local data paths + model artifact file names
 │   ├── llm_classify.py  # LLM fallback classifier (batched, DB-free)
 │   └── recurring.py     # recurring/subscription merchant detection (pure pandas, DB-free)
 ├── supabase/            # migrations (schema, RLS, storage buckets, fixes)
@@ -310,6 +318,9 @@ Full tree with explanations: `REPO_STRUCTURE.md`.
   commits); purging requires a `git filter-repo` rewrite + force-push.
 - Training runs in the backend threadpool — fine at small scale, should move
   to a real worker queue if user count grows.
+- Models trained before 2026-10-17 still compute amount/merchant-frequency
+  features per batch; retrain (Model step → Train) to get batch-independent
+  features.
 - Real Postgres RLS policies are never exercised through the API (the backend
   always uses the service-role key, which bypasses RLS) — only route-level
   `user_id` scoping is tested today (`backend/tests/`). Testing RLS directly

@@ -14,6 +14,7 @@ import { useCategoryColors } from '@/utils/useCategoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/format';
+import { errorDetail } from '@/utils/errors';
 
 interface Transaction {
   id: string;
@@ -67,7 +68,7 @@ export default function ReviewTab() {
       removeRow(txnId);
       advanceTour('label');
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || 'Failed to label transaction');
+      setActionError(errorDetail(err, 'Failed to label transaction'));
     } finally {
       setLabeling(null);
     }
@@ -80,7 +81,7 @@ export default function ReviewTab() {
       await api.classifyTx.accept(txnId);
       removeRow(txnId);
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || 'Failed to accept classification');
+      setActionError(errorDetail(err, 'Failed to accept classification'));
     } finally {
       setLabeling(null);
     }

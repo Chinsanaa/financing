@@ -1,5 +1,6 @@
 """Apply trained classifier to all transactions."""
 import json
+import logging
 import numpy as np
 import pandas as pd
 import joblib
@@ -11,22 +12,20 @@ from typing import Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 
 from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
-from segment import clean_text, vectorize
-from label import load_merchant_rules, apply_merchant_rules
+from segment import clean_texts, vectorize
+from label import apply_merchant_rules
 from merchant_categories import special_category
 from paths import (
     CLASSIFIER,
     ENSEMBLE_CONFIG,
-    MERCHANT_RULES,
-    NEEDS_REVIEW,
     PROCESSED,
     SEMANTIC_CALIBRATOR,
     TFIDF_CALIBRATOR,
-    TRANSACTIONS,
-    TRANSACTIONS_CLASSIFIED,
     VECTORIZER,
 )
 from feature_engineering import create_hybrid_feature_matrix
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_categories(df: pd.DataFrame, valid_categories: list = None, catch_all: str = 'Other') -> pd.DataFrame:
@@ -62,8 +61,12 @@ def _override_category(merchant: str, desc: str) -> Optional[str]:
     return None
 
 
-def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
+def apply_description_overrides(df: pd.DataFrame, protect: Optional[pd.Series] = None) -> pd.DataFrame:
     """Override categories using merchant/description patterns.
+
+    `protect` (boolean mask aligned to df) marks rows that must keep their
+    category — classify_all passes the merchant-rule matches, so a known
+    merchant isn't re-labelled by a description keyword.
 
     Optimized: overrides are resolved once per unique (merchant, description)
     pair and applied with vectorized masks instead of row-by-row iteration.
@@ -79,6 +82,8 @@ def apply_description_overrides(df: pd.DataFrame) -> pd.DataFrame:
     cache = {pair: _override_category(pair[0], pair[1]) for pair in set(pairs)}
     override_cat = pairs.map(cache)
     mask = override_cat.notna()
+    if protect is not None:
+        mask &= ~protect.reindex(df.index, fill_value=False).astype(bool)
 
     if mask.any():
         df.loc[mask, 'category'] = override_cat[mask]
@@ -165,15 +170,16 @@ def load_model_bundle(paths: Optional[dict] = None) -> ModelBundle:
     if config and config.get('use_hybrid') and hybrid_path.exists():
         try:
             vectorizer = joblib.load(hybrid_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Could not load hybrid vectorizer %s: %s", hybrid_path, e)
     if classifier is None and classifier_path.exists() and hybrid_path.exists():
         # hybrid-only training run: no legacy vectorizer file
         try:
             vectorizer = joblib.load(hybrid_path)
             classifier = joblib.load(classifier_path)
             config = {'use_hybrid': True}
-        except Exception:
+        except Exception as e:
+            logger.warning("Could not load hybrid model artifacts: %s", e)
             vectorizer, classifier = None, None
 
     bundle.vectorizer = vectorizer
@@ -184,7 +190,8 @@ def load_model_bundle(paths: Optional[dict] = None) -> ModelBundle:
     try:
         from semantic import load_semantic_artifacts
         bundle.semantic = load_semantic_artifacts(paths)
-    except Exception:
+    except Exception as e:
+        logger.warning("Semantic layer unavailable: %s", e)
         bundle.semantic = None
 
     for attr, path in [('cal_tfidf', tfidf_cal_path),
@@ -192,13 +199,14 @@ def load_model_bundle(paths: Optional[dict] = None) -> ModelBundle:
         if path.exists():
             try:
                 setattr(bundle, attr, joblib.load(path))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Could not load calibrator %s: %s", path, e)
 
     if ensemble_path.exists():
         try:
             bundle.ensemble = json.loads(ensemble_path.read_text(encoding='utf-8'))
-        except Exception:
+        except Exception as e:
+            logger.warning("Could not read ensemble config %s: %s", ensemble_path, e)
             bundle.ensemble = None
 
     return bundle
@@ -257,15 +265,18 @@ def classify_all(
         if config.get('use_hybrid', False):
             from feature_engineering import extract_numeric_features
 
-            # Extract numeric features
-            numeric_features, valid_indices = extract_numeric_features(df)
+            # Training-time stats make features independent of the batch;
+            # models trained before they were saved fall back to per-batch.
+            numeric_stats = vectorizer.get('numeric_stats')
+            numeric_features, valid_indices = extract_numeric_features(df, numeric_stats)
             # valid_indices are df.index *labels* (a subset after dropna), so use
             # .loc — matching the df.loc[df_valid.index, ...] writes below. Using
             # .iloc here treats labels as positions and overflows on a gappy index.
             df_valid = df.loc[valid_indices].copy()
 
             # Create hybrid feature matrix with desc and merch vectorizers
-            X = create_hybrid_feature_matrix(df_valid, vectorizer['desc'], vectorizer['merch'], numeric_features)
+            X = create_hybrid_feature_matrix(df_valid, vectorizer['desc'], vectorizer['merch'],
+                                            numeric_features, numeric_stats)
 
             # Predict on valid rows only
             predictions = classifier.predict(X)
@@ -281,10 +292,7 @@ def classify_all(
             df['label_source'] = 'model'
         else:
             # Legacy vectorizer: single object
-            df['text'] = df.apply(
-                lambda row: clean_text(row['merchant'], row['description']),
-                axis=1,
-            )
+            df['text'] = clean_texts(df)
             X = vectorize(df['text'].tolist(), vectorizer)
             df['category'] = classifier.predict(X)
             df['confidence'] = classifier.predict_proba(X).max(axis=1)
@@ -330,7 +338,7 @@ def classify_all(
         except Exception as e:
             # Never let the trust layer break classification; fall back to
             # review-everything behavior for model rows.
-            print(f"   [agreement layer skipped: {type(e).__name__}: {e}]")
+            logger.warning("Agreement layer skipped: %s: %s", type(e).__name__, e)
 
     if rules:
         ruled = apply_merchant_rules(df, rules)
@@ -339,67 +347,12 @@ def classify_all(
         df.loc[matched, 'confidence'] = 1.0
         df.loc[matched, 'label_source'] = 'rule'
 
-    df = apply_description_overrides(df)
+    # Merchant rules are the user's (or curated) knowledge about a specific
+    # merchant; generic description keywords must not overwrite them.
+    df = apply_description_overrides(df, protect=df['label_source'] == 'rule')
     df = normalize_categories(df, valid_categories=valid_categories, catch_all=catch_all)
 
     # Routing: rules/overrides trusted; model predictions auto-apply only via
     # the calibrated-agreement gate above; everything else goes to review.
     df['needs_review'] = ~df['label_source'].isin(['rule', 'override', 'model_agreed'])
     return df
-
-
-def save_classification_outputs(df_classified: pd.DataFrame) -> None:
-    """Write classified transactions and manual-review queue."""
-    PROCESSED.mkdir(parents=True, exist_ok=True)
-    df_classified.to_csv(TRANSACTIONS_CLASSIFIED, index=False)
-
-    needs_review = df_classified[df_classified['needs_review']]
-    if len(needs_review) > 0:
-        needs_review.to_csv(NEEDS_REVIEW, index=False)
-    elif NEEDS_REVIEW.exists():
-        NEEDS_REVIEW.unlink()
-
-
-if __name__ == '__main__':
-    print("=" * 70)
-    print("STAGE 6: CLASSIFY ALL TRANSACTIONS")
-    print("=" * 70)
-
-    df = pd.read_csv(TRANSACTIONS)
-    bundle = load_model_bundle()
-    rules = load_merchant_rules(str(MERCHANT_RULES))
-
-    print(f"\n1. Loaded {len(df)} transactions")
-    if bundle.classifier is not None:
-        feature_type = "HYBRID (semantic-weighted)" if bundle.config.get('use_hybrid', False) else "LEGACY (combined text)"
-        print(f"2. Loaded trained classifier ({feature_type})")
-        if bundle.agreement_ready:
-            print(f"   Graduated trust ON — semantic model ({bundle.semantic['encoder_kind']}) "
-                  f"+ calibrated agreement, threshold {bundle.ensemble['threshold']}")
-        else:
-            print("   Graduated trust OFF — all model predictions route to review")
-    else:
-        print("2. No classifier found — rules-only mode (run bootstrap.py to train)")
-    print(f"3. Loaded {len(rules)} merchant rules")
-
-    print("\n4. Classifying all transactions...")
-    df_classified = classify_all(df, rules=rules, bundle=bundle)
-
-    print("\n4. CLASSIFICATION RESULTS:")
-    for cat, count in df_classified['category'].value_counts().items():
-        avg_conf = df_classified[df_classified['category'] == cat]['confidence'].mean()
-        print(f"   {cat:30s}: {count:3d} transactions (avg confidence: {avg_conf:.1%})")
-
-    needs_review = df_classified[df_classified['needs_review']]
-    rule_covered = (~df_classified['needs_review']).sum()
-    print(f"\n4b. TRUSTED (rule/override): {rule_covered}  |  "
-          f"MODEL SUGGESTIONS ROUTED TO REVIEW (unseen merchants): {len(needs_review)}")
-
-    print(f"\n5. Mean confidence: {df_classified['confidence'].mean():.1%}")
-
-    save_classification_outputs(df_classified)
-    print(f"\n6. Saved to {TRANSACTIONS_CLASSIFIED}")
-
-    print(f"\n{'=' * 70}")
-    print(f"Stage 6 Complete! All {len(df_classified)} transactions classified")
-    print("=" * 70)

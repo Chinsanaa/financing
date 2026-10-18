@@ -1,8 +1,7 @@
 """
 Short English display names for common merchants (charts & tables).
-Falls back to Google Translate when no mapping exists.
+Only curated mappings; machine translation lives in translate.py.
 """
-import math
 from typing import Optional
 
 # Exact merchant strings from exports (highest priority)
@@ -413,46 +412,3 @@ def curated_merchant_name(text: str) -> Optional[str]:
         if pattern in text:
             return label
     return None
-
-
-def display_merchant(name: str) -> str:
-    """Return a short English display name for a merchant."""
-    if name is None:
-        return ""
-    if isinstance(name, float) and math.isnan(name):
-        return ""
-    text = str(name).strip()
-    if not text:
-        return text
-
-    curated = curated_merchant_name(text)
-    if curated:
-        return curated
-
-    # Lazy import avoids circular load with translate.py (which imports this module).
-    from src.translate import _sanitize_english, has_cjk, shorten, translate_to_english
-
-    if not has_cjk(text):
-        return text
-
-    translated = translate_to_english(text)
-    return shorten(_sanitize_english(translated, "Unknown merchant"), 28)
-
-
-def add_display_names(df, source_col: str = "merchant", target_col: str = "merchant_display"):
-    """Add a display-name column to a DataFrame copy."""
-    out = df.copy()
-    out[target_col] = out[source_col].map(display_merchant)
-    return out
-
-
-def aggregate_merchants(df, n: int = 12) -> "pd.DataFrame":
-    """Sum spending by English display name."""
-    import pandas as pd
-
-    return (
-        df.assign(merchant_display=df['merchant'].map(display_merchant))
-        .groupby('merchant_display', as_index=False)['amount']
-        .sum()
-        .nlargest(n, 'amount')
-    )

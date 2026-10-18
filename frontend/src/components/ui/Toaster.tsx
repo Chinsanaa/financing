@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Toaster as Sonner } from 'sonner';
+import { useIsDark } from '@/utils/theme';
 
 /**
  * App-wide toast host (sonner). Follows our class-based theme (not the OS
@@ -10,15 +10,7 @@ import { Toaster as Sonner } from 'sonner';
  * next to the thing that failed (<Alert kind="error">).
  */
 export default function Toaster() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('light');
-  useEffect(() => {
-    const root = document.documentElement;
-    const sync = () => setTheme(root.classList.contains('dark') ? 'dark' : 'light');
-    sync();
-    const obs = new MutationObserver(sync);
-    obs.observe(root, { attributes: true, attributeFilter: ['class'] });
-    return () => obs.disconnect();
-  }, []);
+  const theme = useIsDark() ? 'dark' : 'light';
   return (
     <Sonner
       theme={theme}

@@ -51,7 +51,7 @@ Insights / Action plan, reached via the pill sub-tabs), and **Reports**
 ## Design system
 
 Read **`../docs/DESIGN_SYSTEM.md`** before adding UI: tokens (never raw hex),
-motion rules, effect classes (`.spotlight`, `.glow-border`, `.stagger-in`, …),
+motion rules, effect classes (`.stagger-in`, …),
 components, and how to screenshot-verify the logged-in dashboard with mocked
 data. Success feedback uses `toast.success()` (sonner); errors stay inline.
 
@@ -62,7 +62,13 @@ data. Success feedback uses `toast.success()` (sonner); errors stay inline.
 - After a mutation, call `invalidate('/dashboard')` (or the relevant prefix)
   so cached tabs refresh; update local state optimistically where possible.
 - Auth tokens are attached by the axios interceptor in `utils/api.ts`;
-  `getSession()` transparently refreshes expired tokens.
+  `getSession()` transparently refreshes expired tokens. A 401 signs out
+  locally and lands on `/auth?expired=1`.
+- Error messages: `errorDetail(err, 'fallback')` (`utils/errors.ts`) — never
+  put `err.response.data.detail` in state directly (422s carry a list).
+- Shared helpers: `downloadBlob()` (`utils/download.ts`), `useDismiss()` for
+  click-outside/Escape menus, `formatDate()`/`rateTooltip()` in `utils/format.ts`.
+- `npm run typecheck` runs with `noUnusedLocals`: dead imports fail CI.
 
 ## Deployment (Vercel)
 

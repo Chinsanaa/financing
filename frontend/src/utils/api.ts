@@ -2,21 +2,14 @@ import axios from 'axios';
 import { createClient } from './supabase';
 import { clearApiCache } from './apiCache';
 import type {
-  BudgetResponse,
-  CashflowResponse,
   CurrencyCode,
   FxCurrenciesResponse,
   ProfileResponse,
   ProfileUpdate,
   ReportsQuery,
-  ReportsResponse,
-  SummaryResponse,
   TransactionKindResponse,
   TransactionKindUpdate,
-  TrendsResponse,
-  UploadRecord,
   UploadResult,
-  UploadsListResponse,
 } from '@/types/v5';
 
 /**
@@ -72,10 +65,20 @@ apiClient.interceptors.request.use(async (config) => {
 
 // A 401 means the session is gone (expired refresh token, revoked user) —
 // bounce to the login page instead of leaving every tab in an error state.
-apiClient.interceptors.response.use(undefined, (error) => {
-  if (typeof window !== 'undefined' && error?.response?.status === 401) {
+// Sign out locally FIRST: the middleware only checks that a session cookie
+// exists, so redirecting while it lingers bounced /auth straight back to
+// /dashboard, which 401'd again — an endless reload loop.
+let redirectingToAuth = false;
+apiClient.interceptors.response.use(undefined, async (error) => {
+  if (typeof window !== 'undefined' && error?.response?.status === 401 && !redirectingToAuth) {
+    redirectingToAuth = true;
     clearApiCache();
-    window.location.href = '/auth';
+    try {
+      await supabaseClient.auth.signOut({ scope: 'local' });
+    } catch {
+      // Best effort — middleware also lets /auth?expired=1 through.
+    }
+    window.location.href = '/auth?expired=1';
   }
   return Promise.reject(error);
 });
@@ -89,15 +92,14 @@ export const api = {
 
   // Typed helpers for the real backend routes
   uploads: {
+    /** v5 upload: response includes `reimported` and `rows_by_kind`. */
     upload: (file: File, opts?: { onUploadProgress?: (e: any) => void }) => {
       const formData = new FormData();
       formData.append('file', file);
-      return apiClient.post('/uploads/', formData, opts);
+      return apiClient.post<UploadResult>('/uploads/', formData, opts);
     },
     delete: (uploadId: string) =>
       apiClient.delete(`/uploads/${uploadId}`),
-    getStatus: (uploadId: string) =>
-      apiClient.get(`/uploads/${uploadId}`),
   },
 
   transactions: {
@@ -113,7 +115,6 @@ export const api = {
   training: {
     retrain: () => apiClient.post('/training/retrain'),
     getStatus: (modelRunId: string) => apiClient.get(`/training/${modelRunId}`),
-    list: () => apiClient.get('/training/'),
   },
 
   classifyTx: {
@@ -130,7 +131,6 @@ export const api = {
   },
 
   categories: {
-    list: () => apiClient.get('/categories/'),
     create: (name: string) => apiClient.post('/categories/', { name }),
     update: (id: string, data: { name?: string; color?: string | null }) =>
       apiClient.put(`/categories/${id}`, data),
@@ -142,32 +142,8 @@ export const api = {
   },
 
   subscriptions: {
-    list: () => apiClient.get('/subscriptions/'),
     confirm: (id: string) => apiClient.post(`/subscriptions/${id}/confirm`, {}),
     dismiss: (id: string) => apiClient.post(`/subscriptions/${id}/dismiss`, {}),
-  },
-
-  // ── v5 typed helpers (docs/contracts/API_V5.md) ──────────────────────────
-  // Additive only: the untyped helpers above keep working unchanged.
-
-  /** Typed v5 upload (response adds `reimported`, `rows_by_kind`). */
-  uploadsV5: {
-    upload: (file: File, opts?: { onUploadProgress?: (e: any) => void }) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      return apiClient.post<UploadResult>('/uploads/', formData, opts);
-    },
-    list: () => apiClient.get<UploadsListResponse>('/uploads/'),
-    getStatus: (uploadId: string) => apiClient.get<UploadRecord>(`/uploads/${uploadId}`),
-  },
-
-  dashboard: {
-    summary: () => apiClient.get<SummaryResponse>('/dashboard/summary'),
-    trends: (params: { granularity?: 'day' | 'month'; days?: number; months?: number } = {}) =>
-      apiClient.get<TrendsResponse>(`/dashboard/trends${qs(params)}`),
-    cashflow: (months = 12) => apiClient.get<CashflowResponse>(`/dashboard/cashflow${qs({ months })}`),
-    budget: (month?: string) => apiClient.get<BudgetResponse>(`/dashboard/budget${qs({ month })}`),
-    reports: (query: ReportsQuery = {}) => apiClient.get<ReportsResponse>(`/dashboard/reports${qs(query)}`),
   },
 
   /** Path builders for useApi() (shares its cache/invalidation). */
@@ -178,7 +154,6 @@ export const api = {
       `/dashboard/trends${qs(params)}`,
     budget: (month?: string) => (month ? `/dashboard/budget${qs({ month })}` : '/dashboard/budget'),
     reports: (query: ReportsQuery = {}) => `/dashboard/reports${qs(query)}`,
-    fxCurrencies: '/fx/currencies',
     profile: '/settings/profile',
   },
 
@@ -187,7 +162,6 @@ export const api = {
   },
 
   settings: {
-    getProfile: () => apiClient.get<ProfileResponse>('/settings/profile'),
     updateProfile: (data: ProfileUpdate) => apiClient.patch<ProfileResponse>('/settings/profile', data),
     setHomeCurrency: (code: CurrencyCode | null) =>
       apiClient.patch<ProfileResponse>('/settings/profile', { home_currency: code } satisfies ProfileUpdate),

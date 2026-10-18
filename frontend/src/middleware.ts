@@ -30,7 +30,9 @@ export function middleware(req: NextRequest) {
   if (!authed && (pathname.startsWith('/dashboard') || pathname.startsWith('/settings'))) {
     return NextResponse.redirect(new URL('/auth', req.url));
   }
-  if (authed && pathname === '/auth') {
+  // ?expired=1 comes from the API client after the backend rejected the
+  // session; never bounce it back to the dashboard (that loops).
+  if (authed && pathname === '/auth' && req.nextUrl.searchParams.get('expired') !== '1') {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
   return NextResponse.next();

@@ -26,11 +26,12 @@ import { toneForKey } from '@/utils/categoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import Input, { Select } from '@/components/ui/Input';
-import { formatCurrency, formatDate, formatHomeCurrency } from '@/utils/format';
-import { rateTooltip } from '@/components/ui/MoneyPair';
+import { formatCurrency, formatDate, formatHomeCurrency, rateTooltip } from '@/utils/format';
 import SplitModal from '@/components/tabs/SplitModal';
 import { OWN_ACCOUNT_SUBTYPES } from '@/types/v5';
 import type { FlowSubtype, KindFilter, ReportRow, ReportsResponse, TransactionKind } from '@/types/v5';
+import { errorDetail } from '@/utils/errors';
+import { downloadBlob, downloadTransactionsXlsx } from '@/utils/download';
 
 type Transaction = ReportRow;
 
@@ -175,12 +176,6 @@ function typeChangeNote(kind: TransactionKind): string {
 }
 
 /** FastAPI error detail → one readable line (422s carry a list). */
-function errorDetail(err: any, fallback: string): string {
-  const detail = err?.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) return detail.map((d: any) => d?.msg).filter(Boolean).join('; ') || fallback;
-  return fallback;
-}
 
 function toCsv(transactions: Transaction[]): string {
   const esc = (v: unknown) => {
@@ -252,6 +247,7 @@ export default function ReportsTab() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   // Which row's category dropdown is open, and which row is mid-save / errored.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -497,16 +493,12 @@ export default function ReportsTab() {
 
   const handleExportXlsx = async () => {
     setExporting(true);
+    setExportError('');
     try {
-      const response = await api.export.xlsx();
-      const url = URL.createObjectURL(response.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = response.headers['content-disposition']?.split('filename=')[1]?.replace(/"/g, '') || 'transactions.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadTransactionsXlsx();
     } catch (err) {
-      console.error('Failed to export XLSX:', err);
+      // Used to fail silently (console only) — tell the user.
+      setExportError(errorDetail(err, 'Excel export failed. Please try again.'));
     } finally {
       setExporting(false);
     }
@@ -517,12 +509,7 @@ export default function ReportsTab() {
     const blob = new Blob(['﻿' + toCsv(reports.transactions)], {
       type: 'text/csv;charset=utf-8;',
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `transactions_page${reports.page}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `transactions_page${reports.page}.csv`);
   };
 
   if (loading && !reports) {
@@ -596,6 +583,7 @@ export default function ReportsTab() {
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
+      {exportError && <Alert kind="error">{exportError}</Alert>}
       {rowError && (
         <Alert kind="error">Couldn&apos;t save the category for {rowError}. Please try again.</Alert>
       )}

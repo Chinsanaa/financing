@@ -17,6 +17,7 @@ import Input, { Select } from '@/components/ui/Input';
 import FormatBadges from '@/components/brand/FormatBadges';
 import { describeRowsByKind } from '@/components/ui/UploadQueueItem';
 import type { TransactionKind, UploadFileType } from '@/types/v5';
+import { errorDetail } from '@/utils/errors';
 
 interface Upload {
   id: string;
@@ -162,7 +163,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
       setShowManualForm(false);
       invalidate('/dashboard');
     } catch (err: any) {
-      setManualError(err.response?.data?.detail || 'Failed to add expense');
+      setManualError(errorDetail(err, 'Failed to add expense'));
     } finally {
       setManualSubmitting(false);
     }
@@ -267,7 +268,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
       patch(item.id, { status: 'uploading', progress: 0, detail: undefined });
 
       try {
-        const res = await api.uploadsV5.upload(item.file, {
+        const res = await api.uploads.upload(item.file, {
           onUploadProgress: (evt: any) => {
             const pct = evt.total ? Math.round((evt.loaded / evt.total) * 100) : 0;
             if (pct >= 100) {
@@ -292,10 +293,10 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
         const status = err?.response?.status;
         const failure: Partial<QueuedFile> =
           status === 409
-            ? { status: 'duplicate', detail: err.response?.data?.detail || 'Already uploaded' }
+            ? { status: 'duplicate', detail: errorDetail(err, 'Already uploaded') }
             : !err?.response
               ? { status: 'error', detail: 'Network error — check your connection' }
-              : { status: 'error', detail: err.response?.data?.detail || 'Upload failed' };
+              : { status: 'error', detail: errorDetail(err, 'Upload failed') };
         patch(item.id, failure);
         setLiveMsg(`${item.file.name}: ${failure.status === 'duplicate' ? 'skipped, already uploaded' : `failed. ${failure.detail}`}`);
         outcomes[idx] = { ...outcomes[idx], ...failure };
@@ -334,7 +335,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
       invalidate('/dashboard');
       await reload();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete upload');
+      setError(errorDetail(err, 'Failed to delete upload'));
     } finally {
       setDeleting(null);
     }

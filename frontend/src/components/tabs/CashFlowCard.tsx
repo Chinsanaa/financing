@@ -6,7 +6,7 @@ import { useApi } from '@/utils/useApi';
 import { useIsDark } from '@/utils/theme';
 import StatTile, { FactRow } from '@/components/ui/StatTile';
 import Skeleton from '@/components/ui/Skeleton';
-import { formatCurrencyWhole, formatMonthLong, formatMonthShort, formatHomeCurrency } from '@/utils/format';
+import { formatCurrencyWhole, formatMonthLong, formatMonthShort, formatHomeCurrency, CURRENCY_SYMBOL } from '@/utils/format';
 import type { CashflowMonth, CashflowResponse, SummaryResponse } from '@/types/v5';
 
 /**
@@ -34,7 +34,7 @@ const spendOpacity = (dark: boolean) => (dark ? 0.45 : 0.55);
 
 function compactYuan(v: number): string {
   const a = Math.abs(v);
-  if (a >= 1000) return `¥${Number((v / 1000).toFixed(1))}k`;
+  if (a >= 1000) return `${v < 0 ? '-' : ''}${CURRENCY_SYMBOL}${Number((a / 1000).toFixed(1))}k`;
   return formatCurrencyWhole(v);
 }
 

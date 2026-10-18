@@ -4,10 +4,9 @@ Calls src/retrain.py::retrain_model() with user's labeled transactions
 and user's categories. Model artifacts uploaded to Supabase Storage.
 """
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
-from pydantic import BaseModel
 from pathlib import Path
 from config import supabase_client
-from db import run_query
+from db import fetch_all_async, run_query
 from errors import internal_error, logger
 from limiter import limiter
 from datetime import datetime, timedelta, timezone
@@ -30,11 +29,7 @@ STALE_RUNNING_THRESHOLD = timedelta(minutes=30)
 router = APIRouter()
 
 from src.retrain import retrain_model
-
-
-class TrainRequest(BaseModel):
-    """Trigger training on user's labeled data."""
-    pass
+from src.paths import artifact_paths
 
 
 @router.post("/retrain")
@@ -55,7 +50,8 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
         # Fetch user's labeled transactions, joining categories for the
         # category *name* (retrain_model works on category names, but
         # transactions only store category_id)
-        response = await run_query(
+        # Paged so users with >1,000 labels train on all of them.
+        labeled_rows = await fetch_all_async(
             lambda: supabase_client.table("transactions")
             .select("*, categories(name)")
             .eq("user_id", user_id)
@@ -63,12 +59,12 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
             # is_manually_labeled but loses its category — not training data.
             .eq("kind", "expense")
             .eq("is_manually_labeled", True)
-            .execute()
+            .order("id")
         )
-        if not response.data:
+        if not labeled_rows:
             raise HTTPException(status_code=400, detail="No labeled transactions to train on")
 
-        df_labeled = pd.DataFrame(response.data)
+        df_labeled = pd.DataFrame(labeled_rows)
         df_labeled['category'] = df_labeled['categories'].apply(
             lambda c: c['name'] if c else None
         )
@@ -198,18 +194,7 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
 
         # Create temporary directory for model artifacts
         temp_dir = tempfile.mkdtemp(prefix=f"training_{model_run_id}_")
-        paths = {
-            'classifier': Path(temp_dir) / 'classifier.pkl',
-            'vectorizer': Path(temp_dir) / 'tfidf_vectorizer.pkl',
-            'vectorizer_hybrid': Path(temp_dir) / 'tfidf_vectorizer_hybrid.pkl',
-            'vectorizer_config': Path(temp_dir) / 'vectorizer_config.pkl',
-            'semantic_model': Path(temp_dir) / 'semantic_classifier.pkl',
-            'semantic_index': Path(temp_dir) / 'semantic_index.pkl',
-            'semantic_calibrator': Path(temp_dir) / 'semantic_calibrator.pkl',
-            'tfidf_calibrator': Path(temp_dir) / 'tfidf_calibrator.pkl',
-            'ensemble_config': Path(temp_dir) / 'ensemble_config.json',
-            'report': Path(temp_dir) / 'TRAINING_REPORT.txt',
-        }
+        paths = artifact_paths(temp_dir)
 
         # Call retrain_model with user's data and categories
         results = retrain_model(

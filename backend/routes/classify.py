@@ -9,7 +9,7 @@ is scoped to kind='expense', so labeling/splitting/accepting an income or
 transfer row answers 404 "Transaction not found" — change its kind first
 (PATCH /transactions/{id}/kind).
 """
-from typing import List, Optional
+from typing import List, Literal, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 from alerts import check_budget_alerts
@@ -26,7 +26,9 @@ MAX_BULK_LABEL_TRANSACTIONS = 500
 class LabelRequest(BaseModel):
     """Request to label/recategorize a transaction."""
     category_id: str
-    label_source: str = "override"
+    # Only "override" is client-settable; other sources (rule, llm, …) are
+    # set server-side and must not be spoofable.
+    label_source: Literal["override"] = "override"
 
 
 class BulkLabelRequest(BaseModel):
@@ -43,6 +45,21 @@ class SplitItem(BaseModel):
 class SplitRequest(BaseModel):
     """Request to split a transaction's amount across multiple categories."""
     splits: List[SplitItem]
+
+
+async def _require_owned_category(user_id: str, category_id: str) -> None:
+    """404 unless `category_id` belongs to this user."""
+    resp = await run_query(
+        lambda: supabase_client.table("categories").select("id").eq("id", category_id).eq("user_id", user_id).execute()
+    )
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+
+async def _delete_splits(user_id: str, transaction_id: str) -> None:
+    await run_query(
+        lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
+    )
 
 
 async def _promote_to_merchant_rule(user_id: str, transaction: dict, category_id: str) -> None:
@@ -147,9 +164,7 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
     # must not retroactively change what "before" saw.
     before = dict(before_response.data[0])
 
-    await run_query(
-        lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
-    )
+    await _delete_splits(user_id, transaction_id)
 
     response = await run_query(
         lambda: supabase_client.table("transactions").update({
@@ -175,11 +190,7 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
 
     try:
         # Verify category belongs to this user
-        cat_response = await run_query(
-            lambda: supabase_client.table("categories").select("id").eq("id", req.category_id).eq("user_id", user_id).execute()
-        )
-        if not cat_response.data:
-            raise HTTPException(status_code=404, detail="Category not found")
+        await _require_owned_category(user_id, req.category_id)
 
         updated = await _label_one(user_id, transaction_id, req.category_id, req.label_source)
         if not updated:
@@ -219,11 +230,7 @@ async def bulk_label_transactions(request: Request, req: BulkLabelRequest, backg
         )
 
     try:
-        cat_response = await run_query(
-            lambda: supabase_client.table("categories").select("id").eq("id", req.category_id).eq("user_id", user_id).execute()
-        )
-        if not cat_response.data:
-            raise HTTPException(status_code=404, detail="Category not found")
+        await _require_owned_category(user_id, req.category_id)
 
         updated = []
         not_found = []
@@ -288,9 +295,7 @@ async def split_transaction(request: Request, transaction_id: str, req: SplitReq
         if abs(total - txn_amount) >= 0.01:
             raise HTTPException(status_code=400, detail="Split amounts must sum to the transaction amount")
 
-        await run_query(
-            lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
-        )
+        await _delete_splits(user_id, transaction_id)
         await run_query(
             lambda: supabase_client.table("transaction_splits").insert([
                 {"user_id": user_id, "transaction_id": transaction_id, "category_id": s.category_id, "amount": s.amount}
@@ -309,9 +314,7 @@ async def split_transaction(request: Request, transaction_id: str, req: SplitReq
         if not response.data:
             # The row stopped being an expense between the read and this
             # write (PATCH kind): drop the split rows just inserted.
-            await run_query(
-                lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
-            )
+            await _delete_splits(user_id, transaction_id)
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         background_tasks.add_task(check_budget_alerts, user_id)
@@ -331,9 +334,7 @@ async def unsplit_transaction(request: Request, transaction_id: str):
     user_id = request.state.user_id
 
     try:
-        await run_query(
-            lambda: supabase_client.table("transaction_splits").delete().eq("transaction_id", transaction_id).eq("user_id", user_id).execute()
-        )
+        await _delete_splits(user_id, transaction_id)
         response = await run_query(
             lambda: supabase_client.table("transactions").update({
                 "category_id": None,

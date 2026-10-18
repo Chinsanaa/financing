@@ -67,10 +67,17 @@ export function formatMonthLong(ym: string): string {
   return d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ym;
 }
 
+/** Date-only "YYYY-MM-DD" parses as LOCAL midnight (new Date() would read it
+ *  as UTC and show the previous day west of UTC); anything else as usual. */
+function parseDateValue(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+}
+
 /** Any timestamp -> "yyyy/mm/dd", fixed regardless of browser locale. */
 export function formatDate(value: string | Date | null | undefined): string {
   if (value == null) return '—';
-  const d = value instanceof Date ? value : new Date(value);
+  const d = value instanceof Date ? value : parseDateValue(value);
   if (Number.isNaN(d.getTime())) return '—';
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -129,4 +136,11 @@ export function formatHomeCurrency(value: number, currency: string, decimals?: n
     .formatToParts(n)
     .map((p) => (p.type === 'currency' && p.value === CURRENCY_SYMBOL && code !== 'CNY' ? `${code.slice(0, 2)}${p.value}` : p.value))
     .join('');
+}
+
+/** Tooltip for a home-currency figure: "Rate 0.1388 on 2026-10-10 (ECB)". */
+export function rateTooltip(rate?: number, rateDate?: string): string | undefined {
+  if (rate === undefined || !Number.isFinite(rate)) return undefined;
+  const r = rate >= 1 ? rate.toFixed(2) : rate.toPrecision(4);
+  return `Rate ${r}${rateDate ? ` on ${rateDate}` : ''} (ECB)`;
 }

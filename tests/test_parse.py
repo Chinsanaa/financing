@@ -4,7 +4,6 @@ Parser v2 keeps every settled row with a `kind`; see tests/test_parse_v2.py
 for the full kind/subtype mapping tables."""
 import pandas as pd
 import parse
-import validate
 
 
 def test_schema_normalization_columns(alipay_native_utf8):
@@ -49,10 +48,9 @@ def test_income_row_kept_as_transfer_in(alipay_native_utf8):
     assert (df["kind"] == "expense").sum() == 2
 
 
-def test_load_transactions_sees_expense_rows_only(alipay_native_utf8):
-    df = parse.load_transactions(alipay_path=str(alipay_native_utf8))
-    assert list(df.columns) == ["timestamp", "merchant", "description", "amount", "source"]
-    assert set(df["merchant"]) == {"麦当劳", "淘宝店铺"}   # McDonald's, Taobao shop
+def test_expense_rows_only_for_ml(alipay_native_utf8):
+    df = parse.parse_alipay(str(alipay_native_utf8))
+    assert set(df.loc[df["kind"] == "expense", "merchant"]) == {"麦当劳", "淘宝店铺"}   # McDonald's, Taobao shop
 
 
 def test_generic_bank_direction_and_amount_filter(generic_bank_csv):
@@ -62,11 +60,3 @@ def test_generic_bank_direction_and_amount_filter(generic_bank_csv):
     assert (expense["amount"] > 0).all()
     salary = df[df["merchant"] == "Salary Corp"]
     assert salary[["kind", "flow_subtype"]].values.tolist() == [["income", "salary"]]
-
-
-def test_duplicate_handling_reported_not_crashed(generic_bank_csv):
-    df = parse.parse_generic_bank_csv(str(generic_bank_csv), source="bank")
-    dup = pd.concat([df, df.iloc[[0]]], ignore_index=True)  # inject a duplicate
-    violations = validate.validate_transactions(dup)
-    dup_v = [v for v in violations if v.check == "duplicate_rows"]
-    assert dup_v and dup_v[0].count == 1

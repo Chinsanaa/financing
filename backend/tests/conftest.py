@@ -155,6 +155,7 @@ def fake_db(monkeypatch):
     import routes.subscriptions as subscriptions_module
     import routes.transactions as transactions_module
     import alerts as alerts_module
+    import budget as budget_module
     import main as main_module
     import translations as translations_module
 
@@ -170,6 +171,7 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(subscriptions_module, "supabase_client", fake)
     monkeypatch.setattr(transactions_module, "supabase_client", fake)
     monkeypatch.setattr(alerts_module, "supabase_client", fake)
+    monkeypatch.setattr(budget_module, "supabase_client", fake)
 
     # backend/fx.py and routes/fx.py (home-currency rates) may not exist on
     # every branch yet; patch them when they do.

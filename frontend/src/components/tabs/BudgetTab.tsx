@@ -17,6 +17,7 @@ import MonthSelect from '@/components/ui/MonthSelect';
 import { SkeletonCard, SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole, formatHomeCurrency, formatMonthLong, CURRENCY_SYMBOL } from '@/utils/format';
 import RuleBreakdown, { useRuleData } from './RuleBreakdown';
+import { errorDetail } from '@/utils/errors';
 
 interface BudgetInfo {
   budget_config: {
@@ -120,7 +121,7 @@ export default function BudgetTab() {
       await reload();
       toast.success('Budgets saved', { description: `${budgets.length} categor${budgets.length === 1 ? 'y' : 'ies'} updated.` });
     } catch (err: any) {
-      setSaveError(err.response?.data?.detail || 'Failed to save budgets');
+      setSaveError(errorDetail(err, 'Failed to save budgets'));
     } finally {
       setSaving(false);
     }

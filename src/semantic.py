@@ -25,6 +25,7 @@ sharpens both the classifier and the nearest-example index.
 """
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -39,9 +40,11 @@ from sklearn.linear_model import LogisticRegression
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from categories import CATEGORY_NORMALIZE, ML_CATEGORIES
-from segment import clean_text, LR_HYPERPARAMS
+from categories import ML_CATEGORIES, prepare_labeled
+from segment import clean_texts, LR_HYPERPARAMS
 from paths import MODEL2VEC_DIR, SEMANTIC_MODEL, SEMANTIC_INDEX
+
+logger = logging.getLogger(__name__)
 
 MODEL2VEC_NAME = 'minishlab/potion-multilingual-128M'
 
@@ -108,7 +111,7 @@ def get_encoder(local_dir: Path = MODEL2VEC_DIR, allow_download: bool = True):
         try:
             return StaticModel.from_pretrained(str(local_dir))
         except Exception as e:
-            print(f"   [semantic] cached model unreadable ({type(e).__name__}); ignoring cache")
+            logger.warning("Cached model2vec model unreadable (%s); ignoring cache", type(e).__name__)
 
     if not allow_download:
         return None
@@ -119,8 +122,8 @@ def get_encoder(local_dir: Path = MODEL2VEC_DIR, allow_download: bool = True):
         model.save_pretrained(str(local_dir))
         return model
     except Exception as e:
-        print(f"   [semantic] model download unavailable ({type(e).__name__}); "
-              f"will fall back to LsaEncoder")
+        logger.warning("model2vec download unavailable (%s); falling back to LsaEncoder",
+                       type(e).__name__)
         return None
 
 
@@ -135,10 +138,7 @@ def fit_lsa_encoder(texts: list[str], n_components: int = 200) -> LsaEncoder:
 def build_semantic_texts(df: pd.DataFrame) -> list[str]:
     """Same cleaning as the TF-IDF path (segment.clean_text) so both models
     see identical input text."""
-    return df.apply(
-        lambda row: clean_text(row.get('merchant', ''), row.get('description', '')),
-        axis=1,
-    ).tolist()
+    return clean_texts(df)
 
 
 def embed_texts(texts: list[str], encoder) -> np.ndarray:
@@ -167,9 +167,7 @@ def train_semantic_model(df_labeled: pd.DataFrame, encoder, valid_categories: li
     if valid_categories is None:
         valid_categories = ML_CATEGORIES
 
-    df = df_labeled[df_labeled['labeled'] == True].copy()
-    df['category'] = df['category'].replace(CATEGORY_NORMALIZE)
-    df = df[df['category'].isin(valid_categories)]
+    df = prepare_labeled(df_labeled, valid_categories)
 
     counts = df['category'].value_counts()
     df = df[df['category'].isin(counts[counts >= 2].index)]

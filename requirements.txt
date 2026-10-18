@@ -1,9 +1,12 @@
 # Core ML pipeline dependencies (src/ + tests).
 # The deployed backend pins its own versions in backend/requirements.txt.
 pandas>=1.5.0
+numpy>=1.23
+scipy>=1.9
 scikit-learn>=1.0.0
 jieba>=0.42.1
 openpyxl>=3.0.0
 joblib>=1.1.0
 model2vec>=0.3.0
 groq>=0.11.0
+deep-translator>=1.11

@@ -11,13 +11,7 @@ import pandas as pd
 import pytest
 
 from label import apply_merchant_rules
-from merchant_categories import (
-    MERCHANT_CATEGORY_RULES,
-    LOCAL_MERCHANT_RULES,
-    all_merchant_rules,
-    rules_as_dict,
-    special_category,
-)
+from merchant_categories import MERCHANT_CATEGORY_RULES, special_category
 
 # Short brand codes/abbreviations that are legitimately safe despite their
 # length (well-known exact brand names, not ordinary words).
@@ -30,7 +24,8 @@ MIN_SAFE_PATTERN_LENGTH = 4
 
 @pytest.fixture
 def rules():
-    return rules_as_dict()
+    # The global rule set as seeded into merchant_rules.
+    return {p.lower(): c for p, c in MERCHANT_CATEGORY_RULES}
 
 
 # --- Decoy-corpus regression cases -------------------------------------
@@ -101,7 +96,7 @@ def test_no_dangerously_short_unallowlisted_patterns():
     allow-listed as a known-safe brand code/abbreviation.
     """
     offenders = []
-    for pattern, _category in all_merchant_rules():
+    for pattern, _category in MERCHANT_CATEGORY_RULES:
         if not pattern.isascii():
             continue
         if len(pattern) < MIN_SAFE_PATTERN_LENGTH and pattern.lower() not in SHORT_PATTERN_ALLOWLIST:
@@ -114,23 +109,47 @@ def test_no_dangerously_short_unallowlisted_patterns():
     )
 
 
-def test_no_unintentional_cross_category_collisions_between_rule_lists():
-    """A local rule silently overriding a global rule's category for the same
-    pattern string should be a deliberate choice, not an accident."""
-    global_dict = dict(MERCHANT_CATEGORY_RULES)
-    collisions = []
-    for pattern, local_category in LOCAL_MERCHANT_RULES:
-        if pattern in global_dict and global_dict[pattern] != local_category:
-            collisions.append((pattern, global_dict[pattern], local_category))
-    assert not collisions, (
-        f"LOCAL_MERCHANT_RULES silently overrides MERCHANT_CATEGORY_RULES for: "
-        f"{collisions} (pattern, global_category, local_category). If intentional, "
-        "rename the local pattern to avoid ambiguity."
-    )
-
-
 def test_bare_bank_rule_removed():
     """Bare 'bank'/'Bank' was the single most generic collision-prone rule in
     the file; explicit bank names should carry this category instead."""
-    all_patterns_lower = {p.lower() for p, _ in all_merchant_rules()}
+    all_patterns_lower = {p.lower() for p, _ in MERCHANT_CATEGORY_RULES}
     assert "bank" not in all_patterns_lower
+
+
+# --- Description keywords: word boundaries + rule precedence (Session 77) ---
+
+@pytest.mark.parametrize("description,not_category", [
+    ("current account fee", "Housing"),          # "rent" inside "current"
+    ("facebook ads", "Shopping"),                # "book" inside "facebook"
+    ("override charge", "Transportation"),       # "ride" inside "override"
+    ("refund for order 12", "Investments"),      # "fund" inside "refund"
+    ("面包 bakery", "Eating Out"),                # 面 inside 面包 (bread)
+])
+def test_keywords_do_not_fire_inside_other_words(description, not_category):
+    assert special_category("Random Unmapped Merchant XYZ", description) != not_category
+
+
+@pytest.mark.parametrize("description,category", [
+    ("monthly rent", "Housing"),
+    ("noodles to go", "Eating Out"),
+    ("two books", "Shopping"),
+    ("牛肉拉面", "Eating Out"),
+])
+def test_keywords_still_match_whole_words_and_plurals(description, category):
+    assert special_category("Random Unmapped Merchant XYZ", description) == category
+
+
+def test_merchant_rule_beats_description_keyword():
+    from classify import classify_all
+
+    df = pd.DataFrame({
+        "merchant": ["Starbucks Coffee", "Unknown Shop"],
+        "description": ["payment", "payment"],
+        "amount": [30.0, 30.0],
+    })
+    out = classify_all(df, rules={"starbucks": "Eating Out"})
+    assert out.loc[0, "category"] == "Eating Out"
+    assert out.loc[0, "label_source"] == "rule"
+    # Rows no rule covers still get the description override.
+    assert out.loc[1, "category"] == "Transfers & Gifts"
+    assert out.loc[1, "label_source"] == "override"

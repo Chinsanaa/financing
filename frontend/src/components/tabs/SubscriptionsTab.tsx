@@ -15,6 +15,7 @@ import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrencyWhole, formatDate } from '@/utils/format';
+import { errorDetail } from '@/utils/errors';
 
 interface Subscription {
   id: string;
@@ -52,7 +53,7 @@ export default function SubscriptionsTab() {
       invalidate('/subscriptions');
       toast.success('Marked as a subscription');
     } catch (err: any) {
-      setActionError(err?.response?.data?.detail || 'Could not confirm subscription');
+      setActionError(errorDetail(err, 'Could not confirm subscription'));
     } finally {
       setActioningId(null);
     }
@@ -66,7 +67,7 @@ export default function SubscriptionsTab() {
       invalidate('/subscriptions');
       toast('Dismissed — it won\'t be suggested again');
     } catch (err: any) {
-      setActionError(err?.response?.data?.detail || 'Could not dismiss subscription');
+      setActionError(errorDetail(err, 'Could not dismiss subscription'));
     } finally {
       setActioningId(null);
     }

@@ -14,6 +14,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { hashCategoryKey, toneForKey } from '@/utils/categoryColors';
 import { FIELD_CLASSES } from '@/components/ui/Input';
+import { errorDetail } from '@/utils/errors';
 
 interface Category {
   id: string;
@@ -46,7 +47,7 @@ export default function CategoriesTab() {
       setMessage('Category added!');
       invalidate('/categories');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to add category');
+      setError(errorDetail(err, 'Failed to add category'));
     }
   };
 
@@ -63,7 +64,7 @@ export default function CategoriesTab() {
       invalidate('/categories');
       invalidate('/dashboard'); // reassignment changes breakdowns
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete category');
+      setError(errorDetail(err, 'Failed to delete category'));
     }
   };
 
@@ -99,7 +100,7 @@ export default function CategoriesTab() {
             }
           : prev
       );
-      setError(err.response?.data?.detail || 'Failed to save color');
+      setError(errorDetail(err, 'Failed to save color'));
     } finally {
       setSavingColorId(null);
     }

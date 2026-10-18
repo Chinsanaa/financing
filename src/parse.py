@@ -17,14 +17,12 @@ and types it, but expense and refund rows keep exactly the
 differ (partial refunds, see `_classify_wallet_rows`). The re-import algorithm
 in backend/routes/uploads.py matches on that key.
 
-The ML pipeline (training, classification) must only ever see expense rows:
-`load_transactions` filters kind == 'expense'.
+The ML pipeline (training, classification) must only ever see expense rows;
+the backend filters kind == 'expense' when it reads transactions back.
 """
 import csv
-import json
 import logging
 import re
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -975,7 +973,7 @@ def parse_generic_bank_csv(
     if ts is None or not (amt_col or debit_col or credit_col):
         raise ValueError(
             f"Cannot detect date/amount columns in {csv_path}. "
-            f"Found: {list(raw.columns)}. Add column_map in source_config.json."
+            f"Found: {list(raw.columns)}."
         )
 
     merchant_col = _find_column(raw, 'merchant', column_map.get('merchant'))
@@ -1057,183 +1055,3 @@ def parse_generic_bank_csv(
         'kind': [o[4] for o in out],
         'flow_subtype': pd.Series([o[5] for o in out], dtype='object'),
     })
-
-
-# ---------------------------------------------------------------------------
-# CLI pipeline (training / classification): expense rows only
-# ---------------------------------------------------------------------------
-
-def load_source_config(config_path: Path) -> List[dict]:
-    """Load optional additional source definitions from JSON."""
-    if not config_path.exists():
-        return []
-    with open(config_path, encoding='utf-8') as f:
-        data = json.load(f)
-    return data.get('additional_sources', [])
-
-
-def expense_only(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep kind == 'expense' rows (refunds included) in the v1 5-column
-    shape the ML pipeline expects."""
-    if 'kind' in df.columns:
-        df = df[df['kind'] == 'expense']
-    return df[['timestamp', 'merchant', 'description', 'amount', 'source']].reset_index(drop=True)
-
-
-def resolve_raw_paths(base_path: Optional[Path] = None) -> Tuple[Optional[Path], Optional[Path], List[dict]]:
-    """
-    Resolve default Alipay, WeChat, and optional extra sources under data/raw/.
-
-    Returns:
-        (alipay_path or None, wechat_path or None, additional_source_configs)
-    """
-    base = base_path or Path(__file__).parent.parent
-    raw_dir = base / 'data' / 'raw'
-
-    alipay_path = None
-    for name in ('alipay.csv', 'alipay_expenses.csv'):
-        candidate = raw_dir / name
-        if candidate.exists():
-            alipay_path = candidate
-            break
-
-    wechat_path = None
-    for name in ('raw-wechat.xlsx', 'wechat.xlsx', 'wechat.csv'):
-        candidate = raw_dir / name
-        if candidate.exists():
-            wechat_path = candidate
-            break
-
-    config_path = raw_dir / 'source_config.json'
-    additional = load_source_config(config_path)
-
-    # Auto-discover bank/card CSVs when not listed in config
-    configured_paths = {entry.get('path', '') for entry in additional}
-    for name in ('bank.csv', 'credit_card.csv', 'bank_export.csv'):
-        if name in configured_paths:
-            continue
-        candidate = raw_dir / name
-        if candidate.exists():
-            source_label = 'credit_card' if 'credit' in name else 'bank'
-            additional.append({'path': name, 'source': source_label})
-
-    return alipay_path, wechat_path, additional
-
-
-def load_transactions(alipay_path: Optional[str] = None,
-                      wechat_path: Optional[str] = None,
-                      additional_sources: Optional[List[dict]] = None,
-                      raw_dir: Optional[Path] = None) -> pd.DataFrame:
-    """Load and combine EXPENSE transactions (refunds netted) from Alipay,
-    WeChat, and optional bank/card exports, for the ML pipeline. Income and
-    transfer rows are dropped here - they are never trained on or classified."""
-    dfs = []
-    raw_dir = raw_dir or Path(__file__).parent.parent / 'data' / 'raw'
-
-    if alipay_path and Path(alipay_path).exists():
-        try:
-            print("Parsing Alipay CSV...")
-            df_alipay = expense_only(parse_alipay(alipay_path))
-            print(f"  OK - Loaded {len(df_alipay)} expense transactions")
-            dfs.append(df_alipay)
-        except Exception as e:
-            print(f"  FAIL - Error: {e}")
-
-    if wechat_path and Path(wechat_path).exists():
-        try:
-            wechat_path_obj = Path(wechat_path)
-            if wechat_path_obj.suffix.lower() == '.xlsx':
-                print("Parsing WeChat Excel...")
-                df_wechat = parse_wechat_excel(wechat_path)
-            else:
-                print("Parsing WeChat CSV...")
-                df_wechat = parse_wechat_csv(wechat_path)
-            df_wechat = expense_only(df_wechat)
-            print(f"  OK - Loaded {len(df_wechat)} expense transactions")
-            dfs.append(df_wechat)
-        except Exception as e:
-            print(f"  FAIL - Error: {e}")
-
-    for entry in additional_sources or []:
-        rel_path = entry.get('path', '')
-        full_path = raw_dir / rel_path if not Path(rel_path).is_absolute() else Path(rel_path)
-        if not full_path.exists():
-            print(f"Skipping missing source: {full_path}")
-            continue
-        try:
-            label = entry.get('source', 'bank')
-            print(f"Parsing {label} export ({full_path.name})...")
-            df_extra = expense_only(parse_generic_bank_csv(
-                str(full_path),
-                source=label,
-                column_map=entry.get('column_map'),
-                encoding=entry.get('encoding'),
-            ))
-            print(f"  OK - Loaded {len(df_extra)} expense transactions")
-            dfs.append(df_extra)
-        except Exception as e:
-            print(f"  FAIL - {full_path.name}: {e}")
-
-    if not dfs:
-        raise ValueError("Must provide at least one valid file path")
-
-    combined = pd.concat(dfs, ignore_index=True)
-    combined = combined.sort_values('timestamp').reset_index(drop=True)
-
-    return combined
-
-
-def save_processed(df: pd.DataFrame, output_path: str) -> None:
-    """Save processed transactions to CSV."""
-    df.to_csv(output_path, index=False)
-    print(f"Saved processed data to {output_path}")
-
-
-if __name__ == '__main__':
-    base_path = Path(__file__).parent.parent
-    alipay_path, wechat_path, additional = resolve_raw_paths(base_path)
-
-    if not alipay_path and not wechat_path and not additional:
-        print("Error: No raw files found in data/raw/")
-        print("  Expected: alipay.csv, raw-wechat.xlsx, and/or bank.csv")
-        print("  Optional: data/raw/source_config.json for custom column mappings")
-        raise SystemExit(1)
-
-    print(f"Alipay: {alipay_path or '(not found)'}")
-    print(f"WeChat: {wechat_path or '(not found)'}")
-    if additional:
-        print(f"Extra sources: {', '.join(e.get('path', '?') for e in additional)}")
-
-    try:
-        df = load_transactions(
-            str(alipay_path) if alipay_path else None,
-            str(wechat_path) if wechat_path else None,
-            additional_sources=additional,
-            raw_dir=base_path / 'data' / 'raw',
-        )
-
-        print(f"\n{'='*70}")
-        print(f"Successfully loaded {len(df)} total transactions")
-        print(f"Date range: {df['timestamp'].min().date()} to {df['timestamp'].max().date()}")
-
-        for src in sorted(df['source'].unique()):
-            src_df = df[df['source'] == src]
-            print(f"  - {src}: {len(src_df)} transactions (¥{src_df['amount'].sum():,.2f})")
-
-        print(f"Total spend: {df['amount'].sum():,.2f}")
-
-        print(f"\n{'='*70}")
-        stats = df['amount'].describe()
-        print(f"  Count: {int(stats['count'])}")
-        print(f"  Mean: {stats['mean']:.2f}")
-        print(f"  Median: {df['amount'].median():.2f}")
-
-        output_file = base_path / 'data' / 'processed' / 'transactions.csv'
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        save_processed(df, str(output_file))
-
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise SystemExit(1)

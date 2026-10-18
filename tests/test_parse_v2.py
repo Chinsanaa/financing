@@ -393,11 +393,9 @@ def test_bank_xlsx_and_gbk(tmp_path):
         parse.parse_generic_bank_csv(str(FIXTURES / "bank_direction.csv")))
 
 
-def test_load_transactions_filters_bank_to_expenses():
-    df = parse.load_transactions(additional_sources=[
-        {"path": str(FIXTURES / "bank_debit_credit.csv"), "source": "bank"},
-    ])
-    assert df["merchant"].tolist() == ["STARBUCKS SHANGHAI"]
+def test_bank_expense_rows():
+    df = parse.parse_generic_bank_csv(str(FIXTURES / "bank_debit_credit.csv"), source="bank")
+    assert df.loc[df["kind"] == "expense", "merchant"].tolist() == ["STARBUCKS SHANGHAI"]
 
 
 # ---------------------------------------------------------------------------
