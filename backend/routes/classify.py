@@ -47,13 +47,15 @@ class SplitRequest(BaseModel):
     splits: List[SplitItem]
 
 
-async def _require_owned_category(user_id: str, category_id: str) -> None:
-    """404 unless `category_id` belongs to this user."""
+async def _require_owned_category(user_id: str, category_id: str) -> str:
+    """404 unless `category_id` belongs to this user. Returns the category's
+    name so callers can pass it down instead of re-querying it."""
     resp = await run_query(
-        lambda: supabase_client.table("categories").select("id").eq("id", category_id).eq("user_id", user_id).execute()
+        lambda: supabase_client.table("categories").select("id, name").eq("id", category_id).eq("user_id", user_id).execute()
     )
     if not resp.data:
         raise HTTPException(status_code=404, detail="Category not found")
+    return resp.data[0]["name"]
 
 
 async def _delete_splits(user_id: str, transaction_id: str) -> None:
@@ -62,7 +64,9 @@ async def _delete_splits(user_id: str, transaction_id: str) -> None:
     )
 
 
-async def _promote_to_merchant_rule(user_id: str, transaction: dict, category_id: str) -> None:
+async def _promote_to_merchant_rule(
+    user_id: str, transaction: dict, category_id: str, category_name: Optional[str] = None
+) -> None:
     """When a user confirms or labels a transaction, write it back as a
     per-user merchant rule so the next transaction from this exact merchant
     hits the fast, free, trusted rule path instead of landing back in the
@@ -77,19 +81,24 @@ async def _promote_to_merchant_rule(user_id: str, transaction: dict, category_id
         return
     source = "llm_confirmed" if transaction.get("label_source") == "llm" else "user_created"
     try:
-        cat_resp = await run_query(
-            lambda: supabase_client.table("categories").select("name").eq("id", category_id).eq("user_id", user_id).execute()
-        )
-        if not cat_resp.data:
-            return
-        category_name = cat_resp.data[0]["name"]
+        if category_name is None:
+            # Caller did not already validate/fetch the category (accept path).
+            cat_resp = await run_query(
+                lambda: supabase_client.table("categories").select("name").eq("id", category_id).eq("user_id", user_id).execute()
+            )
+            if not cat_resp.data:
+                return
+            category_name = cat_resp.data[0]["name"]
+        # Upsert + ignore duplicates on the table's UNIQUE(user_id,
+        # merchant_pattern, category_name): re-labeling the same merchant to
+        # the same category is a no-op, not a logged failure.
         await run_query(
-            lambda: supabase_client.table("merchant_rules").insert({
+            lambda: supabase_client.table("merchant_rules").upsert({
                 "user_id": user_id,
                 "merchant_pattern": merchant,
                 "category_name": category_name,
                 "source": source,
-            }).execute()
+            }, on_conflict="user_id,merchant_pattern,category_name", ignore_duplicates=True).execute()
         )
     except Exception as e:
         logger.warning("Failed to promote a merchant rule for user %s: %s", user_id, e)
@@ -142,7 +151,10 @@ async def _apply_to_merchant_siblings(
         return 0
 
 
-async def _label_one(user_id: str, transaction_id: str, category_id: str, label_source: str) -> Optional[dict]:
+async def _label_one(
+    user_id: str, transaction_id: str, category_id: str, label_source: str,
+    category_name: Optional[str] = None,
+) -> Optional[dict]:
     """Fetch-before, update, and best-effort LLM-rule-promotion for a single
     transaction. Returns the updated row, or None if no matching transaction
     was found for this user. Callers are responsible for the category
@@ -178,7 +190,7 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
     if not response.data:
         return None
 
-    await _promote_to_merchant_rule(user_id, before, category_id)
+    await _promote_to_merchant_rule(user_id, before, category_id, category_name)
     return response.data[0]
 
 
@@ -190,9 +202,9 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
 
     try:
         # Verify category belongs to this user
-        await _require_owned_category(user_id, req.category_id)
+        category_name = await _require_owned_category(user_id, req.category_id)
 
-        updated = await _label_one(user_id, transaction_id, req.category_id, req.label_source)
+        updated = await _label_one(user_id, transaction_id, req.category_id, req.label_source, category_name)
         if not updated:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
@@ -230,12 +242,12 @@ async def bulk_label_transactions(request: Request, req: BulkLabelRequest, backg
         )
 
     try:
-        await _require_owned_category(user_id, req.category_id)
+        category_name = await _require_owned_category(user_id, req.category_id)
 
         updated = []
         not_found = []
         for transaction_id in req.transaction_ids:
-            result = await _label_one(user_id, transaction_id, req.category_id, "override")
+            result = await _label_one(user_id, transaction_id, req.category_id, "override", category_name)
             if result:
                 updated.append(result)
             else:

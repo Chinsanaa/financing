@@ -11,6 +11,7 @@ cached table immediately and refreshes it in the background
 cached yet waits for detection inline, so a first visit is never empty.
 """
 import asyncio
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 import pandas as pd
@@ -140,7 +141,7 @@ async def confirm_subscription(request: Request, subscription_id: str):
     try:
         response = await run_query(
             lambda: supabase_client.table("recurring_merchants")
-            .update({"is_confirmed": True, "updated_at": "now()"})
+            .update({"is_confirmed": True, "updated_at": datetime.now(timezone.utc).isoformat()})
             .eq("id", subscription_id)
             .eq("user_id", user_id)
             .execute()
@@ -164,7 +165,7 @@ async def dismiss_subscription(request: Request, subscription_id: str):
     try:
         response = await run_query(
             lambda: supabase_client.table("recurring_merchants")
-            .update({"is_dismissed": True, "updated_at": "now()"})
+            .update({"is_dismissed": True, "updated_at": datetime.now(timezone.utc).isoformat()})
             .eq("id", subscription_id)
             .eq("user_id", user_id)
             .execute()

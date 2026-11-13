@@ -269,4 +269,8 @@ def fake_fx(monkeypatch):
     module.request_backfill_for_user = request_backfill_for_user
     module.RateTable = FakeRateTable
     monkeypatch.setitem(sys.modules, "fx", module)
+    # routes/dashboard.py binds `import fx` at import time, so swap its
+    # module attribute too (sys.modules alone no longer reaches it).
+    from routes import dashboard as _dashboard
+    monkeypatch.setattr(_dashboard, "fx", module)
     return module

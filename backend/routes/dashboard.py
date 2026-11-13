@@ -8,6 +8,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
+import fx
 from config import supabase_client
 from db import fetch_all_async, run_query
 from errors import internal_error
@@ -18,7 +19,7 @@ from src.translate import merchant_label_stored, description_label_stored
 from translations import request_translation_if_missing, request_translation_periodic
 from src.categories import CATEGORY_BUCKET
 
-from budget import (  # noqa: E402 — shared with alerts.py
+from budget import (  # shared with alerts.py
     _budget_crossings,
     _month_bounds,
     _month_start,
@@ -70,20 +71,8 @@ FLOW_SUBTYPE_LABELS = {
 FX_LOOKBACK = timedelta(days=7)  # strict lookup: rate_date in [d - 7, d]
 
 
-def _fx():
-    """backend/fx.py, imported lazily (it reads only the fx_rates cache —
-    never the network — on every GET). Returns None if the module is absent,
-    which then behaves exactly like "no home currency"."""
-    try:
-        import fx
-        return fx
-    except ImportError:
-        return None
-
-
 async def _home_currency(user_id: str) -> Optional[str]:
-    fx = _fx()
-    return await fx.get_home_currency(user_id) if fx else None
+    return await fx.get_home_currency(user_id)
 
 
 async def _load_rates(home: Optional[str], days) -> Optional[object]:
@@ -96,15 +85,23 @@ async def _load_rates(home: Optional[str], days) -> Optional[object]:
     days = [d for d in days if d is not None]
     start = (min(days) if days else today) - FX_LOOKBACK
     end = max(max(days) if days else today, today)
-    return await _fx().load_rates(home, start, end)
+    return await fx.load_rates(home, start, end)
 
 
 def _row_day(ts: str) -> date:
     """Calendar date of a transaction row — ("timestamp" AT TIME ZONE 'UTC')::date."""
-    fx = _fx()
-    if fx:
-        return fx.row_date(ts)
-    return _parse_utc(ts).astimezone(timezone.utc).date()
+    return fx.row_date(ts)
+
+
+_SEARCH_STRIP = str.maketrans("", "", ',%()":*\\')
+
+
+def _sanitize_search(search: str) -> str:
+    """Remove characters that are structural in a PostgREST `or=(...)` filter.
+    `.` is kept: it only separates column/operator/value, and the value of an
+    `ilike` clause is everything after the 2nd dot up to the next `,` (which
+    is stripped), so a dot inside the value cannot end the clause."""
+    return search.translate(_SEARCH_STRIP)
 
 
 def _r2(value: Optional[float]) -> Optional[float]:
@@ -1170,8 +1167,17 @@ async def get_reports(
         elif category_id:
             query = query.eq("category_id", category_id)
         if search:
-            escaped = search.replace(",", "").replace("%", "")
+            escaped = _sanitize_search(search)
             query = query.or_(f"merchant.ilike.%{escaped}%,description.ilike.%{escaped}%")
+        for label, value in (("date_from", date_from), ("date_to", date_to)):
+            if value:
+                try:
+                    date.fromisoformat(value)
+                except ValueError:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"{label} must be an ISO date (YYYY-MM-DD)",
+                    )
         if date_from:
             query = query.gte("timestamp", date_from)
         if date_to:
