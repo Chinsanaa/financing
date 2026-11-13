@@ -1,106 +1,82 @@
-# CLAUDE.md — Personal Finance Categorizer Project
+# CLAUDE.md: Personal Finance Categorizer
 
-This file tells Claude Code how to behave while working on this project.
-Read this first, every session, before writing any code.
+How Claude Code works on this project. Read this first, every session.
 
-## Who I Am (the user)
+## Who I am (the user)
 
-- New to NLP and ML in general. Comfortable with Python basics, pandas, NumPy.
-- Learning by building. I want to understand *why* something works, not just
-  get working code dropped on me.
-- I get frustrated by AI that just executes silently and dumps a wall of code.
-  I want to follow along.
-- Does not know Chinese so all output should be in English. Translate all Chinese words to English.
+- New to NLP and ML. Comfortable with Python basics, pandas, NumPy.
+- Learning by building: I want to understand *why* something works.
+- I get frustrated by silent execution and walls of code. I want to follow along.
+- I do not read Chinese. All output in English; translate any Chinese text.
 
-## How to Work With Me
+## How to work with me
 
-**Teach as you build, don't just build.**
-Before writing a new concept into code for the first time (e.g. TF-IDF,
-tokenization, jieba segmentation, classifier choice), explain it in 3-5
-plain-language sentences first. Use a small concrete example from MY data
-if possible, not a generic textbook example. Then write the code.
+- **Teach as you build.** Before a concept appears in code for the first time
+  (TF-IDF, tokenization, a classifier choice), explain it in 3 to 5 plain
+  sentences using a small example from MY data. Then write the code.
+- **Small steps.** One pipeline stage or one change at a time, each followed by
+  a quick sanity check (a few rows, a test run, a screenshot).
+- **Ask before big decisions:** category list changes, dropping or keeping
+  ambiguous transactions, switching model approach, anything touching the real
+  CSV structure or the live database. Small implementation details are yours.
+- **Be honest about uncertainty.** If it is a judgment call, say so and give the
+  trade-off. Do not silently pick.
+- **Push back on me.** If my suggestion will not work well, explain why first.
 
-**Work in small steps, not one giant script.**
-Build one pipeline stage at a time (parse → clean → label → vectorize →
-train → classify → visualize). After each stage, show me a quick sanity
-check (print a few rows, show a plot, whatever proves it worked) before
-moving to the next stage. Don't write the whole pipeline in one shot.
+## Project memory
 
-**Ask before big decisions, don't assume.**
-Examples of "big decisions" that need my input first:
-- Which categories to use as the starter list
-- Whether to drop or keep ambiguous/ambiguous-looking transactions
-- Model choice if accuracy is poor and we need to switch approaches
-- Anything that touches my real CSV data structure (confirm column names
-  with me before hardcoding them)
+- Start of session: read `docs/context.md` (short, current state).
+- End of session or PR: update `docs/context.md` once (what changed, what was
+  decided and why, what is open, next step). Keep it under about 200 lines;
+  move older session entries to `docs/archive/SESSION_LOG.md`.
+- Update `README.md` only when setup, architecture or features change.
+- Read `docs/archive/` only when you need the reasoning behind an old decision.
+- If a decision contradicts `docs/context.md`, flag it and fix the file.
 
-Small implementation details (variable names, which plotting library) are
-fine to decide on your own judgment.
+## Technical guardrails
 
-**Be honest about uncertainty and trade-offs.**
-If something is a judgment call (e.g. "should we treat 'split bill' refunds
-as negative spend or exclude them?"), say so explicitly and give me the
-trade-off, don't silently pick one.
+- **Supervised text classification**, not clustering. Clustering is only a
+  bootstrap aid for unlabeled rows.
+- **Chinese text needs `jieba`** before TF-IDF. Never run raw Chinese through
+  an English tokenizer.
+- **Parsers stay separate and normalized.** Alipay and WeChat quirks live in
+  `src/parse.py` and never leak into later stages.
+- **Simple models first** (Logistic Regression, Naive Bayes on TF-IDF).
+  Escalate only if accuracy requires it, and explain why first.
+- **Do not change `src.` vs bare import style.** Saved models depend on it.
+- **Migrations are append-only.** Never edit a file in `supabase/migrations/`;
+  add a new one. Never apply to the live database without my go-ahead.
+- **API contract is frozen:** `docs/contracts/API_V5.md`.
+- **UI rule: NO gradients, ONLY solid colors.** No glows, blurs, shadows used
+  as glow, textured backgrounds, and **no purple** anywhere (charts and
+  category colors included). Read `docs/DESIGN_SYSTEM.md` ("Ledger" v5) before
+  touching UI. `scripts/design_gate.sh` enforces it.
+- **Design skills** in `.claude/skills/`: impeccable, apple-design,
+  review-animations, web-design-guidelines. Product brief: `PRODUCT.md`.
+  If a skill contradicts the UI rule, the rule wins.
 
-**Be critical of my decisions too.**
-If I suggest something that won't work well (e.g. I ask you to use K-means
-where a classifier is actually right), push back and explain why before
-just doing what I asked.
-
-## Project Memory
-
-Always read `context.md` at the start of a session to recall where we left
-off, decisions already made, and open questions. Always update `context.md`
-at the end of a working session (or after any meaningful decision/change)
-with:
-- What was built/changed
-- What was decided and why
-- What's still open or unresolved
-- Next suggested step
-
-Do not silently let context.md go stale. If you make a decision mid-session
-that contradicts something written in context.md, flag it and update the
-file rather than leaving a stale record.
-
-## Technical Guardrails
-
-- Mixed Chinese/English transaction text: Chinese segments need `jieba` for
-  tokenization before TF-IDF. Don't run raw Chinese text through a
-  standard English tokenizer, it won't split correctly.
-- This is a **supervised text classification** problem (merchant/description
-  text → category label), not a clustering problem. Clustering (K-means /
-  HDBSCAN) is only used in the bootstrap phase to help discover category
-  patterns in unlabeled "Other" transactions, not as the main classifier.
-- Keep the CSV parsing layer for Alipay and WeChat separate and normalized
-  into one common schema before anything else touches the data. Don't let
-  source-specific quirks leak into later pipeline stages.
-- Favor simple, interpretable models first (Logistic Regression, Naive
-  Bayes on TF-IDF vectors). Only escalate to something heavier if accuracy
-  genuinely requires it, and explain why before doing so.
-- **UI design rule: NO gradients, ONLY solid colors.** No glows, blurs,
-  aurora/grain/grid backgrounds, and **no purple** anywhere (incl. charts and
-  category colors). One flat page background; cards are one flat surface
-  color + a thin border. See `docs/DESIGN_SYSTEM.md` ("Ledger" v4) before
-  touching the UI.
-- Design skills live in `.claude/skills/` (impeccable, taste-skill,
-  apple-design, review-animations, web-design-guidelines; product brief in
-  `PRODUCT.md`). **If a skill contradicts the rule above (e.g. taste-skill's
-  grain/noise/gradient advice), the rule wins.**
-
-## File Structure
+## Checks (run before saying "done")
 
 ```
-/frontend/              # Next.js app (Vercel) — the product UI
-/backend/               # FastAPI app (Render) — API + per-user ML glue
-/src/                   # ML pipeline modules (imported by backend + tests)
-/supabase/              # migrations (schema, RLS, storage, fixes)
-/tests/                 # pytest suite for src/
-/docs/                  # context.md (project memory), audits, guides
-/data/                  # gitignored user data + example templates
+python -m pytest tests -q                       # ML pipeline (Python 3.11)
+(cd backend && python -m pytest -q)             # backend
+(cd frontend && npm run typecheck && npm run lint && npm run build)
+bash scripts/design_gate.sh
 ```
+Install: `pip install -r backend/requirements-dev.txt`, `cd frontend && npm ci`.
+The pins need Python 3.11. Set `MODEL2VEC_ENABLED=0` to match the server.
 
-See `REPO_STRUCTURE.md` for the full annotated tree. The old Streamlit and
-Flask/PWA UIs and `_archive/` were removed 2026-07-06 (recoverable from git
-history).
-## Automation
-- Always update context.md and readme.md after every file change. Include the most essential parts and try to be concise.
+## Delegation (saving usage)
+
+- Mechanical edits with exact instructions: Haiku subagent.
+- Small logic changes with tests: Sonnet subagent.
+- Design, risky refactors, review of every subagent diff: the main model.
+- Worker rules and report format: `.claude/agents/cleanup-worker.md`.
+- Never give two workers the same file. Only the main session commits.
+
+## Where things are
+
+`frontend/` Next.js UI · `backend/` FastAPI + `backend/tests/` · `src/` ML
+pipeline · `tests/` pipeline tests · `supabase/` migrations · `docs/` memory,
+design system, guides · `data/` gitignored user data. Full annotated tree:
+`REPO_STRUCTURE.md`.

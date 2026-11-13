@@ -7,7 +7,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 # Production hyperparameters.
 # class_weight='balanced' addresses the ~40:1 class imbalance (Eating Out vs Utilities).
 # C=1.0: the earlier C=10 was tuned on stratified CV, which leaks merchants across
-# folds (see docs/FULL_AUDIT.md Phase 4). Under honest GroupKFold-by-merchant CV,
+# folds (see docs/archive/FULL_AUDIT.md Phase 4). Under honest GroupKFold-by-merchant CV,
 # C=1.0 strictly dominates C=10 (accuracy +8.9pts, F1-macro +0.106) while leaving
 # stratified accuracy essentially unchanged — less overfitting generalizes better
 # to unseen merchants.

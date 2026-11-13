@@ -1,7 +1,7 @@
 """Canonical category lists shared across pipeline and dashboard."""
 
 # 13 categories the ML classifier is trained on (expanded from the original 7
-# on 2026-08-14 — see docs/context.md Session 52 for the decision record).
+# on 2026-08-14 — see docs/archive/SESSION_LOG.md Session 52 for the decision record).
 ML_CATEGORIES = [
     'Groceries',
     'Transportation',
