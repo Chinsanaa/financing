@@ -257,6 +257,28 @@ export interface ReportsQuery {
   kind?: KindFilter;
 }
 
+// ── Categories & review queue (shared UI shapes) ───────────────────────────
+
+/** A row of GET /categories/. id + name always present; the rest depends on the caller. */
+export interface Category {
+  id: string;
+  name: string;
+  is_catch_all?: boolean;
+  color?: string | null;
+}
+
+/** A row of the review queue (GET /dashboard/review-queue) shown in Label/Review tabs. */
+export interface ReviewTransaction {
+  id: string;
+  date: string;
+  merchant: string;
+  description: string;
+  amount: number;
+  confidence: number;
+  suggested_category: string | null;
+  category?: string | null;
+}
+
 // ── Transactions ───────────────────────────────────────────────────────────
 
 /** PATCH /transactions/{id}/kind body */

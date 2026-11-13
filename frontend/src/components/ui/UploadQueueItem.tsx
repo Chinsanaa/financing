@@ -35,7 +35,7 @@ const KIND_WORDS: Record<TransactionKind, string> = {
 };
 const KIND_ORDER: TransactionKind[] = ['expense', 'income', 'transfer'];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
 
 /** "41 transactions: 29 spending, 3 income, 9 transfers" (zero kinds omitted). */
 export function describeRowsByKind(total: number, byKind?: Partial<Record<TransactionKind, number>> | null): string {
@@ -43,7 +43,7 @@ export function describeRowsByKind(total: number, byKind?: Partial<Record<Transa
   if (!byKind) return head;
   const parts = KIND_ORDER.filter((k) => (byKind[k] ?? 0) > 0).map((k) => {
     const n = byKind[k] ?? 0;
-    return `${n.toLocaleString()} ${k === 'transfer' && n === 1 ? 'transfer' : KIND_WORDS[k]}`;
+    return `${n.toLocaleString('en-US')} ${k === 'transfer' && n === 1 ? 'transfer' : KIND_WORDS[k]}`;
   });
   return parts.length ? `${head}: ${parts.join(', ')}` : head;
 }
@@ -54,8 +54,8 @@ function describeReimport(r: Pick<UploadResult, 'rows_updated' | 'rows_removed'>
   const removed = r.rows_removed ?? 0;
   if (!updated && !removed) return 'Matched the transactions you had already imported from this statement; nothing needed changing.';
   const bits: string[] = [];
-  if (updated) bits.push(`updated ${updated.toLocaleString()}`);
-  if (removed) bits.push(`removed ${removed.toLocaleString()}`);
+  if (updated) bits.push(`updated ${updated.toLocaleString('en-US')}`);
+  if (removed) bits.push(`removed ${removed.toLocaleString('en-US')}`);
   const sentence = bits.join(' and ');
   const noun = updated + removed === 1 ? 'earlier transaction' : 'earlier transactions';
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)} ${noun} from this statement.`;

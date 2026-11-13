@@ -16,7 +16,7 @@ import UploadQueueItem, { QueuedFile, QueueStatus } from '@/components/ui/Upload
 import Input, { Select } from '@/components/ui/Input';
 import FormatBadges from '@/components/brand/FormatBadges';
 import { describeRowsByKind } from '@/components/ui/UploadQueueItem';
-import type { TransactionKind, UploadFileType } from '@/types/v5';
+import type { Category, TransactionKind, UploadFileType } from '@/types/v5';
 import { errorDetail } from '@/utils/errors';
 
 interface Upload {
@@ -120,7 +120,7 @@ export default function UploadTab({ aside }: { aside?: ReactNode } = {}) {
 
   // Fetch upload history
   const { data: uploadsData, loading: uploadsLoading, setData: setUploadsData, reload } = useApi<{ uploads: Upload[] }>('/uploads/');
-  const { data: categoriesData } = useApi<{ categories: { id: string; name: string }[] }>('/categories/');
+  const { data: categoriesData } = useApi<{ categories: Category[] }>(api.paths.categories);
   const categories = categoriesData?.categories || [];
 
   const resetManualForm = () => {

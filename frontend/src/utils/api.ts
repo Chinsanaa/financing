@@ -153,6 +153,7 @@ export const api = {
     budget: (month?: string) => (month ? `/dashboard/budget${qs({ month })}` : '/dashboard/budget'),
     reports: (query: ReportsQuery = {}) => `/dashboard/reports${qs(query)}`,
     profile: '/settings/profile',
+    categories: '/categories/',
   },
 
   fx: {

@@ -29,16 +29,11 @@ import Input, { Select } from '@/components/ui/Input';
 import { formatCurrency, formatDate, formatHomeCurrency, rateTooltip } from '@/utils/format';
 import SplitModal from '@/components/tabs/SplitModal';
 import { OWN_ACCOUNT_SUBTYPES } from '@/types/v5';
-import type { FlowSubtype, KindFilter, ReportRow, ReportsResponse, TransactionKind } from '@/types/v5';
+import type { Category, FlowSubtype, KindFilter, ReportRow, ReportsResponse, TransactionKind } from '@/types/v5';
 import { errorDetail } from '@/utils/errors';
 import { downloadBlob, downloadTransactionsXlsx } from '@/utils/download';
 
 type Transaction = ReportRow;
-
-interface Category {
-  id: string;
-  name: string;
-}
 
 const PER_PAGE_OPTIONS = [10, 20, 50, 100];
 
@@ -304,7 +299,7 @@ export default function ReportsTab() {
     bucket: categoryFiltersApply && bucketFilter ? (bucketFilter as 'Need' | 'Want' | 'Savings') : undefined,
   });
   const { data: reports, loading, error, setData, reload } = useApi<ReportsResponse>(query);
-  const { data: cats } = useApi<{ categories: Category[] }>('/categories/');
+  const { data: cats } = useApi<{ categories: Category[] }>(api.paths.categories);
   const { toneFor } = useCategoryColors();
   const categories = cats?.categories || [];
   const currencyHome = reports?.currency_home ?? null;
