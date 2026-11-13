@@ -46,7 +46,8 @@ financing/
 │   ├── limiter.py             # shared slowapi rate limiter (one counter across all routes)
 │   ├── mailer.py              # transactional email via Resend's HTTP API; fails soft (logs and returns)
 │   ├── routes/                # auth (resolve-identifier only), categories, uploads, training, classify,
-│   │                          #   dashboard (incl. cashflow), settings, subscriptions,
+│   │                          #   dashboard/ (package: overview, planning, reports, notifications, tour),
+│   │                          #   settings, subscriptions,
 │   │                          #   transactions (manual + PATCH kind), fx (currencies)
 │   ├── tests/                 # pytest API tests against an in-memory fake Supabase
 │   ├── requirements.txt       # pinned backend deps (installed by Dockerfile)

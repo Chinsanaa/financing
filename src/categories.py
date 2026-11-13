@@ -26,7 +26,7 @@ CATEGORY_NORMALIZE = {
 }
 
 # 50/30/20 rule: canonical Need/Want/Savings bucket for each ML category, used
-# by the Planning tab's 50/30/20 view (backend/routes/dashboard.py). This is
+# by the Planning tab's 50/30/20 view (backend/routes/dashboard/). This is
 # independent of the per-category `budget_category_config.type` ('Need'/'Want'
 # enum, no 'Savings' value) — that table only covers categories the user has
 # explicitly set a $ budget for, so it can't be used to bucket ALL of a

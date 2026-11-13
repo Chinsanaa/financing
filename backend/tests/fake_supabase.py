@@ -88,7 +88,7 @@ class FakeQueryBuilder:
     def not_(self) -> "_NotFilter":
         """postgrest-py exposes `.not_` as a PROPERTY (not a method) whose
         methods negate the next filter, e.g. `.not_.is_("category_id", "null")`.
-        See the module docstring in backend/routes/dashboard.py for why this
+        See the module docstring in backend/routes/dashboard/ for why this
         matters — calling `.not_(...)` raises TypeError on the real client."""
         return _NotFilter(self)
 
@@ -185,7 +185,7 @@ class FakeQueryBuilder:
 
 def _ilike_matches(value: Any, pattern: str) -> bool:
     """Case-insensitive '%substring%' match — the only ilike shape this
-    codebase generates (backend/routes/dashboard.py's reports `search`)."""
+    codebase generates (backend/routes/dashboard/'s reports `search`)."""
     if value is None:
         return False
     needle = pattern.strip("%").lower()

@@ -164,7 +164,12 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(auth_module, "supabase_client", fake)
     monkeypatch.setattr(categories_module, "supabase_client", fake)
     monkeypatch.setattr(classify_module, "supabase_client", fake)
-    monkeypatch.setattr(dashboard_module, "supabase_client", fake)
+    # routes.dashboard is a package: every submodule binds `supabase_client`
+    # by name, so each one is patched.
+    for _name in ("_shared", "overview", "planning", "notifications", "reports", "tour"):
+        monkeypatch.setattr(
+            getattr(dashboard_module, _name), "supabase_client", fake
+        )
     monkeypatch.setattr(settings_module, "supabase_client", fake)
     monkeypatch.setattr(training_module, "supabase_client", fake)
     monkeypatch.setattr(uploads_module, "supabase_client", fake)
@@ -269,8 +274,10 @@ def fake_fx(monkeypatch):
     module.request_backfill_for_user = request_backfill_for_user
     module.RateTable = FakeRateTable
     monkeypatch.setitem(sys.modules, "fx", module)
-    # routes/dashboard.py binds `import fx` at import time, so swap its
-    # module attribute too (sys.modules alone no longer reaches it).
+    # routes/dashboard/{_shared,reports}.py bind `import fx` at import time,
+    # so swap their module attributes too (sys.modules alone no longer
+    # reaches them).
     from routes import dashboard as _dashboard
-    monkeypatch.setattr(_dashboard, "fx", module)
+    monkeypatch.setattr(_dashboard._shared, "fx", module)
+    monkeypatch.setattr(_dashboard.reports, "fx", module)
     return module
