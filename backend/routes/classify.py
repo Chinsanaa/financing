@@ -21,6 +21,7 @@ from limiter import limiter
 router = APIRouter()
 
 MAX_BULK_LABEL_TRANSACTIONS = 500
+BULK_IN_CHUNK = 200  # ids per `.in_()` query, keeps request URLs short
 
 
 class LabelRequest(BaseModel):
@@ -221,15 +222,82 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
         raise internal_error(e, "classify/label_transaction")
 
 
+def _chunks(items: List[str], size: int = BULK_IN_CHUNK):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+async def _label_many(
+    user_id: str, transaction_ids: List[str], category_id: str, category_name: str,
+) -> tuple[list, list]:
+    """Batched equivalent of calling `_label_one` for every id (label_source
+    is always "override" here). Returns (updated, not_found), both in request
+    order; a duplicated id repeats in its list exactly as the per-row loop did.
+
+    Round trips: one select, one splits delete and one update per 200 ids,
+    plus one rule upsert per DISTINCT merchant. The update payload is
+    identical for every row (it depends only on category_id/label_source,
+    never on the row), so one `.in_()` update is equivalent to N single ones.
+    """
+    unique_ids = list(dict.fromkeys(transaction_ids))
+
+    # Same eligibility as `_label_one`'s fetch: owned by this user AND expense.
+    before_by_id: dict = {}
+    for chunk in _chunks(unique_ids):
+        resp = await run_query(
+            lambda: supabase_client.table("transactions").select("id, merchant, label_source")
+            .eq("user_id", user_id).eq("kind", "expense").in_("id", chunk).execute()
+        )
+        # Copy: the update below must not retroactively change what "before" saw.
+        for row in resp.data or []:
+            before_by_id[row["id"]] = dict(row)
+
+    eligible = [i for i in unique_ids if i in before_by_id]
+
+    updated_by_id: dict = {}
+    for chunk in _chunks(eligible):
+        await run_query(
+            lambda: supabase_client.table("transaction_splits")
+            .delete().eq("user_id", user_id).in_("transaction_id", chunk).execute()
+        )
+        resp = await run_query(
+            lambda: supabase_client.table("transactions").update({
+                "category_id": category_id,
+                "label_source": "override",
+                "needs_review": False,
+                "is_manually_labeled": True,
+                "is_split": False,
+            }).eq("user_id", user_id).eq("kind", "expense").in_("id", chunk).execute()
+        )
+        for row in resp.data or []:
+            updated_by_id[row["id"]] = row
+
+    updated, not_found = [], []
+    promoted_merchants = set()
+    for transaction_id in transaction_ids:
+        row = updated_by_id.get(transaction_id)
+        if row is None:
+            not_found.append(transaction_id)
+            continue
+        updated.append(row)
+        # One rule per distinct merchant. The per-row path upserted with
+        # ignore_duplicates, so the FIRST row (request order) of a merchant
+        # decided the rule's source; keep that by promoting from it.
+        before = before_by_id[transaction_id]
+        merchant = str(before.get("merchant") or "").strip().lower()
+        if merchant and merchant not in promoted_merchants:
+            promoted_merchants.add(merchant)
+            await _promote_to_merchant_rule(user_id, before, category_id, category_name)
+    return updated, not_found
+
+
 @router.post("/bulk-label")
 @limiter.limit("60/hour")
 async def bulk_label_transactions(request: Request, req: BulkLabelRequest, background_tasks: BackgroundTasks):
     """Recategorize multiple transactions at once (Reports bulk action).
 
-    Reuses `_label_one`'s per-transaction fetch/update/promote sequence in a
-    loop rather than a single `.in_("id", ids)` update — each transaction's
-    own prior `label_source` needs fetching individually for the
-    merchant-rule-promotion check to stay correct per-row.
+    Batched (see `_label_many`): a constant number of queries per 200 ids
+    instead of 4-5 round trips per id. Same results as looping `_label_one`.
     """
     user_id = request.state.user_id
 
@@ -244,14 +312,7 @@ async def bulk_label_transactions(request: Request, req: BulkLabelRequest, backg
     try:
         category_name = await _require_owned_category(user_id, req.category_id)
 
-        updated = []
-        not_found = []
-        for transaction_id in req.transaction_ids:
-            result = await _label_one(user_id, transaction_id, req.category_id, "override", category_name)
-            if result:
-                updated.append(result)
-            else:
-                not_found.append(transaction_id)
+        updated, not_found = await _label_many(user_id, req.transaction_ids, req.category_id, category_name)
 
         # One check for the whole batch, not once per transaction — already
         # de-duplicated per category/month by the budget_alerts table, so
