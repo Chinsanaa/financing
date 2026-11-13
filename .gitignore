@@ -117,13 +117,6 @@ ipython_config.py
 .pdm-python
 .pdm-build/
 
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-# pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
 
@@ -189,12 +182,6 @@ cython_debug/
 #   option (not recommended) you can uncomment the following to ignore the entire idea folder.
 # .idea/
 
-# Abstra
-#   Abstra is an AI-powered process automation framework.
-#   Ignore directories containing user credentials, local state, and settings.
-#   Learn more at https://abstra.io/docs
-.abstra/
-
 # Visual Studio Code
 #   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
 #   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
@@ -209,13 +196,6 @@ tempCodeRunnerFile.py
 
 # PyPI configuration file
 .pypirc
-
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
-
-# Streamlit
 
 # User-specific financial data (see data/templates/)
 data/raw/*
@@ -250,3 +230,6 @@ keyword_search*.txt
 
 # Vercel CLI project link
 .vercel/
+
+# impeccable design-skill local state
+.impeccable/
