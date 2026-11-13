@@ -1,6 +1,6 @@
 """Month windows, budget spend and budget crossings.
 
-Shared by routes/dashboard.py (in-app budget views and actions) and alerts.py
+Shared by routes/dashboard/ (in-app budget views and actions) and alerts.py
 (budget alert emails), so the two never disagree on what counts as "over" or
 "approaching" a budget. Lives outside routes/ so alerts.py doesn't depend on
 a route module.

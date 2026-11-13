@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     """Load environment variables."""
 
     supabase_url: str
-    supabase_anon_key: str
+    supabase_anon_key: str | None = None
     supabase_service_role_key: str
     environment: str = "development"
     # Optional: enables the LLM fallback classification tier (src/llm_classify.py).
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # having no trained model — rows stay in the review queue with no
     # suggestion.
     groq_api_key: str | None = None
-    # Optional: enables budget-alert emails (backend/email.py). Unset in
+    # Optional: enables budget-alert emails (backend/mailer.py). Unset in
     # dev/test just means send_alert_email() no-ops — the in-app bell/action
     # items still work either way, since they don't depend on email.
     resend_api_key: str | None = None

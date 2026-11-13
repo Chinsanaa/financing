@@ -29,11 +29,19 @@ async def lifespan(app: FastAPI):
 
 
 # --- FastAPI App ---
+# Interactive docs/schema are dev-only: hidden in production.
+def docs_kwargs(environment: str) -> dict:
+    if environment.lower() in ("production", "prod"):
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {}
+
+
 app = FastAPI(
     title="Financing SaaS Backend",
     description="Multi-tenant transaction classification API",
     version="0.1.0",
     lifespan=lifespan,
+    **docs_kwargs(settings.environment),
 )
 
 # --- Rate Limiting ---

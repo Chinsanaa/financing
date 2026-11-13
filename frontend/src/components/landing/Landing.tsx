@@ -1,8 +1,5 @@
-'use client';
-
 import Link from 'next/link';
-import { ReactNode, useEffect, useState } from 'react';
-import { m, type MotionProps } from 'framer-motion';
+import type { ReactNode } from 'react';
 import { ArrowRight } from 'lucide-react';
 import SiteFooter from '@/components/layout/SiteFooter';
 import LiveDemo from './LiveDemo';
@@ -13,6 +10,8 @@ import CashFlowTeaser from './CashFlowTeaser';
 import PrivacyPromise from './PrivacyPromise';
 import Faq from './Faq';
 import SmoothScroll from './SmoothScroll';
+import LandingHeader from './LandingHeader';
+import Rise from './Rise';
 import { WRAP } from '@/components/layout/wrap';
 
 /**
@@ -20,9 +19,11 @@ import { WRAP } from '@/components/layout/wrap';
  * by rules and whitespace, every claim a mechanism the product has
  * (PRODUCT.md: no testimonials, counts or savings figures). Sample figures
  * are always labeled. The one stamp on the page lives in LiveDemo.
+ *
+ * A server component: only the interactive pieces (header scroll state, the
+ * entrance animation, the demos) ship as client JavaScript.
  */
 
-const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 const SIGNUP = '/auth?mode=signup';
 
 function SectionTitle({ children, id }: { children: ReactNode; id?: string }) {
@@ -52,32 +53,11 @@ function StartFree({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
 }
 
 export default function Landing() {
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  // One authored entrance: the headline settles, then the demo arrives.
-  // (Reduced motion is handled globally by MotionConfig — never branch here.)
-  const rise = (delay: number): MotionProps => ({
-    initial: { opacity: 0, y: 14 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.6, ease: EASE_OUT, delay },
-  });
-
   return (
     <div className="overflow-x-clip">
       <SmoothScroll />
 
-      <header
-        className={`fixed inset-x-0 top-0 z-50 border-b bg-bg transition-[border-color] duration-200 ${
-          scrolled ? 'border-edge/15' : 'border-transparent'
-        }`}
-      >
+      <LandingHeader>
         <div className={`${WRAP} flex h-16 items-center justify-between`}>
           <Link href="/" className="font-display text-xl font-medium tracking-[-0.01em]">
             Financing<span className="text-accent">.</span>
@@ -95,21 +75,22 @@ export default function Landing() {
             <StartFree size="sm" />
           </nav>
         </div>
-      </header>
+      </LandingHeader>
 
       <main>
         {/* ── Hero: the promise, then a statement you can sort ── */}
         <section aria-labelledby="hero-title" className={`${WRAP} pt-24 sm:pt-28 lg:pt-32`}>
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr),minmax(0,1.05fr)] lg:items-center lg:gap-14">
             <div>
-              <m.h1
+              <Rise
+                as="h1"
                 id="hero-title"
-                {...rise(0)}
+                delay={0}
                 className="font-display text-[3.25rem] font-normal leading-[0.98] tracking-[-0.025em] sm:text-7xl lg:text-[5.25rem]"
               >
                 Every yuan, accounted for.
-              </m.h1>
-              <m.div {...rise(0.12)}>
+              </Rise>
+              <Rise delay={0.12}>
                 <p className="mt-6 max-w-[40ch] text-[17px] leading-relaxed text-muted">
                   Living in China? Your Alipay and WeChat Pay statements, in plain English, sorted by a model that learns
                   your merchants.
@@ -124,12 +105,12 @@ export default function Landing() {
                     See how to export
                   </Link>
                 </div>
-              </m.div>
+              </Rise>
             </div>
 
-            <m.div {...rise(0.25)}>
+            <Rise delay={0.25}>
               <LiveDemo />
-            </m.div>
+            </Rise>
           </div>
 
           <div className="mt-16 sm:mt-20">

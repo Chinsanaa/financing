@@ -69,10 +69,10 @@ export default function StatsTab({
   onNavigate?: (tab: string) => void;
   displayName?: string;
 } = {}) {
-  const summaryQ = useApi<Summary>('/dashboard/summary');
+  const summaryQ = useApi<Summary>(api.paths.summary);
   const categoryQ = useApi<{ categories: Category[] }>('/dashboard/by-category');
   const trendsQ = useApi<{ trends: Trend[]; currency_home?: TrendsResponse['currency_home'] }>(
-    '/dashboard/trends?granularity=month&months=12'
+    api.paths.trends({ granularity: 'month', months: 12 })
   );
   // "Under budget" stamp: the most recent CLOSED month = the month before the
   // current China-time month from the summary (never the current month).

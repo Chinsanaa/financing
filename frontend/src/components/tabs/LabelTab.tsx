@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m, PanInfo, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
 import { Check, Keyboard } from 'lucide-react';
 import { api } from '@/utils/api';
+import type { Category, ReviewTransaction } from '@/types/v5';
 import { useApi, invalidate } from '@/utils/useApi';
 import { advanceTour, useTour } from '@/utils/tour';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
@@ -17,20 +18,7 @@ import Skeleton, { SkeletonCard } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { errorDetail } from '@/utils/errors';
 
-interface Transaction {
-  id: string;
-  date: string;
-  merchant: string;
-  description: string;
-  amount: number;
-  confidence: number;
-  suggested_category: string | null;
-}
-
-interface Category {
-  id: string;
-  name: string;
-}
+type Transaction = ReviewTransaction;
 
 /**
  * The draggable slip. Each slip owns its motion value — the leaving and the
@@ -87,7 +75,7 @@ function Slip({
 
 export default function LabelTab() {
   const queueQ = useApi<{ transactions: Transaction[] }>('/dashboard/review-queue');
-  const categoriesQ = useApi<{ categories: Category[] }>('/categories/');
+  const categoriesQ = useApi<{ categories: Category[] }>(api.paths.categories);
   const { toneFor, chartColorFor } = useCategoryColors();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [acting, setActing] = useState(false);

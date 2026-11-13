@@ -47,7 +47,7 @@ export function formatCurrencyWhole(value: number): string {
  * any viewer west of UTC sees the previous day — shifting every month label
  * back by one month.
  */
-export function parseYearMonth(ym: string): Date | null {
+function parseYearMonth(ym: string): Date | null {
   const m = /^(\d{4})-(\d{2})$/.exec(ym);
   if (!m) return null;
   return new Date(Number(m[1]), Number(m[2]) - 1, 1);

@@ -21,6 +21,7 @@ from limiter import limiter
 router = APIRouter()
 
 MAX_BULK_LABEL_TRANSACTIONS = 500
+BULK_IN_CHUNK = 200  # ids per `.in_()` query, keeps request URLs short
 
 
 class LabelRequest(BaseModel):
@@ -47,13 +48,15 @@ class SplitRequest(BaseModel):
     splits: List[SplitItem]
 
 
-async def _require_owned_category(user_id: str, category_id: str) -> None:
-    """404 unless `category_id` belongs to this user."""
+async def _require_owned_category(user_id: str, category_id: str) -> str:
+    """404 unless `category_id` belongs to this user. Returns the category's
+    name so callers can pass it down instead of re-querying it."""
     resp = await run_query(
-        lambda: supabase_client.table("categories").select("id").eq("id", category_id).eq("user_id", user_id).execute()
+        lambda: supabase_client.table("categories").select("id, name").eq("id", category_id).eq("user_id", user_id).execute()
     )
     if not resp.data:
         raise HTTPException(status_code=404, detail="Category not found")
+    return resp.data[0]["name"]
 
 
 async def _delete_splits(user_id: str, transaction_id: str) -> None:
@@ -62,7 +65,9 @@ async def _delete_splits(user_id: str, transaction_id: str) -> None:
     )
 
 
-async def _promote_to_merchant_rule(user_id: str, transaction: dict, category_id: str) -> None:
+async def _promote_to_merchant_rule(
+    user_id: str, transaction: dict, category_id: str, category_name: Optional[str] = None
+) -> None:
     """When a user confirms or labels a transaction, write it back as a
     per-user merchant rule so the next transaction from this exact merchant
     hits the fast, free, trusted rule path instead of landing back in the
@@ -77,19 +82,24 @@ async def _promote_to_merchant_rule(user_id: str, transaction: dict, category_id
         return
     source = "llm_confirmed" if transaction.get("label_source") == "llm" else "user_created"
     try:
-        cat_resp = await run_query(
-            lambda: supabase_client.table("categories").select("name").eq("id", category_id).eq("user_id", user_id).execute()
-        )
-        if not cat_resp.data:
-            return
-        category_name = cat_resp.data[0]["name"]
+        if category_name is None:
+            # Caller did not already validate/fetch the category (accept path).
+            cat_resp = await run_query(
+                lambda: supabase_client.table("categories").select("name").eq("id", category_id).eq("user_id", user_id).execute()
+            )
+            if not cat_resp.data:
+                return
+            category_name = cat_resp.data[0]["name"]
+        # Upsert + ignore duplicates on the table's UNIQUE(user_id,
+        # merchant_pattern, category_name): re-labeling the same merchant to
+        # the same category is a no-op, not a logged failure.
         await run_query(
-            lambda: supabase_client.table("merchant_rules").insert({
+            lambda: supabase_client.table("merchant_rules").upsert({
                 "user_id": user_id,
                 "merchant_pattern": merchant,
                 "category_name": category_name,
                 "source": source,
-            }).execute()
+            }, on_conflict="user_id,merchant_pattern,category_name", ignore_duplicates=True).execute()
         )
     except Exception as e:
         logger.warning("Failed to promote a merchant rule for user %s: %s", user_id, e)
@@ -142,7 +152,10 @@ async def _apply_to_merchant_siblings(
         return 0
 
 
-async def _label_one(user_id: str, transaction_id: str, category_id: str, label_source: str) -> Optional[dict]:
+async def _label_one(
+    user_id: str, transaction_id: str, category_id: str, label_source: str,
+    category_name: Optional[str] = None,
+) -> Optional[dict]:
     """Fetch-before, update, and best-effort LLM-rule-promotion for a single
     transaction. Returns the updated row, or None if no matching transaction
     was found for this user. Callers are responsible for the category
@@ -178,7 +191,7 @@ async def _label_one(user_id: str, transaction_id: str, category_id: str, label_
     if not response.data:
         return None
 
-    await _promote_to_merchant_rule(user_id, before, category_id)
+    await _promote_to_merchant_rule(user_id, before, category_id, category_name)
     return response.data[0]
 
 
@@ -190,9 +203,9 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
 
     try:
         # Verify category belongs to this user
-        await _require_owned_category(user_id, req.category_id)
+        category_name = await _require_owned_category(user_id, req.category_id)
 
-        updated = await _label_one(user_id, transaction_id, req.category_id, req.label_source)
+        updated = await _label_one(user_id, transaction_id, req.category_id, req.label_source, category_name)
         if not updated:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
@@ -209,15 +222,82 @@ async def label_transaction(request: Request, transaction_id: str, req: LabelReq
         raise internal_error(e, "classify/label_transaction")
 
 
+def _chunks(items: List[str], size: int = BULK_IN_CHUNK):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+async def _label_many(
+    user_id: str, transaction_ids: List[str], category_id: str, category_name: str,
+) -> tuple[list, list]:
+    """Batched equivalent of calling `_label_one` for every id (label_source
+    is always "override" here). Returns (updated, not_found), both in request
+    order; a duplicated id repeats in its list exactly as the per-row loop did.
+
+    Round trips: one select, one splits delete and one update per 200 ids,
+    plus one rule upsert per DISTINCT merchant. The update payload is
+    identical for every row (it depends only on category_id/label_source,
+    never on the row), so one `.in_()` update is equivalent to N single ones.
+    """
+    unique_ids = list(dict.fromkeys(transaction_ids))
+
+    # Same eligibility as `_label_one`'s fetch: owned by this user AND expense.
+    before_by_id: dict = {}
+    for chunk in _chunks(unique_ids):
+        resp = await run_query(
+            lambda: supabase_client.table("transactions").select("id, merchant, label_source")
+            .eq("user_id", user_id).eq("kind", "expense").in_("id", chunk).execute()
+        )
+        # Copy: the update below must not retroactively change what "before" saw.
+        for row in resp.data or []:
+            before_by_id[row["id"]] = dict(row)
+
+    eligible = [i for i in unique_ids if i in before_by_id]
+
+    updated_by_id: dict = {}
+    for chunk in _chunks(eligible):
+        await run_query(
+            lambda: supabase_client.table("transaction_splits")
+            .delete().eq("user_id", user_id).in_("transaction_id", chunk).execute()
+        )
+        resp = await run_query(
+            lambda: supabase_client.table("transactions").update({
+                "category_id": category_id,
+                "label_source": "override",
+                "needs_review": False,
+                "is_manually_labeled": True,
+                "is_split": False,
+            }).eq("user_id", user_id).eq("kind", "expense").in_("id", chunk).execute()
+        )
+        for row in resp.data or []:
+            updated_by_id[row["id"]] = row
+
+    updated, not_found = [], []
+    promoted_merchants = set()
+    for transaction_id in transaction_ids:
+        row = updated_by_id.get(transaction_id)
+        if row is None:
+            not_found.append(transaction_id)
+            continue
+        updated.append(row)
+        # One rule per distinct merchant. The per-row path upserted with
+        # ignore_duplicates, so the FIRST row (request order) of a merchant
+        # decided the rule's source; keep that by promoting from it.
+        before = before_by_id[transaction_id]
+        merchant = str(before.get("merchant") or "").strip().lower()
+        if merchant and merchant not in promoted_merchants:
+            promoted_merchants.add(merchant)
+            await _promote_to_merchant_rule(user_id, before, category_id, category_name)
+    return updated, not_found
+
+
 @router.post("/bulk-label")
 @limiter.limit("60/hour")
 async def bulk_label_transactions(request: Request, req: BulkLabelRequest, background_tasks: BackgroundTasks):
     """Recategorize multiple transactions at once (Reports bulk action).
 
-    Reuses `_label_one`'s per-transaction fetch/update/promote sequence in a
-    loop rather than a single `.in_("id", ids)` update — each transaction's
-    own prior `label_source` needs fetching individually for the
-    merchant-rule-promotion check to stay correct per-row.
+    Batched (see `_label_many`): a constant number of queries per 200 ids
+    instead of 4-5 round trips per id. Same results as looping `_label_one`.
     """
     user_id = request.state.user_id
 
@@ -230,16 +310,9 @@ async def bulk_label_transactions(request: Request, req: BulkLabelRequest, backg
         )
 
     try:
-        await _require_owned_category(user_id, req.category_id)
+        category_name = await _require_owned_category(user_id, req.category_id)
 
-        updated = []
-        not_found = []
-        for transaction_id in req.transaction_ids:
-            result = await _label_one(user_id, transaction_id, req.category_id, "override")
-            if result:
-                updated.append(result)
-            else:
-                not_found.append(transaction_id)
+        updated, not_found = await _label_many(user_id, req.transaction_ids, req.category_id, category_name)
 
         # One check for the whole batch, not once per transaction — already
         # de-duplicated per category/month by the budget_alerts table, so

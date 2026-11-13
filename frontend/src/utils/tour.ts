@@ -15,7 +15,7 @@ import { createClient } from './supabase';
 
 export const TOUR_STEPS = ['upload', 'categories', 'label', 'train'] as const;
 export type TourStep = (typeof TOUR_STEPS)[number];
-export type TourState = { finished: boolean; step: TourStep | null };
+type TourState = { finished: boolean; step: TourStep | null };
 
 let state: TourState | null = null; // null = not loaded yet
 let loading: Promise<void> | null = null;

@@ -120,3 +120,19 @@ def test_second_transaction_from_same_merchant_now_matches_the_new_rule(client, 
 
     patterns = ml._fetch_rules(USER_A)
     assert patterns.get("obscure ramen shop") == "Eating Out"
+
+
+def test_relabeling_same_merchant_to_same_category_creates_no_duplicate_rule(client, patch_jwks, make_token, fake_db):
+    fake_db.seed("categories", [{"id": "cat-eat", "user_id": USER_A, "name": "Eating Out"}])
+    fake_db.seed("transactions", [
+        {"id": "t1", "user_id": USER_A, "merchant": "Ramen Shop", "label_source": "none", "needs_review": True},
+        {"id": "t2", "user_id": USER_A, "merchant": "Ramen Shop", "label_source": "none", "needs_review": True},
+    ])
+    for tid in ("t1", "t2"):
+        r = client.post(
+            f"/classify/{tid}/label",
+            json={"category_id": "cat-eat", "label_source": "override"},
+            headers=_headers(make_token),
+        )
+        assert r.status_code == 200
+    assert len(fake_db._tables["merchant_rules"].rows) == 1

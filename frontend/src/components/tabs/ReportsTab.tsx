@@ -1,17 +1,15 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { m } from 'framer-motion';
 import RollingNumber from '@/components/ui/RollingNumber';
 import {
-  ArrowLeftRight,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   Download,
   FileText,
-  Check,
   SlidersHorizontal,
 } from 'lucide-react';
 import { useApi, invalidate } from '@/utils/useApi';
@@ -19,225 +17,28 @@ import { api } from '@/utils/api';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
 import Card, { SectionHeader } from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
 import Segmented from '@/components/ui/Segmented';
 import { useCategoryColors } from '@/utils/useCategoryColors';
-import { toneForKey } from '@/utils/categoryColors';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import Input, { Select } from '@/components/ui/Input';
-import { formatCurrency, formatDate, formatHomeCurrency, rateTooltip } from '@/utils/format';
 import SplitModal from '@/components/tabs/SplitModal';
-import { OWN_ACCOUNT_SUBTYPES } from '@/types/v5';
-import type { FlowSubtype, KindFilter, ReportRow, ReportsResponse, TransactionKind } from '@/types/v5';
+import type { Category, KindFilter, ReportsResponse } from '@/types/v5';
 import { errorDetail } from '@/utils/errors';
 import { downloadBlob, downloadTransactionsXlsx } from '@/utils/download';
-
-type Transaction = ReportRow;
-
-interface Category {
-  id: string;
-  name: string;
-}
-
-const PER_PAGE_OPTIONS = [10, 20, 50, 100];
-
-const SORT_OPTIONS: { value: string; sortBy: 'date' | 'category'; sortDir: 'asc' | 'desc'; label: string }[] = [
-  { value: 'date-desc', sortBy: 'date', sortDir: 'desc', label: 'Date (Newest)' },
-  { value: 'date-asc', sortBy: 'date', sortDir: 'asc', label: 'Date (Oldest)' },
-  { value: 'category-asc', sortBy: 'category', sortDir: 'asc', label: 'Category (A–Z)' },
-  { value: 'category-desc', sortBy: 'category', sortDir: 'desc', label: 'Category (Z–A)' },
-];
-
-const KIND_OPTIONS: { value: KindFilter; label: string }[] = [
-  { value: 'expense', label: 'Spending' },
-  { value: 'income', label: 'Income' },
-  { value: 'transfer', label: 'Transfers' },
-  { value: 'all', label: 'All' },
-];
-
-// Same fixed sky/amber/emerald palette as the 50/30/20 breakdown
-// (RuleBreakdown.tsx) — these are aggregate buckets, not per-category
-// identities, so they stay constant rather than going through useCategoryColors().
-const BUCKET_TONE: Record<'Need' | 'Want' | 'Savings', string> = {
-  Need: toneForKey('sky'),
-  Want: toneForKey('amber'),
-  Savings: toneForKey('emerald'),
-};
-
-const LABEL_SOURCES: Record<string, string> = {
-  rule: 'Rule',
-  override: 'Manual',
-  model: 'Model',
-  model_agreed: 'Auto',
-  none: 'Unset',
-};
-
-const NON_EXPENSE_HINT =
-  "Income and transfers don't have a spending category. Use Change type to make this row spending first.";
-
-/** Money came IN to the user (API_V5 §1.1 sign rule: income rows are + when
- *  money comes in; expense/transfer rows are − when money comes in). */
-function isMoneyIn(t: Pick<Transaction, 'kind' | 'amount' | 'flow_subtype'>): boolean {
-  if (isOwnAccount(t)) return false; // moving your own money is neither in nor out
-  return t.kind === 'income' ? t.amount > 0 : t.amount < 0;
-}
-
-/** Transfers between the user's own accounts (top-up, repayment, …). They are
- *  shown NEUTRAL — muted, unsigned, "⇄" — never as income or spending. */
-function isOwnAccount(t: Pick<Transaction, 'kind' | 'flow_subtype'>): boolean {
-  return t.kind === 'transfer' && !!t.flow_subtype && OWN_ACCOUNT_SUBTYPES.includes(t.flow_subtype);
-}
-
-/** CNY amount as shown in the table/editor: "+¥260.00" (in), "⇄ ¥2,000.00"
- *  (own-account), "¥18.50" (out / spending). */
-function amountText(t: Pick<Transaction, 'kind' | 'amount' | 'flow_subtype'>): string {
-  if (isOwnAccount(t)) return `⇄ ${formatCurrency(Math.abs(t.amount))}`;
-  return isMoneyIn(t) ? `+${formatCurrency(Math.abs(t.amount))}` : formatCurrency(t.amount);
-}
-
-/** Plain-English type label for a row, direction-aware ("Red packet received").
- *  null for ordinary purchases (they need no label). */
-function typeLabel(t: Pick<Transaction, 'kind' | 'flow_subtype' | 'amount'>): string | null {
-  const incoming = isMoneyIn(t);
-  if (t.kind === 'expense') return t.flow_subtype === 'refund' ? 'Refund' : null;
-  if (t.kind === 'income') {
-    if (t.flow_subtype === 'salary') return 'Salary';
-    if (t.flow_subtype === 'interest') return 'Interest';
-    return t.flow_subtype === 'other' ? 'Other income' : 'Income';
-  }
-  switch (t.flow_subtype) {
-    case 'red_packet':
-      return incoming ? 'Red packet received' : 'Red packet sent';
-    case 'aa_collection':
-      return 'AA collected';
-    case 'p2p_transfer':
-      return incoming ? 'Transfer from a person' : 'Transfer to a person';
-    case 'own_account':
-      return 'Own-account transfer';
-    case 'repayment':
-      return 'Credit card repayment';
-    case 'top_up':
-      return 'Wallet top-up';
-    case 'withdrawal':
-      return 'Withdrawal to bank';
-    default:
-      return incoming ? 'Transfer in' : 'Transfer out';
-  }
-}
-
-// "Change type" choices. Value = "kind:subtype" ("kind:" = no subtype).
-// Labels are direction-neutral; the row's sign decides "sent"/"received".
-const TYPE_CHOICES: { group: string; options: { value: string; label: string }[] }[] = [
-  {
-    group: 'Spending',
-    options: [
-      { value: 'expense:', label: 'Purchase (spending)' },
-      { value: 'expense:refund', label: 'Refund of a purchase' },
-    ],
-  },
-  {
-    group: 'Income',
-    options: [
-      { value: 'income:salary', label: 'Salary' },
-      { value: 'income:interest', label: 'Interest' },
-      { value: 'income:other', label: 'Other income' },
-    ],
-  },
-  {
-    group: 'Transfer (not spending or income)',
-    options: [
-      { value: 'transfer:red_packet', label: 'Red packet' },
-      { value: 'transfer:aa_collection', label: 'Shared bill (AA) collection' },
-      { value: 'transfer:p2p_transfer', label: 'Transfer to/from a person' },
-      { value: 'transfer:own_account', label: 'Own-account transfer' },
-      { value: 'transfer:repayment', label: 'Credit card repayment' },
-      { value: 'transfer:top_up', label: 'Wallet top-up' },
-      { value: 'transfer:withdrawal', label: 'Withdrawal to bank' },
-      { value: 'transfer:other', label: 'Other transfer' },
-    ],
-  },
-];
-
-function typeValue(t: Pick<Transaction, 'kind' | 'flow_subtype'>): string {
-  return `${t.kind}:${t.flow_subtype ?? ''}`;
-}
-
-function parseTypeValue(v: string): { kind: TransactionKind; flow_subtype: FlowSubtype | null } {
-  const [kind, sub] = v.split(':');
-  return { kind: kind as TransactionKind, flow_subtype: (sub || null) as FlowSubtype | null };
-}
-
-function typeChangeNote(kind: TransactionKind): string {
-  if (kind === 'expense')
-    return 'It will count as spending and go to your review queue to get a category.';
-  if (kind === 'income') return 'It will count as income. Its category is removed and it no longer counts as spending.';
-  return "It won't count as spending or income. Its category is removed.";
-}
-
-/** FastAPI error detail → one readable line (422s carry a list). */
-
-function toCsv(transactions: Transaction[]): string {
-  const esc = (v: unknown) => {
-    const s = String(v ?? '');
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const header = ['Date', 'Merchant', 'Description', 'Category', 'Type', 'Amount', 'Home amount', 'Source'];
-  const rows = transactions.map((t) =>
-    [
-      formatDate(t.date),
-      t.merchant,
-      t.description,
-      t.kind === 'expense' ? t.category : '',
-      typeLabel(t) ?? 'Purchase',
-      t.amount,
-      t.amount_home ?? '',
-      t.label_source,
-    ]
-      .map(esc)
-      .join(',')
-  );
-  return [header.join(','), ...rows].join('\n');
-}
-
-/** CNY amount (money in = "+" in the positive color) with the home-currency
- *  equivalent underneath. Rate tooltip uses the row's own date. */
-function AmountCell({ txn, currencyHome }: { txn: Transaction; currencyHome: string | null }) {
-  const incoming = isMoneyIn(txn);
-  const own = isOwnAccount(txn);
-  const showHome = !!currencyHome && txn.amount_home !== null && Number.isFinite(txn.amount_home);
-  const day = (txn.date || '').slice(0, 10);
-  // The row carries no rate, so derive it from the two rounded amounts —
-  // only when the home amount is large enough for that to be accurate.
-  const rate =
-    showHome && Math.abs(txn.amount_home as number) >= 10 && txn.amount !== 0
-      ? (txn.amount_home as number) / txn.amount
-      : undefined;
-  const title = showHome
-    ? rateTooltip(rate, day) ?? `Converted at the ECB rate on ${day}`
-    : undefined;
-  return (
-    <span className="inline-flex flex-col items-end" title={title}>
-      <span
-        className={`num whitespace-nowrap text-[15px] ${incoming ? 'text-positive' : own ? 'text-muted' : ''}`}
-        title={own ? 'Moved between your own accounts — not income or spending' : undefined}
-      >
-        {amountText(txn)}
-      </span>
-      {showHome && (
-        <span className="num whitespace-nowrap text-xs text-muted">
-          <span aria-hidden="true">≈ </span>
-          <span className="sr-only">approximately </span>
-          {own
-            ? formatHomeCurrency(Math.abs(txn.amount_home as number), currencyHome as string)
-            : incoming
-            ? `+${formatHomeCurrency(Math.abs(txn.amount_home as number), currencyHome as string)}`
-            : formatHomeCurrency(txn.amount_home as number, currencyHome as string)}
-        </span>
-      )}
-    </span>
-  );
-}
+import ReportsBulkBar from './reports/ReportsBulkBar';
+import ReportsRow from './reports/ReportsRow';
+import ReportsTypeEditorRow from './reports/ReportsTypeEditorRow';
+import { toCsv } from './reports/reportsCsv';
+import {
+  KIND_OPTIONS,
+  PER_PAGE_OPTIONS,
+  SORT_OPTIONS,
+  TYPE_CHOICES,
+  parseTypeValue,
+  typeValue,
+} from './reports/reportsHelpers';
+import type { Transaction } from './reports/reportsHelpers';
 
 export default function ReportsTab() {
   const [page, setPage] = useState(1);
@@ -305,11 +106,14 @@ export default function ReportsTab() {
     bucket: categoryFiltersApply && bucketFilter ? (bucketFilter as 'Need' | 'Want' | 'Savings') : undefined,
   });
   const { data: reports, loading, error, setData, reload } = useApi<ReportsResponse>(query);
-  const { data: cats } = useApi<{ categories: Category[] }>('/categories/');
+  const { data: cats } = useApi<{ categories: Category[] }>(api.paths.categories);
   const { toneFor } = useCategoryColors();
   const categories = cats?.categories || [];
   const currencyHome = reports?.currency_home ?? null;
-  const expenseRowsOnPage = reports ? reports.transactions.filter((t) => t.kind === 'expense') : [];
+  const expenseRowsOnPage = useMemo(
+    () => (reports ? reports.transactions.filter((t) => t.kind === 'expense') : []),
+    [reports]
+  );
 
   const totalPages = reports ? Math.max(1, Math.ceil(reports.total_count / perPage)) : 1;
   const pageNumbers = (() => {
@@ -532,8 +336,6 @@ export default function ReportsTab() {
           : 'Upload and categorize some data first — every transaction shows up here.';
 
   const rowNoun = kind === 'expense' ? 'spending transactions' : kind === 'income' ? 'income transactions' : kind === 'transfer' ? 'transfers' : 'transactions';
-  // 8 visible columns on desktop + the action column.
-  const COLS = 9;
 
   return (
     <div className="space-y-6">
@@ -741,28 +543,16 @@ export default function ReportsTab() {
       )}
 
       {selectedIds.size > 0 && (
-        <Card className="flex flex-wrap items-center gap-3 border-accent/25 p-4">
-          <p className="text-sm font-medium">{selectedIds.size} selected</p>
-          <div className="w-[200px]">
-            <Select value={bulkCategoryId} onChange={(e) => setBulkCategoryId(e.target.value)}>
-              <option value="" disabled>
-                Move to category…
-              </option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button size="sm" onClick={handleBulkApply} loading={bulkApplying} disabled={!bulkCategoryId}>
-            Apply
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
-            Clear selection
-          </Button>
-          {bulkError && <Alert kind="error">{bulkError}</Alert>}
-        </Card>
+        <ReportsBulkBar
+          selectedCount={selectedIds.size}
+          bulkCategoryId={bulkCategoryId}
+          onBulkCategoryChange={setBulkCategoryId}
+          categories={categories}
+          onApply={handleBulkApply}
+          applying={bulkApplying}
+          onClear={() => setSelectedIds(new Set())}
+          error={bulkError}
+        />
       )}
 
       <Card className="flex flex-col overflow-hidden md:max-h-[calc(100vh-22rem)] md:min-h-[16rem]">
@@ -799,205 +589,45 @@ export default function ReportsTab() {
               </thead>
               <tbody className="stagger-in divide-y divide-edge/8">
                 {reports.transactions.map((txn) => {
-                  const isExpense = txn.kind === 'expense';
-                  const label = typeLabel(txn);
                   const typeOpen = typeEditId === txn.id;
-                  const categoryCell = !isExpense ? (
-                    <span className="text-muted" title={NON_EXPENSE_HINT}>
-                      <span aria-hidden="true">—</span>
-                      <span className="sr-only">No category (only spending has categories)</span>
-                    </span>
-                  ) : txn.is_split ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSplitError('');
-                        setSplitModalTxn(txn);
-                      }}
-                      title="Click to edit split"
-                      className="group inline-flex items-center gap-1"
-                    >
-                      <Badge tone="neutral">Split ({txn.splits?.length ?? 0})</Badge>
-                    </button>
-                  ) : editingId === txn.id ? (
-                    <select
-                      autoFocus
-                      defaultValue={txn.category_id ?? ''}
-                      onChange={(e) => handleCategoryChange(txn, e.target.value)}
-                      onBlur={() => setEditingId(null)}
-                      className="rounded-md border border-edge/20 bg-surface px-2.5 py-1 text-sm text-ink focus:border-accent focus:outline-none"
-                    >
-                      <option value="" disabled>
-                        Choose category…
-                      </option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
+                  return (
+                    <Fragment key={txn.id}>
+                      <ReportsRow
+                        txn={txn}
+                        currencyHome={currencyHome}
+                        selected={selectedIds.has(txn.id)}
+                        typeOpen={typeOpen}
+                        isEditing={editingId === txn.id}
+                        isSaving={savingId === txn.id}
+                        categories={categories}
+                        toneFor={toneFor}
+                        onToggleSelected={toggleSelected}
+                        onOpenTypeEditor={openTypeEditor}
+                        onOpenSplit={() => {
+                          setSplitError('');
+                          setSplitModalTxn(txn);
+                        }}
+                        onStartEdit={() => {
                           setRowError(null);
                           setTypeEditId(null);
                           setEditingId(txn.id);
                         }}
-                        disabled={savingId === txn.id}
-                        title="Click to change category"
-                        className="group inline-flex items-center gap-1 disabled:opacity-60"
-                      >
-                        {txn.category === 'Uncategorized' ? (
-                          <span className="rounded-[4px] border border-dashed border-edge/40 px-1.5 py-0.5 text-xs text-muted group-hover:border-ink/50">
-                            Uncategorized
-                          </span>
-                        ) : (
-                          <Badge tone={toneFor(txn.category)}>{txn.category}</Badge>
-                        )}
-                        {savingId === txn.id && <Check className="h-3 w-3 animate-pulse text-muted" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSplitError('');
-                          setSplitModalTxn(txn);
-                        }}
-                        title="Split across categories"
-                        className="text-xs text-muted underline decoration-dotted hover:text-ink"
-                      >
-                        Split
-                      </button>
-                    </div>
-                  );
-
-                  return (
-                    <Fragment key={txn.id}>
-                      <tr
-                        className={`transition-colors hover:bg-edge/5 ${selectedIds.has(txn.id) ? 'bg-edge/[0.06]' : ''} ${typeOpen ? 'bg-edge/[0.04]' : ''}`}
-                      >
-                        <td className="py-3 pl-3 pr-1 align-top sm:px-4 sm:align-middle">
-                          <span title={isExpense ? undefined : NON_EXPENSE_HINT} className="inline-flex">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(txn.id)}
-                              disabled={!isExpense}
-                              onChange={() => toggleSelected(txn.id)}
-                              className="h-4 w-4 rounded border-edge/30 accent-accent disabled:opacity-30"
-                              aria-label={`Select ${txn.merchant}`}
-                            />
-                          </span>
-                        </td>
-                        <td className="hidden whitespace-nowrap px-4 py-3 text-muted sm:table-cell">
-                          {formatDate(txn.date)}
-                        </td>
-                        <td className="min-w-0 px-2 py-3 sm:px-4">
-                          <div className="font-medium leading-snug">{txn.merchant}</div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
-                            <span className="sm:hidden">{formatDate(txn.date)}</span>
-                            {label && (
-                              <span
-                                className={`max-w-full truncate whitespace-nowrap rounded-[4px] border px-1.5 py-px leading-4 ${
-                                  isMoneyIn(txn) ? 'border-positive/35 text-positive' : 'border-edge/20 text-muted'
-                                }`}
-                              >
-                                {label}
-                              </span>
-                            )}
-                          </div>
-                          {/* Phone: category lives under the merchant (column hidden). */}
-                          {isExpense && <div className="mt-1.5 md:hidden">{categoryCell}</div>}
-                        </td>
-                        <td className="hidden max-w-xs truncate px-4 py-3 text-xs text-muted lg:table-cell">
-                          {txn.description}
-                        </td>
-                        <td className="hidden px-4 py-3 md:table-cell">{categoryCell}</td>
-                        <td className="hidden px-4 py-3 xl:table-cell">
-                          {txn.bucket && <Badge tone={BUCKET_TONE[txn.bucket]}>{txn.bucket}</Badge>}
-                        </td>
-                        <td className="px-2 py-3 text-right align-top sm:px-4 sm:align-middle">
-                          <AmountCell txn={txn} currencyHome={currencyHome} />
-                        </td>
-                        <td className="hidden px-4 py-3 text-center md:table-cell">
-                          {isExpense ? (
-                            <Badge tone="neutral">{LABEL_SOURCES[txn.label_source] || txn.label_source}</Badge>
-                          ) : (
-                            <span className="text-xs text-muted">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 pl-1 pr-3 text-right align-top sm:px-4 sm:align-middle">
-                          <button
-                            type="button"
-                            onClick={() => openTypeEditor(txn)}
-                            aria-expanded={typeOpen}
-                            aria-label={`Change type of ${txn.merchant}`}
-                            title="Change type (spending, income or transfer)"
-                            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs transition-colors ${
-                              typeOpen
-                                ? 'border-ink/60 text-ink'
-                                : 'border-edge/15 text-muted hover:border-edge/35 hover:text-ink'
-                            }`}
-                          >
-                            <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span className="hidden sm:inline">Change type</span>
-                          </button>
-                        </td>
-                      </tr>
+                        onStopEdit={() => setEditingId(null)}
+                        onCategoryChange={handleCategoryChange}
+                      />
                       {typeOpen && (
-                        <tr className="bg-edge/[0.04]">
-                          <td colSpan={COLS} className="px-3 pb-4 pt-1 sm:px-4">
-                            <div className="ml-0 max-w-xl space-y-3 border-l-2 border-ink/70 pl-3 sm:ml-10 sm:pl-4">
-                              <p className="text-sm text-ink">
-                                What is <span className="font-medium">{txn.merchant}</span>{' '}
-                                <span className="num">
-                                  ({amountText(txn)})
-                                </span>
-                                ?
-                              </p>
-                              <div className="flex flex-wrap items-end gap-2">
-                                <div className="w-full sm:w-[280px]">
-                                  <Select
-                                    aria-label="New type"
-                                    value={typeDraft}
-                                    onChange={(e) => {
-                                      setTypeDraft(e.target.value);
-                                      setTypeError('');
-                                    }}
-                                    className="py-2"
-                                  >
-                                    {TYPE_CHOICES.map((g) => (
-                                      <optgroup key={g.group} label={g.group}>
-                                        {g.options.map((o) => (
-                                          <option key={o.value} value={o.value}>
-                                            {o.label}
-                                          </option>
-                                        ))}
-                                      </optgroup>
-                                    ))}
-                                  </Select>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleTypeSave(txn)}
-                                  loading={typeSaving}
-                                  disabled={typeSaving || typeDraft === typeValue(txn)}
-                                >
-                                  Save type
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => setTypeEditId(null)} disabled={typeSaving}>
-                                  Cancel
-                                </Button>
-                              </div>
-                              <p className="text-[13px] text-muted">
-                                {typeDraft === typeValue(txn)
-                                  ? 'Pick a different type. The amount never changes.'
-                                  : `${typeChangeNote(parseTypeValue(typeDraft).kind)} The amount never changes.`}
-                              </p>
-                              {typeError && <Alert kind="error">{typeError}</Alert>}
-                            </div>
-                          </td>
-                        </tr>
+                        <ReportsTypeEditorRow
+                          txn={txn}
+                          typeDraft={typeDraft}
+                          typeSaving={typeSaving}
+                          typeError={typeError}
+                          onDraftChange={(value) => {
+                            setTypeDraft(value);
+                            setTypeError('');
+                          }}
+                          onSave={handleTypeSave}
+                          onCancel={() => setTypeEditId(null)}
+                        />
                       )}
                     </Fragment>
                   );

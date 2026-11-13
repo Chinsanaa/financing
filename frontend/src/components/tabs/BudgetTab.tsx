@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pencil, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/utils/api';
+import type { Category } from '@/types/v5';
 import { useApi, invalidate } from '@/utils/useApi';
 import { Alert, ProgressBar } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
@@ -43,12 +44,6 @@ interface BudgetInfo {
   total_spent_home?: number | null;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  is_catch_all?: boolean;
-}
-
 interface BudgetDraft {
   amount: string;
   type: 'Need' | 'Want';
@@ -61,7 +56,7 @@ export default function BudgetTab() {
   const { data: budget, loading, error, reload } = useApi<BudgetInfo>(
     month ? `/dashboard/budget?month=${month}` : '/dashboard/budget'
   );
-  const { data: categoriesData } = useApi<{ categories: Category[] }>('/categories/');
+  const { data: categoriesData } = useApi<{ categories: Category[] }>(api.paths.categories);
   const { toneFor, chartColorFor } = useCategoryColors();
 
   // Same selected month as the budget list above, so the 50/30/20 breakdown

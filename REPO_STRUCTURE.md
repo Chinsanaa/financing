@@ -8,6 +8,11 @@ financing/
 ├── README.md                  # Project overview, quick start, honest-accuracy notes
 ├── REPO_STRUCTURE.md          # This file
 ├── CLAUDE.md                  # AI-assisted-session collaboration guidelines
+├── PRODUCT.md                 # product brief read by the design skills
+├── SECURITY.md                # security policy and scope
+├── skills-lock.json           # skill provenance (source repo + hash per installed skill)
+├── .mcp.json                  # MCP servers for this repo (Playwright MCP)
+├── .claude/                   # settings, agents/cleanup-worker.md, 4 design skills
 ├── requirements.txt           # ML pipeline deps (src/ + tests)
 ├── requirements-dev.txt       # + pytest
 │
@@ -15,7 +20,17 @@ financing/
 │   ├── src/middleware.ts      # server-side auth gating
 │   ├── src/app/               # auth, dashboard (5 sections, tabs code-split), settings pages
 │   ├── src/components/        # ui-feedback.tsx atoms + ui/*.tsx + tabs/*.tsx
-│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror), errors.ts (errorDetail), download.ts, useDismiss.ts, format.ts, chunkReload.ts, tour.ts; design rules in docs/DESIGN_SYSTEM.md (NO gradients, solid colors only)
+│   ├── src/components/auth/       # password checklist, password input, username field
+│   ├── src/components/brand/      # Alipay, WeChat Pay and format logos
+│   ├── src/components/import/     # per-source import guide steps (Alipay, WeChat, bank CSV), phone frame
+│   ├── src/components/landing/    # marketing landing page sections + sample statement
+│   ├── src/components/layout/     # site footer, layout helper
+│   ├── src/components/legal/      # shared legal page layout
+│   ├── src/components/onboarding/ # first-run tour and spotlight
+│   ├── src/app/guide, privacy, terms  # /guide import help, /privacy and /terms pages
+│   ├── src/types/v5.ts        # v5 type definitions
+│   ├── scripts/ui-snapshots.cjs  # UI screenshots: every page/tab in light/dark, desktop/phone
+│   └── src/utils/             # supabase.ts, api.ts (auth interceptor), useApi.ts (dedupe + SWR), apiCache.ts (sessionStorage mirror), errors.ts (errorDetail), download.ts, useDismiss.ts, format.ts, chunkReload.ts, tour.ts; design rules in docs/DESIGN_SYSTEM.md
 │
 ├── backend/                   # FastAPI app → Render (see backend/README.md)
 │   ├── main.py                # app, JWT auth middleware, CORS, rate limiting
@@ -26,9 +41,15 @@ financing/
 │   ├── translations.py        # background worker: stores English merchant/description once per string
 │   ├── fx.py                  # ECB rate cache (Frankfurter, background-only) + RateTable lookups for home currency
 │   ├── errors.py              # log-and-mask error helper
+│   ├── alerts.py              # reactive budget-alert email check, run after a category change (no cron)
+│   ├── auth_utils.py          # Supabase JWT verification via JWKS (ES256); key lookup is swappable in tests
+│   ├── limiter.py             # shared slowapi rate limiter (one counter across all routes)
+│   ├── mailer.py              # transactional email via Resend's HTTP API; fails soft (logs and returns)
 │   ├── routes/                # auth (resolve-identifier only), categories, uploads, training, classify,
-│   │                          #   dashboard (incl. cashflow), settings, subscriptions,
+│   │                          #   dashboard/ (package: overview, planning, reports, notifications, tour),
+│   │                          #   settings, subscriptions,
 │   │                          #   transactions (manual + PATCH kind), fx (currencies)
+│   ├── tests/                 # pytest API tests against an in-memory fake Supabase
 │   ├── requirements.txt       # pinned backend deps (installed by Dockerfile)
 │   ├── Dockerfile             # Docker context is the repo root (needs ../src/ too)
 │   └── .env.example
@@ -52,7 +73,7 @@ financing/
 │
 ├── supabase/
 │   ├── config.toml
-│   └── migrations/            # 15 migrations:
+│   └── migrations/            # 38 migrations:
 │       ├── 20260703000000_initial_schema.sql          # 9 tables + RLS + triggers
 │       ├── 20260703000001_seed_rules_and_categories.sql
 │       ├── 20260704000000_create_storage_buckets.sql  # model_artifacts, uploads
@@ -80,7 +101,7 @@ financing/
 │       ├── 20261011000300_uploads_parser_version.sql        # uploads.parser_version (v1 re-import reconciliation)
 │       └── 20261011000400_fx_rates_home_currency.sql        # fx_rates cache + profiles.home_currency
 │
-├── tests/                     # pytest suite for src/ (158 tests)
+├── tests/                     # pytest suite for src/ (about 160 tests)
 │   ├── test_parse.py, test_parse_v2.py, test_numeric_stats.py, test_merchant_rules.py, test_semantic.py, test_calibration.py
 │   ├── test_classify_routing.py, test_agreement_routing.py
 │   ├── test_leakage_guard.py, test_reproducibility.py
@@ -93,19 +114,18 @@ financing/
 │
 ├── scripts/
 │   ├── test_local.sh          # local backend run helper (not a test suite)
-│   ├── design_gate.sh         # fails on gradients/blur/glass/purple in frontend/src
+│   ├── design_gate.sh         # fails on banned effects and colors (see docs/DESIGN_SYSTEM.md)
 │   └── backfill_fx.py         # manual FX rate seed (Frankfurter → fx_rates)
 │
 ├── docs/
-│   ├── context.md             # project memory: sessions, decisions, open items
+│   ├── context.md             # project memory: current state, decisions, open items
 │   ├── DESIGN_SYSTEM.md       # frontend tokens, motion, effects, components ("Ledger" v5)
 │   ├── contracts/API_V5.md    # frozen API contract: kinds, cash flow, home currency, bank import
-│   ├── audits/                # COMPETITOR_AUDIT_2026-10.md, VERIFICATION_2026-10.md
+│   ├── audits/                # COMPETITOR_AUDIT_2026-10.md
 │   ├── design/                # palette-validation-2026-10.txt (contrast + palette validator output)
-│   ├── PROJECT_SUMMARY.md     # architecture overview + phase history
 │   ├── SECURITY_AUDIT.md      # security checklist + test specs
-│   ├── FULL_AUDIT.md          # ML integrity audit (historical, still relevant)
-│   └── guides/                # START_LOCAL, TEST_LOCAL, DEPLOYMENT, MIGRATION_GUIDE
+│   ├── guides/                # START_LOCAL, TEST_LOCAL, DEPLOYMENT
+│   └── archive/               # SESSION_LOG (Sessions 1-77), FULL_AUDIT, PROJECT_SUMMARY, MIGRATION_GUIDE
 │
 └── data/                      # user data — gitignored except templates/readmes
     ├── raw/                   # original exports (local CLI use)
@@ -117,14 +137,14 @@ financing/
 
 - `web/` — legacy Flask/PWA UI; `.streamlit/` + the Streamlit dashboard
   modules in `src/` (app, dashboard, dashboard_helpers, dashboard_data,
-  web_pipeline, session_context, translate, merchant_display, forecast,
+  web_pipeline, session_context, forecast,
   trends, budget_loader)
 - Superseded CLI scripts: `bootstrap.py`, `train.py`, `eval.py`,
   `export_en.py`, `find_other_candidates.py`, `visualize.py`
 - `_archive/` (old experiments), `scripts/run_all.py` (broken since reorg),
   `docs/phase1_analysis.py`, `docs/phase4_analysis.py`, `docs/CLEANUP_SUMMARY.md`
 - `backend/migrate_personal_data.py` (contained personal data; procedure
-  documented in `docs/guides/MIGRATION_GUIDE.md`)
+  documented in `docs/archive/MIGRATION_GUIDE.md`)
 
 ## What was removed (2026-10-17, Session 77)
 

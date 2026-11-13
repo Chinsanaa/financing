@@ -22,7 +22,7 @@ Supabase PostgreSQL + Auth + Storage
 - **Backend**: FastAPI + supabase-py — `backend/`
 - **ML pipeline**: scikit-learn (TF-IDF + Logistic Regression, optional
   semantic-embedding second model with calibrated agreement) — `src/`
-- **Database**: PostgreSQL, 12 tables, RLS enabled on all — `supabase/migrations/`
+- **Database**: PostgreSQL, 14 tables, RLS enabled on all — `supabase/migrations/`
 
 ## How classification works
 
@@ -35,7 +35,7 @@ Supabase PostgreSQL + Auth + Storage
 3. **Graduated trust**: a model prediction auto-applies without review
    (`label_source='model_agreed'`) only when the TF-IDF and semantic models
    agree, their calibrated confidence clears a data-derived threshold, and the
-   prediction isn't the catch-all. See `docs/FULL_AUDIT.md` for why raw model
+   prediction isn't the catch-all. See `docs/archive/FULL_AUDIT.md` for why raw model
    confidence can't be trusted on unseen merchants.
 4. **LLM fallback** (`label_source='llm'`, `src/llm_classify.py`): rows still
    unclassified after rules + model (no rule hit, no trained model yet — the
@@ -70,7 +70,7 @@ Two very different questions:
 - **Stratified CV** (known merchants): ~95% accuracy — but mostly memorization.
 - **GroupKFold by merchant** (unseen merchants): far lower — this is the number
   that matters for new data, and why model output defaults to review instead of
-  auto-applying. Details: `docs/FULL_AUDIT.md`.
+  auto-applying. Details: `docs/archive/FULL_AUDIT.md`.
 
 ## Dashboard sections (5)
 
@@ -87,10 +87,10 @@ grey-green ledger paper + ink, one vermilion accent, Fraunces "soft" serif
 for headings and ¥ figures) with a quiet dark theme,
 skeleton loading states, and a marketing landing page at `/` for signed-out
 visitors, with `/privacy` and `/terms` legal pages linked from its footer.
-Visual language, tokens, motion rules and components are documented in
-**`docs/DESIGN_SYSTEM.md`** ("Ledger" v5: **no gradients,
-solid colors only, no purple**, rolling numbers, a **⌘K / Ctrl+K command menu** to
-jump anywhere, and **keyboard labeling** — 1–9 pick a category, Enter accepts,
+Visual language, tokens, motion rules and components are in
+**`docs/DESIGN_SYSTEM.md`**, which holds the binding rule (solid colors only,
+no gradients, no purple). The UI also has rolling numbers, a **⌘K / Ctrl+K
+command menu**, and **keyboard labeling** (1–9 pick a category, Enter accepts,
 S skips). Every Transactions & Model step (Upload, Categories, Label, Review,
 Train) uses the full content width with multi-column layouts on wide screens.
 
@@ -218,11 +218,12 @@ Set `MODEL2VEC_ENABLED=1` only on an instance with ≥2 GB.
 
 **Onboarding tour:** shown once per account right after sign-up; progress is stored on the account (`profiles.tour_step`) and each step advances only when the user does it (or taps Skip).
 
-**Design rule:** NO gradients, ONLY solid colors, no purple — see `docs/DESIGN_SYSTEM.md`.
-Design skills (impeccable, taste-skill, apple-design, review-animations,
-web-design-guidelines) live in `.claude/skills/`; `PRODUCT.md` holds the
-product brief they read. UI screenshots: `frontend/scripts/ui-snapshots.cjs`
-(every page/tab × light/dark × desktop/phone against a mocked API).
+**Design rule:** solid colors only, no gradients, no purple. The full rule is in
+`docs/DESIGN_SYSTEM.md`. Four design skills (impeccable, apple-design,
+review-animations, web-design-guidelines) live in `.claude/skills/`;
+`PRODUCT.md` holds the product brief they read. UI screenshots:
+`frontend/scripts/ui-snapshots.cjs` (every page/tab × light/dark × desktop/phone
+against a mocked API).
 
 **Frontend data cache:** `useApi` dedupes concurrent GETs and mirrors responses
 to sessionStorage (per-tab; cleared on sign-out/401) so reloads render instantly.
@@ -231,12 +232,14 @@ to sessionStorage (per-tab; cleared on sign-out/401) so reloads render instantly
 
 ```bash
 cd backend && pip install -r requirements-dev.txt   # pinned deps; covers src/ too
-cd .. && MODEL2VEC_ENABLED=0 python -m pytest tests -q   # ML pipeline (158)
-cd backend && python -m pytest -q                   # backend API (264)
+cd .. && MODEL2VEC_ENABLED=0 python -m pytest tests -q   # ML pipeline
+cd backend && python -m pytest -q                    # backend API
 
-cd frontend && npm run typecheck && npm run build   # tsc (noUnusedLocals) + build
-bash scripts/design_gate.sh                        # no gradients / blur / purple
+cd frontend && npm run typecheck && npm run lint && npm run build
+bash scripts/design_gate.sh                          # no gradients / blur / purple
 ```
+
+Python 3.11 is required by the pinned versions in `requirements-dev.txt`.
 
 CI (`.github/workflows/ci.yml`) runs all of the above on every PR. There is
 no automated frontend test suite yet (open item).
@@ -247,47 +250,17 @@ when a session starts on this repo.
 
 ## Repo layout
 
-```
-financing/
-├── frontend/            # Next.js app (see frontend/README.md)
-├── backend/             # FastAPI app (see backend/README.md)
-│   ├── routes/          # auth (resolve-identifier), categories, uploads, training, classify, dashboard, settings, subscriptions, transactions, fx
-│   ├── budget.py        # month windows + budget crossings (dashboard + alert emails)
-│   ├── auth_utils.py    # JWT verification against Supabase's JWKS
-│   ├── tests/           # API tests against an in-memory fake Supabase
-│   └── ml.py            # per-user model loading + bulk classification
-├── src/                 # ML pipeline shared by backend + tests
-│   ├── parse.py         # Alipay/WeChat parsers → common schema
-│   ├── segment.py       # jieba tokenization + TF-IDF
-│   ├── classify.py      # rules-first + graduated-trust routing
-│   ├── retrain.py       # training entry point (both models + calibration)
-│   ├── semantic.py      # embedding classifier (Model2Vec / LSA fallback)
-│   ├── calibration.py   # top-label Platt scaling
-│   ├── eval_grouped.py  # GroupKFold evaluation + threshold derivation
-│   ├── merchant_categories.py  # global rule patterns + description keywords
-│   ├── feature_engineering.py  # hybrid TF-IDF + numeric features (stats fitted at training)
-│   ├── paths.py         # local data paths + model artifact file names
-│   ├── llm_classify.py  # LLM fallback classifier (batched, DB-free)
-│   └── recurring.py     # recurring/subscription merchant detection (pure pandas, DB-free)
-├── supabase/            # migrations (schema, RLS, storage buckets, fixes)
-├── tests/               # pytest suite for src/
-├── scripts/test_local.sh
-├── docs/                # context.md (project memory), audits, guides
-└── data/                # gitignored user data + example templates
-```
-
-Full tree with explanations: `REPO_STRUCTURE.md`.
+See [`REPO_STRUCTURE.md`](REPO_STRUCTURE.md) for the annotated tree.
 
 ## Documentation
 
 | Document | Purpose |
 |---|---|
-| `docs/context.md` | Project memory: every session, decision, and open item |
+| `docs/context.md` | Project memory: current state, decisions in force, open items |
 | `docs/DESIGN_SYSTEM.md` | Frontend design system: tokens, motion, effects, components |
-| `docs/PROJECT_SUMMARY.md` | Architecture overview and phase history |
 | `docs/SECURITY_AUDIT.md` | Security checklist + test specifications |
-| `docs/FULL_AUDIT.md` | ML integrity audit (merchant leakage, honest evaluation) |
-| `docs/guides/` | START_LOCAL, TEST_LOCAL, DEPLOYMENT, MIGRATION_GUIDE |
+| `docs/archive/` | Session history (Sessions 1-77) and historical audits |
+| `docs/guides/` | START_LOCAL, TEST_LOCAL, DEPLOYMENT |
 | `CLAUDE.md` | Collaboration guidelines for AI-assisted sessions |
 
 ## Built for foreigners in China (v5, 2026-10)
@@ -305,26 +278,13 @@ Full tree with explanations: `REPO_STRUCTURE.md`.
   a bank; generic bank CSV/XLSX is now accepted. Re-uploading an older
   statement adds its income and fixes old rows in place (labels kept).
 - Contract: `docs/contracts/API_V5.md`. Competitor audit + weak points:
-  `docs/audits/COMPETITOR_AUDIT_2026-10.md` (verification log alongside).
+  `docs/audits/COMPETITOR_AUDIT_2026-10.md`.
 - **Deploy order:** apply migrations `20261011000000…000400` first, then the
   backend (Render), then the frontend (Vercel).
 
 ## Known open items
 
-- Privacy/terms pages still contain placeholders the owner must fill in:
-  hosting region(s), support email, jurisdiction.
-
-- Old personal data is still recoverable from **git history** (pre-Session-19
-  commits); purging requires a `git filter-repo` rewrite + force-push.
-- Training runs in the backend threadpool — fine at small scale, should move
-  to a real worker queue if user count grows.
-- Models trained before 2026-10-17 still compute amount/merchant-frequency
-  features per batch; retrain (Model step → Train) to get batch-independent
-  features.
-- Real Postgres RLS policies are never exercised through the API (the backend
-  always uses the service-role key, which bypasses RLS) — only route-level
-  `user_id` scoping is tested today (`backend/tests/`). Testing RLS directly
-  would need a local/CLI Supabase stack hit with an anon key + real user JWT.
+See the "Open items" section of `docs/context.md`.
 
 ## License
 

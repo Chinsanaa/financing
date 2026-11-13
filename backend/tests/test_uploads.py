@@ -167,3 +167,28 @@ def test_realistic_gb18030_preamble_is_detected(client, patch_jwks, make_token, 
     assert resp.status_code == 200
     assert resp.json()["rows_imported"] == 1
     assert fake_db._tables["transactions"].rows[0]["merchant"] == "麦当劳"
+
+
+def test_oversize_upload_rejected_with_400(client, patch_jwks, make_token, fake_db, monkeypatch):
+    _no_classification(monkeypatch)
+    big = b"x" * (uploads_module.MAX_SIZE + 1)
+    resp = client.post(
+        "/uploads/", headers=_headers(make_token),
+        files={"file": ("big.csv", big, "text/csv")},
+    )
+    assert resp.status_code == 400
+    assert "10MB" in resp.json()["detail"]
+
+
+def test_oversize_content_length_rejected_before_read(client, patch_jwks, make_token, fake_db, monkeypatch):
+    _no_classification(monkeypatch)
+    resp = client.post(
+        "/uploads/",
+        headers={
+            **_headers(make_token),
+            "Content-Length": str(uploads_module.MAX_SIZE + 2 * 1024 * 1024),
+        },
+        files={"file": ("small.csv", b"a,b\n", "text/csv")},
+    )
+    assert resp.status_code == 400
+    assert "10MB" in resp.json()["detail"]

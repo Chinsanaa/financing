@@ -1,6 +1,6 @@
 """Confidence calibration: make "0.9 confident" actually mean ~90% correct.
 
-Why this exists: the audit (docs/FULL_AUDIT.md Phase 4) showed the classifier's
+Why this exists: the audit (docs/archive/FULL_AUDIT.md Phase 4) showed the classifier's
 raw predict_proba is badly miscalibrated on merchants it has never seen —
 predictions in the 0.8-0.9 confidence bin were only ~44% correct (ECE 0.184).
 A confidence number that lies is worse than none, because downstream routing

@@ -13,7 +13,6 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
-import pytest
 
 # Mock jieba so importing the feature module doesn't require the real dependency.
 if 'jieba' not in sys.modules:

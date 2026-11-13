@@ -10,7 +10,7 @@ import { useApi } from '@/utils/useApi';
 import { chartColorForKey } from '@/utils/categoryColors';
 import { formatCurrencyWhole } from '@/utils/format';
 
-export interface BucketCategory {
+interface BucketCategory {
   category: string;
   amount: number;
 }
@@ -22,7 +22,7 @@ export interface Bucket {
   categories: BucketCategory[];
 }
 
-export interface RuleData {
+interface RuleData {
   month: string;
   available_months: string[];
   income: number;

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
 import { api } from '@/utils/api';
+import type { Category, ReviewTransaction } from '@/types/v5';
 import { useApi, invalidate } from '@/utils/useApi';
 import { advanceTour } from '@/utils/tour';
 import { Alert } from '@/components/ui-feedback';
@@ -16,16 +17,7 @@ import Skeleton, { SkeletonRows } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { errorDetail } from '@/utils/errors';
 
-interface Transaction {
-  id: string;
-  date: string;
-  merchant: string;
-  description: string;
-  amount: number;
-  confidence: number;
-  suggested_category: string | null;
-  category?: string | null;
-}
+type Transaction = ReviewTransaction;
 
 interface ReviewQueueData {
   transactions: Transaction[];
@@ -37,7 +29,7 @@ export default function ReviewTab() {
   const [showLabeled, setShowLabeled] = useState(false);
   const queryString = showLabeled ? '?show_labeled=true' : '';
   const { data, setData, loading, error: loadError } = useApi<ReviewQueueData>(`/dashboard/review-queue${queryString}`);
-  const categoriesQ = useApi<{ categories: Array<{ id: string; name: string }> }>('/categories/');
+  const categoriesQ = useApi<{ categories: Category[] }>(api.paths.categories);
   const { toneFor } = useCategoryColors();
   const [selectedTxn, setSelectedTxn] = useState<string | null>(null);
   const [labeling, setLabeling] = useState<string | null>(null);

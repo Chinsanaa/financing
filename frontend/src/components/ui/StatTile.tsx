@@ -5,7 +5,7 @@ import RollingNumber from './RollingNumber';
 import { formatHomeCurrency, rateTooltip } from '@/utils/format';
 
 /** Home-currency equivalent of a CNY figure (docs/contracts/API_V5.md §0). */
-export interface HomeAmount {
+interface HomeAmount {
   /** `null` = no usable rate: the line is hidden. */
   amount: number | null | undefined;
   currency: string;

@@ -348,7 +348,7 @@ export default function SettingsClient() {
               <p className="text-sm font-semibold text-ink">Budget alerts</p>
               <p className="text-sm text-muted">
                 When a category goes over budget, or crosses your chosen
-                "approaching budget" threshold. Checked when you use the app
+                &quot;approaching budget&quot; threshold. Checked when you use the app
                 (upload, review, label) — not a continuous background check.
               </p>
               <div className="flex items-center justify-between gap-3">
@@ -398,7 +398,7 @@ export default function SettingsClient() {
             <div className="space-y-3 border-t border-edge/8 pt-6">
               <p className="text-sm font-semibold text-ink">Monthly spending overview</p>
               <p className="text-sm text-muted">
-                A monthly email summarizing your spending. This feature hasn't
+                A monthly email summarizing your spending. This feature hasn&apos;t
                 shipped yet — your preference is saved now so we can start
                 sending these as soon as it does.
               </p>

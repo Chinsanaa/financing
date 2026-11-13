@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { Tags, Trash2 } from 'lucide-react';
 import { api } from '@/utils/api';
+import type { Category } from '@/types/v5';
 import { useApi, invalidate } from '@/utils/useApi';
 import { Alert } from '@/components/ui-feedback';
 import Button from '@/components/ui/Button';
@@ -16,15 +17,8 @@ import { hashCategoryKey, toneForKey } from '@/utils/categoryColors';
 import { FIELD_CLASSES } from '@/components/ui/Input';
 import { errorDetail } from '@/utils/errors';
 
-interface Category {
-  id: string;
-  name: string;
-  is_catch_all?: boolean;
-  color?: string | null;
-}
-
 export default function CategoriesTab() {
-  const { data, setData, loading, error: loadError } = useApi<{ categories: Category[] }>('/categories/');
+  const { data, setData, loading, error: loadError } = useApi<{ categories: Category[] }>(api.paths.categories);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');

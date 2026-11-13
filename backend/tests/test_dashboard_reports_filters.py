@@ -306,3 +306,21 @@ def test_reports_category_filters_only_match_expenses(client, patch_jwks, make_t
     assert client.get("/dashboard/reports?kind=all&uncategorized_only=true", headers=h).json()["total_count"] == 0
     # min/max compare the signed stored amount.
     assert client.get("/dashboard/reports?kind=transfer&max_amount=0", headers=h).json()["total_count"] == 1
+
+
+def test_invalid_date_from_is_422(client, patch_jwks, make_token, fake_db):
+    response = client.get("/dashboard/reports?date_from=not-a-date", headers=_headers(make_token))
+    assert response.status_code == 422
+    assert "date_from" in response.json()["detail"]
+
+
+def test_invalid_date_to_is_422(client, patch_jwks, make_token, fake_db):
+    response = client.get("/dashboard/reports?date_to=2026-13-45", headers=_headers(make_token))
+    assert response.status_code == 422
+    assert "date_to" in response.json()["detail"]
+
+
+def test_search_sanitizer_strips_postgrest_structural_chars_but_keeps_dots():
+    from routes.dashboard import _sanitize_search
+    assert _sanitize_search('a,b%c(d)e:f*g\\h"i') == "abcdefghi"
+    assert _sanitize_search("amazon.com") == "amazon.com"

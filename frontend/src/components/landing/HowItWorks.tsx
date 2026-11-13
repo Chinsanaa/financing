@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m, useInView } from 'framer-motion';
 import { SAMPLE_COLOR } from './sampleStatement';
+import { formatCurrencyWhole } from '@/utils/format';
 
 /**
  * Sticky scroll story (layout idea from Aceternity's sticky-scroll-reveal,
@@ -82,7 +83,7 @@ function UnderstandSheet() {
   return (
     <div className="text-sm">
       <p className="text-[13px] text-muted">Spent in September · sample</p>
-      <p className="num text-5xl leading-tight">¥{total.toLocaleString('en-US')}</p>
+      <p className="num text-5xl leading-tight">{formatCurrencyWhole(total)}</p>
       {/* The chart is the headline: one bold bar, every slice named. */}
       <div className="mt-5 flex h-10 w-full gap-[2px]" role="img" aria-label="September spending by category">
         {SPLIT.map(([c, v]) => (
@@ -105,7 +106,7 @@ function UnderstandSheet() {
               {c}
             </dt>
             <dd className="num">
-              ¥{v.toLocaleString('en-US')} <span className="text-muted">· {Math.round((v / total) * 100)}%</span>
+              {formatCurrencyWhole(v)} <span className="text-muted">· {Math.round((v / total) * 100)}%</span>
             </dd>
           </div>
         ))}

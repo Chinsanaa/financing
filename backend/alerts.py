@@ -1,4 +1,4 @@
-"""Reactive budget-alert email check (no cron — see docs/context.md for why).
+"""Reactive budget-alert email check (no cron — see docs/archive/SESSION_LOG.md for why).
 
 Triggered as a FastAPI BackgroundTask from backend/routes/classify.py right
 after a transaction's category is durably set, so it fires shortly after

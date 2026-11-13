@@ -1,6 +1,7 @@
 """Settings: account management, profile updates, account deletion."""
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
 from config import supabase_client
 from db import run_query
@@ -147,7 +148,7 @@ async def delete_account(request: Request):
         for bucket_name in ('model_artifacts', 'uploads'):
             try:
                 storage_client = supabase_client.storage.from_(bucket_name)
-                _delete_prefix(storage_client, user_id)
+                await run_in_threadpool(_delete_prefix, storage_client, user_id)
             except Exception as storage_err:
                 logger.warning("Storage cleanup warning (%s) for user %s: %s",
                                bucket_name, user_id, storage_err)
@@ -155,7 +156,7 @@ async def delete_account(request: Request):
 
         # Step 2: Delete auth user (FK cascade removes all user rows)
         try:
-            supabase_client.auth.admin.delete_user(user_id)
+            await run_in_threadpool(supabase_client.auth.admin.delete_user, user_id)
         except Exception as auth_err:
             logger.error("Failed to delete auth user %s: %s", user_id, auth_err)
             raise HTTPException(

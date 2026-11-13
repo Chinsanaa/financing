@@ -6,11 +6,7 @@ import Card from '@/components/ui/Card';
 import { Select } from '@/components/ui/Input';
 import { Alert } from '@/components/ui-feedback';
 import { formatCurrencyWhole } from '@/utils/format';
-
-interface Category {
-  id: string;
-  name: string;
-}
+import type { Category } from '@/types/v5';
 
 interface SplitLine {
   category_id: string;

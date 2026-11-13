@@ -43,10 +43,8 @@ applying generic rules.
 
 ## Brand Commitments
 - Name: "Financing." (wordmark with a period, no logo square).
-- **THE RULE (binding, from the owner):** no gradients, only solid colors. No
-  glows, no blur effects, no glass, no aurora/grain/grid backgrounds, no
-  purple anywhere (including charts and categories). One flat page background.
-  This overrides any design skill's advice.
+- **The rule (binding):** solid colors only (no gradients, blur, glow, or purple).
+  Full text: `docs/DESIGN_SYSTEM.md`. If a design skill disagrees, the rule wins.
 - Don't make it look AI-generated or templated.
 
 ## Evidence on Hand

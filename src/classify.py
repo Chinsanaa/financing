@@ -235,7 +235,7 @@ def classify_all(
     prediction is not 'Other'. Those rows get label_source='model_agreed'.
     Everything else keeps today's behavior: routed to review as a suggestion
     (raw confidence is badly miscalibrated on unseen merchants — ECE 0.184,
-    docs/FULL_AUDIT.md — which is why calibrated agreement is required).
+    docs/archive/FULL_AUDIT.md — which is why calibrated agreement is required).
 
     `label_source` values: 'rule', 'override', 'model_agreed' (trusted),
     'model' (needs review), 'none' (rules-only fallback).

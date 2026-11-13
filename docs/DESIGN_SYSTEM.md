@@ -7,11 +7,9 @@ Everything is token-driven, so light and dark stay in sync automatically.
   `frontend/tailwind.config.js`
 - Components: `frontend/src/components/ui/`
 - Product brief for design skills: `PRODUCT.md` (repo root)
-- Design skills (installed with Vercel's `npx skills`, committed in
-  `.claude/skills/`): **impeccable**, **design-taste-frontend**,
-  **redesign-existing-projects**, **apple-design**, **review-animations**,
-  **web-design-guidelines**. If a skill contradicts THE RULE (taste-skill
-  recommends grain, noise and gradients), THE RULE wins.
+- Design skills (committed in `.claude/skills/`): **impeccable**, **apple-design**,
+  **review-animations**, **web-design-guidelines**. If a skill contradicts
+  THE RULE (solid colors only, no gradients, no purple), THE RULE wins.
 - History: v1/v2 dark + electric lime + Space Grotesk; v3 (2026-09-27) flat;
   v4 (2026-10-09): "Ledger" — warm paper + ink, one seal-vermilion accent,
   serif figures, hairline rules instead of cards.

@@ -1,7 +1,7 @@
 """Canonical category lists shared across pipeline and dashboard."""
 
 # 13 categories the ML classifier is trained on (expanded from the original 7
-# on 2026-08-14 — see docs/context.md Session 52 for the decision record).
+# on 2026-08-14 — see docs/archive/SESSION_LOG.md Session 52 for the decision record).
 ML_CATEGORIES = [
     'Groceries',
     'Transportation',
@@ -26,7 +26,7 @@ CATEGORY_NORMALIZE = {
 }
 
 # 50/30/20 rule: canonical Need/Want/Savings bucket for each ML category, used
-# by the Planning tab's 50/30/20 view (backend/routes/dashboard.py). This is
+# by the Planning tab's 50/30/20 view (backend/routes/dashboard/). This is
 # independent of the per-category `budget_category_config.type` ('Need'/'Want'
 # enum, no 'Savings' value) — that table only covers categories the user has
 # explicitly set a $ budget for, so it can't be used to bucket ALL of a
