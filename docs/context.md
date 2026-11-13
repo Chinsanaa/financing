@@ -80,8 +80,49 @@ bootstrap aid for discovering patterns in unlabeled rows.
 
 ### Session 78 (2026-11-13): Full audit and optimization (PR #68)
 
-See the PR description for the tier-by-tier list. Summary is completed at the
-end of the session (below).
+Manager-style audit with cheaper subagents doing scoped tasks. Checks at the
+end: 158 pipeline tests, 276 backend tests, frontend typecheck + lint + build,
+design gate, all passing.
+
+**Security and bugs**
+- New migration `20261113000000_lock_storage_writes.sql` drops client
+  INSERT/DELETE storage policies. Why: the backend loads model files with
+  joblib (pickle), so a user who could write to their own folder could plant a
+  file the server would run. **Not yet applied to the live database.**
+- Training: generic error text to clients, own DB client in the worker thread,
+  409 if a run is already in progress (runs stale for 30+ minutes do not block).
+- CSV export neutralizes cells starting with `= + - @` (spreadsheet formulas).
+- `/docs` and `/openapi.json` are hidden when `ENVIRONMENT=production`.
+- Reports: stricter search sanitizing; invalid date filters return 422.
+- Blocking calls moved off the event loop (auth lookup, account deletion).
+
+**Performance**
+- Classification writes are grouped by identical payload: a few UPDATEs per
+  pass instead of one per transaction (`backend/ml.py`).
+- Bulk label: 6 queries for 50 ids instead of about 200.
+- Landing page is a server component; first-load JS 143 kB to 137 kB.
+
+**Structure and cleanup**
+- `backend/routes/dashboard.py` (1,600 lines) is now the package
+  `backend/routes/dashboard/` (pure move).
+- `ReportsTab.tsx` 1,074 to 710 lines; pieces live in `components/tabs/reports/`.
+- One shared `Category` type; dead exports removed; ESLint works and runs in CI.
+- Backend dependencies pinned; `model2vec` no longer installed on the server.
+- Docs: this file slimmed (history in the archive), CLAUDE.md shortened,
+  duplicated tree and rule text removed, two conflicting design skills removed,
+  `.claude/agents/cleanup-worker.md` added.
+
+**Decided not to do (and why)**
+- Parser dedup in `src/parse.py`: the merged version was longer and needed a
+  flag parameter. Reverted.
+- Global exception handler: FastAPI returns catch-all 500s outside the CORS
+  layer, so browsers would see a network error. Per-route wrappers stay.
+- Removing the dashboard session gate: saves milliseconds, risks tabs firing
+  requests without a session.
+- Deleting `GET /uploads/{id}`: unused by the frontend but listed in the frozen
+  API contract.
+- Upload size guard caveat: FastAPI parses the body before the handler, so the
+  10 MB cap limits handler memory, not network intake.
 
 ### Session 77 (2026-10-17): Codebase cleanup (PR #67, merged)
 
