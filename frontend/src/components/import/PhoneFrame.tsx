@@ -271,6 +271,6 @@ export function Notice({ y, title, body }: { y: number; title: string; body: str
 }
 
 /** The "tap here" marker: a vermilion outline (no fill, no glow). */
-export function Highlight({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+function Highlight({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
   return <rect x={x} y={y} width={w} height={h} rx="4" className="fill-none stroke-accent" strokeWidth="1.6" />;
 }

@@ -49,7 +49,7 @@ export function describeRowsByKind(total: number, byKind?: Partial<Record<Transa
 }
 
 /** The re-import sentence from the contract: "Updated 12 and removed 2 earlier transactions from this statement." */
-export function describeReimport(r: Pick<UploadResult, 'rows_updated' | 'rows_removed'>): string {
+function describeReimport(r: Pick<UploadResult, 'rows_updated' | 'rows_removed'>): string {
   const updated = r.rows_updated ?? 0;
   const removed = r.rows_removed ?? 0;
   if (!updated && !removed) return 'Matched the transactions you had already imported from this statement; nothing needed changing.';

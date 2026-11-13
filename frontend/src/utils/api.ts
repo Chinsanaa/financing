@@ -54,8 +54,6 @@ apiClient.interceptors.request.use(async (config) => {
     } = await supabaseClient.auth.getSession();
     if (session?.access_token) {
       config.headers.Authorization = `Bearer ${session.access_token}`;
-    } else {
-      console.warn('No Supabase session found - request may fail with 401');
     }
   } catch (err) {
     console.error('Failed to get Supabase session:', err);

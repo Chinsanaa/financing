@@ -8,7 +8,7 @@
  * characters are rendered anywhere on the landing page.
  */
 
-export type SampleSource = 'Alipay' | 'WeChat Pay';
+type SampleSource = 'Alipay' | 'WeChat Pay';
 
 export interface SampleRow {
   id: string;

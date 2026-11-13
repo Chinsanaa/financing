@@ -45,7 +45,7 @@ export const CATEGORY_COLORS = [
 
 export type CategoryColorKey = (typeof CATEGORY_COLORS)[number]['key'];
 
-export const CATEGORY_COLOR_KEYS: readonly CategoryColorKey[] = CATEGORY_COLORS.map((c) => c.key);
+const CATEGORY_COLOR_KEYS: readonly CategoryColorKey[] = CATEGORY_COLORS.map((c) => c.key);
 export const CATEGORY_COLOR_KEY_SET: ReadonlySet<string> = new Set<string>(CATEGORY_COLOR_KEYS);
 
 /**

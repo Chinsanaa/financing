@@ -175,27 +175,26 @@ function typeChangeNote(kind: TransactionKind): string {
   return "It won't count as spending or income. Its category is removed.";
 }
 
-/** FastAPI error detail → one readable line (422s carry a list). */
-
 function toCsv(transactions: Transaction[]): string {
-  const esc = (v: unknown) => {
-    const s = String(v ?? '');
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  // `text` cells come from statement text: a leading = + - @ tab or CR would make
+  // spreadsheets run them as formulas, so prefix a single quote. Numbers and dates skip this.
+  const esc = (v: unknown, text = false) => {
+    let s = String(v ?? '');
+    if (text && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const header = ['Date', 'Merchant', 'Description', 'Category', 'Type', 'Amount', 'Home amount', 'Source'];
   const rows = transactions.map((t) =>
     [
-      formatDate(t.date),
-      t.merchant,
-      t.description,
-      t.kind === 'expense' ? t.category : '',
-      typeLabel(t) ?? 'Purchase',
-      t.amount,
-      t.amount_home ?? '',
-      t.label_source,
-    ]
-      .map(esc)
-      .join(',')
+      esc(formatDate(t.date)),
+      esc(t.merchant, true),
+      esc(t.description, true),
+      esc(t.kind === 'expense' ? t.category : '', true),
+      esc(typeLabel(t) ?? 'Purchase', true),
+      esc(t.amount),
+      esc(t.amount_home ?? ''),
+      esc(t.label_source, true),
+    ].join(',')
   );
   return [header.join(','), ...rows].join('\n');
 }

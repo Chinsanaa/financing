@@ -13,7 +13,7 @@
 const KEY = 'chunkReloadAt';
 const MIN_INTERVAL_MS = 30_000;
 
-export function isChunkLoadError(err: unknown): boolean {
+function isChunkLoadError(err: unknown): boolean {
   const e = err as { name?: string; message?: string } | null;
   if (!e) return false;
   return e.name === 'ChunkLoadError' || /Loading (CSS )?chunk [\w-]+ failed/i.test(e.message || '');

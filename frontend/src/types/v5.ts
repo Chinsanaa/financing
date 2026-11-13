@@ -34,46 +34,9 @@ export type FlowSubtype =
   | 'withdrawal'
   | 'other';
 
-/** Which subtypes are valid for which kind (null subtype is always valid). */
-export const SUBTYPES_BY_KIND: Record<TransactionKind, readonly FlowSubtype[]> = {
-  expense: ['refund'],
-  income: ['salary', 'interest', 'other'],
-  transfer: [
-    'p2p_transfer',
-    'red_packet',
-    'aa_collection',
-    'own_account',
-    'repayment',
-    'top_up',
-    'withdrawal',
-    'other',
-  ],
-};
-
 /** Transfer subtypes that move money between the user's OWN accounts. They
  *  are reported as `own_account_moved`, never as transfers in/out. */
 export const OWN_ACCOUNT_SUBTYPES: readonly FlowSubtype[] = ['own_account', 'repayment', 'top_up', 'withdrawal'];
-
-/** English display labels for kinds and subtypes. */
-export const KIND_LABELS: Record<TransactionKind, string> = {
-  expense: 'Expense',
-  income: 'Income',
-  transfer: 'Transfer',
-};
-
-export const FLOW_SUBTYPE_LABELS: Record<FlowSubtype, string> = {
-  refund: 'Refund',
-  red_packet: 'Red packet',
-  p2p_transfer: 'Transfer to/from a person',
-  aa_collection: 'Split-bill collection',
-  salary: 'Salary',
-  interest: 'Interest',
-  own_account: 'Between own accounts',
-  repayment: 'Credit repayment',
-  top_up: 'Top-up',
-  withdrawal: 'Withdrawal',
-  other: 'Other',
-};
 
 export type TransactionSource = 'alipay' | 'wechat' | 'manual' | 'bank';
 
