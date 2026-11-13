@@ -19,6 +19,7 @@ import re
 import tempfile
 import hashlib
 
+import fx
 from src.parse import (
     PARSER_VERSION,
     detect_export_filter,
@@ -32,6 +33,8 @@ from src.parse import (
 router = APIRouter()
 
 MAX_SIZE = 10 * 1024 * 1024  # 10MB
+MULTIPART_OVERHEAD = 1024 * 1024  # allowance for multipart framing in Content-Length
+READ_CHUNK = 1024 * 1024
 MAX_ROWS = 50000
 UNDETECTED_MESSAGE = "Could not detect file source. Expected an Alipay, WeChat or bank statement export."
 NON_EXPENSE_DEFAULTS = {
@@ -106,10 +109,25 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
     tmp_path = None
     try:
-        content = await file.read()
+        # Reject oversize bodies early from Content-Length (when present),
+        # then read in chunks and stop as soon as the limit is exceeded.
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > MAX_SIZE + MULTIPART_OVERHEAD:
+            raise ValueError(
+                f"File exceeds 10MB limit ({int(declared) / 1024 / 1024:.1f}MB)"
+            )
 
-        if len(content) > MAX_SIZE:
-            raise ValueError(f"File exceeds 10MB limit ({len(content) / 1024 / 1024:.1f}MB)")
+        parts = []
+        total = 0
+        while True:
+            chunk = await file.read(READ_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_SIZE:
+                raise ValueError(f"File exceeds 10MB limit ({total / 1024 / 1024:.1f}MB)")
+            parts.append(chunk)
+        content = b"".join(parts)
 
         _validate_file_content(file.filename, content)
 
@@ -278,15 +296,10 @@ def schedule_classification(request: Request, user_id: str) -> None:
 
 def schedule_fx_backfill(user_id: str, earliest) -> None:
     """Ask the FX module to backfill rates from the earliest uploaded row's
-    date (contract §2 trigger 2). Imported lazily: uploads keep working if
-    the FX module is missing or broken; it is non-blocking by contract."""
-    try:
-        from fx import request_backfill_for_user
-    except ImportError:
-        return
+    date (contract §2 trigger 2). Non-blocking by contract."""
     try:
         start = pd.Timestamp(earliest).date() if earliest is not None and not pd.isna(earliest) else None
-        request_backfill_for_user(user_id, start=start)
+        fx.request_backfill_for_user(user_id, start=start)
     except Exception as e:
         logger.warning("Could not schedule FX backfill for %s: %s", user_id, e)
 
@@ -388,7 +401,7 @@ def parse_with_src(file_path: str, file_type: str) -> Optional[pd.DataFrame]:
         if file_type == 'alipay':
             return parse_alipay(file_path)
         if file_type == 'wechat':
-            if file_path.endswith('.xlsx'):
+            if file_path.lower().endswith('.xlsx'):
                 return parse_wechat_excel(file_path)
             return parse_wechat_csv(file_path)
         if file_type == 'bank':

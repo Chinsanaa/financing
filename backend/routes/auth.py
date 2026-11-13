@@ -8,6 +8,7 @@ JWT for every later backend query.
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from config import supabase_client
+from db import run_query
 from errors import internal_error
 from limiter import limiter
 
@@ -40,9 +41,11 @@ async def resolve_identifier(request: Request, req: ResolveIdentifierRequest):
     if "@" in identifier:
         return {"email": None}
     try:
-        result = supabase_client.rpc(
-            "get_email_for_username", {"check_username": identifier}
-        ).execute()
+        result = await run_query(
+            lambda: supabase_client.rpc(
+                "get_email_for_username", {"check_username": identifier}
+            ).execute()
+        )
         return {"email": result.data or None}
     except Exception as e:
         raise internal_error(e)

@@ -25,6 +25,7 @@ def fx_calls(monkeypatch):
     stub = types.ModuleType("fx")
     stub.request_backfill_for_user = lambda user_id, start=None: calls.append((user_id, start))
     monkeypatch.setitem(sys.modules, "fx", stub)
+    monkeypatch.setattr(uploads_module, "fx", stub)  # uploads imports fx at top level
     monkeypatch.setattr(uploads_module, "schedule_classification", lambda request, user_id: None)
     # The 20/hour upload limit is a process-wide in-memory counter; this file
     # alone makes more than 20 uploads, so start each test from zero.
