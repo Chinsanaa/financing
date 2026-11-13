@@ -38,9 +38,9 @@ from config import settings, supabase_client
 from db import fetch_all
 from errors import logger
 
-from src.classify import classify_all, load_model_bundle, ModelBundle  # noqa: E402
-from src.llm_classify import classify_with_llm  # noqa: E402
-from src.paths import ARTIFACT_FILES  # noqa: E402
+from src.classify import classify_all, load_model_bundle, ModelBundle
+from src.llm_classify import classify_with_llm
+from src.paths import ARTIFACT_FILES
 
 # Safety valve: cap how many distinct merchants one classification pass will
 # send to the LLM, so one big/weird upload can't spike cost in a single call.
@@ -48,8 +48,11 @@ from src.paths import ARTIFACT_FILES  # noqa: E402
 # same as if this fallback tier didn't run at all.
 _LLM_MERCHANT_CAP = 40
 
-# In-process bundle cache: user_id -> (model_run_id, ModelBundle, temp_dir).
-# The temp dir must outlive the bundle (semantic encoder may lazy-read).
+# Ids per batched UPDATE (keeps the PostgREST URL short).
+_UPDATE_CHUNK = 200
+
+# In-process bundle cache: user_id -> (model_run_id, ModelBundle). The bundle's
+# temp dir is removed by a finalizer once nothing references the bundle.
 _bundle_cache: dict = {}
 _cache_lock = threading.Lock()
 _MAX_CACHED_USERS = 8
@@ -187,7 +190,7 @@ def get_user_bundle(user_id: str) -> Optional[ModelBundle]:
     with _cache_lock:
         if len(_bundle_cache) >= _MAX_CACHED_USERS:
             _bundle_cache.pop(next(iter(_bundle_cache)))
-        _bundle_cache[user_id] = (run_id, bundle, temp_dir)
+        _bundle_cache[user_id] = (run_id, bundle)
     return bundle
 
 
@@ -248,11 +251,14 @@ def _llm_fallback_suggestions(result, categories: list[str]) -> dict:
     if len(unique_merchants) > _LLM_MERCHANT_CAP:
         unique_merchants = unique_merchants[:_LLM_MERCHANT_CAP]
 
-    # One representative description per merchant keeps the batch small.
-    items = []
-    for merchant in unique_merchants:
-        sample = none_rows[none_rows["merchant"].astype(str).str.strip() == merchant].iloc[0]
-        items.append({"merchant": merchant, "description": sample.get("description", "")})
+    # One representative description per merchant (its first row) keeps the
+    # batch small.
+    merchant_keys = none_rows["merchant"].astype(str).str.strip()
+    first_rows = none_rows.assign(_m=merchant_keys).drop_duplicates("_m").set_index("_m")
+    items = [
+        {"merchant": m, "description": first_rows.at[m, "description"] if "description" in first_rows else ""}
+        for m in unique_merchants
+    ]
 
     answers = classify_with_llm(items, categories)
 
@@ -262,13 +268,11 @@ def _llm_fallback_suggestions(result, categories: list[str]) -> dict:
     if not merchant_to_answer:
         return {}
 
-    suggestions = {}
-    for _, row in none_rows.iterrows():
-        merchant = str(row["merchant"]).strip()
-        answer = merchant_to_answer.get(merchant)
-        if answer is not None:
-            suggestions[row["id"]] = answer
-    return suggestions
+    return {
+        row_id: merchant_to_answer[m]
+        for row_id, m in zip(none_rows["id"], merchant_keys)
+        if m in merchant_to_answer
+    }
 
 
 def classify_user_transactions(user_id: str) -> int:
@@ -321,8 +325,10 @@ def _classify_user_transactions(user_id: str) -> int:
     llm_categories = [c for c in valid_categories if c != catch_all]
     llm_suggestions = _llm_fallback_suggestions(result, llm_categories)
 
-    updated = 0
-    for _, row in result.iterrows():
+    # Group row ids by identical update payload so a pass costs a handful of
+    # UPDATEs (one per payload per 200 ids) instead of one per transaction.
+    groups: dict = {}
+    for row in result.to_dict("records"):
         label_source = row["label_source"]
         category_name = row.get("category")
         category_id = name_to_id.get(category_name)
@@ -359,13 +365,19 @@ def _classify_user_transactions(user_id: str) -> int:
             # for manual review.
             continue
 
-        try:
-            # kind filter: a row re-kinded to income/transfer while this pass
-            # ran must not get a category written back onto it.
-            supabase_client.table("transactions").update(update).eq("id", row["id"]).eq("user_id", user_id).eq("kind", "expense").execute()
-            updated += 1
-        except Exception as e:
-            logger.warning("Failed to update transaction %s: %s", row["id"], e)
+        groups.setdefault(tuple(update.items()), []).append(row["id"])
+
+    updated = 0
+    for payload, ids in groups.items():
+        for start in range(0, len(ids), _UPDATE_CHUNK):
+            chunk = ids[start:start + _UPDATE_CHUNK]
+            try:
+                # kind filter: a row re-kinded to income/transfer while this
+                # pass ran must not get a category written back onto it.
+                supabase_client.table("transactions").update(dict(payload)).in_("id", chunk).eq("user_id", user_id).eq("kind", "expense").execute()
+                updated += len(chunk)
+            except Exception as e:
+                logger.warning("Failed to update %d transactions: %s", len(chunk), e)
 
     logger.info("Classified %d/%d pending transactions for user %s (model=%s)",
                 updated, len(result), user_id, "yes" if bundle else "rules-only")

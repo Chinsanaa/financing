@@ -157,3 +157,45 @@ def test_end_to_end_llm_suggestion_never_auto_applies(monkeypatch, fake_db):
     assert txn["label_source"] == "llm"
     assert txn["needs_review"] is True  # never auto-applied
     assert txn["category_id"] == "cat-eat"
+
+
+def test_classification_writes_are_batched_by_payload(monkeypatch, fake_db):
+    """60 rule-matched rows over 2 merchants cost 2 UPDATEs, not 60."""
+    from fake_supabase import FakeQueryBuilder
+
+    monkeypatch.setattr(ml, "supabase_client", fake_db)
+    fake_db.seed("transactions", [
+        {
+            "id": f"t{i}", "user_id": "u1", "kind": "expense",
+            "merchant": "Metro" if i % 2 else "Noodle Bar",
+            "description": "", "amount": -5.0,
+            "needs_review": True, "is_manually_labeled": False,
+        }
+        for i in range(60)
+    ])
+    monkeypatch.setattr(
+        ml, "_fetch_categories",
+        lambda user_id: (
+            {"Transportation": "cat-t", "Eating Out": "cat-e", "Other": "cat-o"},
+            ["Transportation", "Eating Out", "Other"], "Other",
+        ),
+    )
+    monkeypatch.setattr(ml, "_fetch_rules", lambda user_id: {"metro": "Transportation", "noodle bar": "Eating Out"})
+    monkeypatch.setattr(ml, "get_user_bundle", lambda user_id: None)
+    settings.groq_api_key = None
+
+    updates = []
+    real_update = FakeQueryBuilder.update
+
+    def counting_update(self, payload, *a, **kw):
+        updates.append(payload)
+        return real_update(self, payload, *a, **kw)
+
+    monkeypatch.setattr(FakeQueryBuilder, "update", counting_update)
+
+    assert ml._classify_user_transactions("u1") == 60
+    assert len(updates) == 2
+    rows = fake_db._tables["transactions"].rows
+    assert {r["category_id"] for r in rows if r["merchant"] == "Metro"} == {"cat-t"}
+    assert {r["category_id"] for r in rows if r["merchant"] == "Noodle Bar"} == {"cat-e"}
+    assert all(r["needs_review"] is False and r["label_source"] == "rule" for r in rows)
