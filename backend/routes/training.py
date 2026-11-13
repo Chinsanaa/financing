@@ -6,7 +6,7 @@ and user's categories. Model artifacts uploaded to Supabase Storage.
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pathlib import Path
 from config import supabase_client
-from db import fetch_all_async, run_query
+from db import fetch_all_async, new_client as _new_client, run_query
 from errors import internal_error, logger
 from limiter import limiter
 from datetime import datetime, timedelta, timezone
@@ -14,7 +14,6 @@ import pandas as pd
 from uuid import uuid4
 import tempfile
 import shutil
-import traceback
 
 # Artifacts classification can't function without; if any of these fail to
 # upload the run must not be reported as "succeeded" (see run_training).
@@ -85,6 +84,18 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
         )
         user_categories = [cat['name'] for cat in categories_response.data] if categories_response.data else ['Other']
 
+        # One run at a time per user. A "running" row past the staleness
+        # threshold is a dead background task, so it must not block forever.
+        active = await run_query(
+            lambda: supabase_client.table("model_runs")
+            .select("id,status,started_at")
+            .eq("user_id", user_id)
+            .in_("status", ["queued", "running"])
+            .execute()
+        )
+        if any(not _with_stale_flag(r)["stale"] for r in (active.data or [])):
+            raise HTTPException(status_code=409, detail="A training run is already in progress.")
+
         # Create model_run record
         model_run_id = str(uuid4())
         await run_query(
@@ -94,7 +105,7 @@ async def trigger_retrain(request: Request, background_tasks: BackgroundTasks):
                 "status": "running",
                 "trigger": "manual",
                 "n_labeled_samples": len(df_labeled),
-                "started_at": datetime.utcnow().isoformat(),
+                "started_at": datetime.now(timezone.utc).isoformat(),
             }).execute()
         )
 
@@ -188,6 +199,8 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
     6. Clean up temp directory
     """
     temp_dir = None
+    # Own client for this long-running thread; never share the request pool's.
+    db_client = _new_client()
     try:
         logger.info("[Training %s] Starting with %d samples and %d categories",
                     model_run_id, len(df_labeled), len(user_categories))
@@ -219,7 +232,7 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
                     file_content = f.read()
                 remote_path = f"{storage_path_prefix}/{artifact_path.name}"
                 try:
-                    supabase_client.storage.from_("model_artifacts").upload(
+                    db_client.storage.from_("model_artifacts").upload(
                         remote_path,
                         file_content,
                     )
@@ -246,20 +259,20 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
         # (The old code wrote status='complete' — not a model_run_status enum
         # value — plus nonexistent metrics/storage_path/completed_at columns,
         # so the update always failed and every run stayed 'running' forever.)
-        supabase_client.table("model_runs").update({
+        db_client.table("model_runs").update({
             "status": "succeeded",
             "cv_accuracy": round(results['accuracy'], 4),
             "f1_macro": round(results['f1_macro'], 4),
             "n_labeled_samples": results['n_samples'],
             "artifact_version": storage_path_prefix,
-            "finished_at": datetime.utcnow().isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", model_run_id).execute()
 
         logger.info("[Training %s] Succeeded (accuracy: %.1f%%)",
                     model_run_id, results['accuracy'] * 100)
 
         try:
-            supabase_client.table("notifications").upsert(
+            db_client.table("notifications").upsert(
                 {
                     "user_id": user_id,
                     "type": "training_complete",
@@ -283,13 +296,12 @@ def run_training(user_id: str, model_run_id: str, df_labeled: pd.DataFrame, user
                            model_run_id, e)
 
     except Exception as e:
-        logger.error("[Training %s] Failed: %s", model_run_id, e)
-        traceback.print_exc()
+        logger.exception("[Training %s] Failed: %s", model_run_id, e)
         try:
-            supabase_client.table("model_runs").update({
+            db_client.table("model_runs").update({
                 "status": "failed",
-                "error_message": str(e),
-                "finished_at": datetime.utcnow().isoformat(),
+                "error_message": "Training failed. Please try again.",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", model_run_id).execute()
         except Exception as db_err:
             logger.error("[Training %s] Also failed to update database: %s", model_run_id, db_err)

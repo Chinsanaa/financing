@@ -1,5 +1,4 @@
 """Reproducibility: same seed → identical metrics; and validation sanity."""
-import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, GroupKFold
 from sklearn.metrics import accuracy_score, f1_score

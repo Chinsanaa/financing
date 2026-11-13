@@ -7,6 +7,8 @@ found out via polling model_runs.error_message. This suite pins the new
 behavior: reject before creating a model_runs row or touching the background
 task at all.
 """
+from datetime import datetime, timezone
+
 USER_A = "user-a-id"
 
 
@@ -46,3 +48,19 @@ def test_zero_labeled_samples_returns_400(client, patch_jwks, make_token, fake_d
 
     assert resp.status_code == 400
     assert fake_db._tables.get("model_runs") is None or fake_db._tables["model_runs"].rows == []
+
+
+def test_retrain_while_run_in_progress_returns_409(client, patch_jwks, make_token, fake_db):
+    _seed_labeled(fake_db, USER_A, 6)
+    fake_db.seed("model_runs", [{
+        "id": "run-1",
+        "user_id": USER_A,
+        "status": "running",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }])
+
+    resp = client.post("/training/retrain", headers=_headers(make_token))
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "A training run is already in progress."
+    assert [r["id"] for r in fake_db._tables["model_runs"].rows] == ["run-1"]
