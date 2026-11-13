@@ -25,13 +25,14 @@ python -m uvicorn main:app --reload    # http://localhost:8000, docs at /docs
 
 ## Endpoints
 
-All routes except `/health`, `/`, docs, and `/auth/signup|login|refresh`
+All routes except `/health`, `/`, docs, and `/auth/resolve-identifier`
 require `Authorization: Bearer <supabase access token>`.
 
-**Auth** (`/auth`) — rate-limited per IP
-- `POST /auth/signup` (5/hour), `POST /auth/login` (10/15min)
-- `POST /auth/logout` (stateless ack; the client discards its tokens)
-- `POST /auth/refresh` (handled client-side by the Supabase SDK)
+**Auth** (`/auth`): pre-auth helper, rate-limited per IP
+- `POST /auth/resolve-identifier` (10/min): maps a username to its account email for the sign-in form
+
+There are no sign-up, sign-in, sign-out or refresh routes on the backend. Those
+happen in the browser via Supabase Auth (supabase-js); the backend only verifies the resulting JWT.
 
 **Categories** (`/categories`)
 - `GET /` · `POST /` (`{name, sort_order?}`) · `PUT /{id}` · `DELETE /{id}`
